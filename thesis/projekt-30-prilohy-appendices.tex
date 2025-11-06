@@ -20,7 +20,7 @@
 
 V této příloze je uveden popis jednotlivých částí šablony, po kterém následuje stručný návod, jak s touto šablonou pracovat. Pokud po jejím přečtení k šabloně budete mít nějaké dotazy, připomínky apod., neváhejte a napište na e-mail \texttt{sablona@fit.vutbr.cz}.
 
-\section*{Popis částí šablony}
+\section{Popis částí šablony}
 
 Po rozbalení šablony naleznete následující soubory a adresáře:
 \begin{DESCRIPTION}
@@ -35,7 +35,7 @@ Po rozbalení šablony naleznete následující soubory a adresáře:
   \item [projekt.tex] Hlavní soubor práce -- definice formálních částí.
 \end{DESCRIPTION}
 
-Styl literatury v šabloně je od Ing. Radka Pyšného \cite{Pysny}, jehož práce byla vylepšena prof. Adamem Heroutem, dr. Jaroslavem Dytrychem a panem Karlem Hanákem tak, aby odpovídala normě a podporovala všechny často využívané typy citací. Jeho dokumentaci naleznete v příloze \ref{priloha-priklady-citaci}.
+Styl literatury v šabloně je od Ing. Radka Pyšného \cite{Pysny}, jehož práce byla vylepšena prof. Adamem Heroutem, dr. Jaroslavem Dytrychem, dr. Petrem Veigendem a panem Karlem Hanákem tak, aby odpovídala normě a podporovala všechny často využívané typy citací. Jeho dokumentaci naleznete v příloze \ref{priloha-priklady-citaci}.
 
 \begin{samepage}
 Makefile kromě překladu do PDF nabízí i další funkce:
@@ -52,7 +52,7 @@ Nezapomeňte, že vlna neřeší všechny nezlomitelné mezery. Vždy je třeba 
 \paragraph {Pozor na číslování stránek!} Pokud má obsah 2 strany a na 2. jsou jen \uv{Přílohy} a~\uv{Seznam příloh} (ale žádná příloha tam není), z nějakého důvodu se posune číslování stránek o 1 (obsah \uv{nesedí}). Stejný efekt má, když je na 2. či 3. stránce obsahu jen \uv{Literatura} a~je možné, že tohoto problému lze dosáhnout i jinak. Řešení je několik (od~úpravy obsahu, přes nastavení počítadla až po sofistikovanější metody). \textbf{Před odevzdáním proto vždy překontrolujte číslování stran!}
 
 
-\section*{Doporučený postup práce se šablonou}
+\section{Doporučený postup práce se šablonou}
 
 \begin{enumerate}
   \item \textbf{Zkontrolujte, zda máte aktuální verzi šablony.} Máte-li šablonu z předchozího roku, na stránkách fakulty již může být novější verze šablony s~aktualizovanými informacemi, opravenými chybami apod.
@@ -73,7 +73,7 @@ make rename NAME=xlogin00-Cisteni-a-extrakce-textu
 
 Obsah práce se generuje standardním příkazem \tt \textbackslash tableofcontents \rm (zahrnut v šabloně). Přílohy jsou v něm uvedeny úmyslně.
 
-\subsection*{Pokyny pro oboustranný tisk}
+\subsection{Pokyny pro oboustranný tisk}
 \begin{itemize}
 \item \textbf{Oboustranný tisk je doporučeno konzultovat s vedoucím práce.}
 \item Je-li práce tištěna oboustranně a její tloušťka je menší než tloušťka desek, nevypadá to dobře.
@@ -91,7 +91,7 @@ Další metodou je odsazení odstavců, které je časté u elektronické sazby 
 
 Jeden z výše uvedených způsobů je v šabloně nastaven jako výchozí, druhý můžete zvolit parametrem šablony \uv{\tt odsaz\rm }.
 
-\subsection*{Užitečné nástroje}
+\section{Užitečné nástroje}
 \label{nastroje}
 
 Následující seznam není výčtem všech využitelných nástrojů. Máte-li vyzkoušený osvědčený nástroj, neváhejte jej využít. Pokud však nevíte, který nástroj si zvolit, můžete zvážit některý z následujících:
@@ -115,7 +115,7 @@ Tato příloha je převzata ze stránek doc. Černockého \cite{CernockyEnglish}
 
 Spousta lidí píše zprávy k projektům anglicky (a to je dobře!), ale dělá v nich spoustu zbytečných chyb (a to je špatně). Nejsem angličtinář, ale tento jazyk už nějakých pár let používám k psaní, čtení i komunikaci -- tato příloha obsahuje pár důležitých věcí. Pokud chcete napsat práci nebo článek opravdu 100\,\% dobře, nezbude Vám než si najmout rodilého mluvčího (a to by měl by být trochu technicky zdatný a aspoň trochu rozumět tomu, co píšete, ať to neskončí ještě hůř \ldots).
 
-\section*{Obecně}
+\section{Obecně}
 
 \begin{itemize}
   \item{Předtím, než budete sami něco psát, si přečtěte pár anglických technických článků a~zkuste si zapamatovat a získat \uv{obecný pocit}, jak se to píše.}
@@ -137,7 +137,7 @@ Spousta lidí píše zprávy k projektům anglicky (a to je dobře!), ale dělá
   Neříkám, že je to 100\,\% správně, ale je to určité vodítko. Toto se dá použít i~na~dohledání správných spojek (třeba \uv{among two cases} nebo \uv{between two cases}?)\end{samepage}}
 \end{itemize}
        
-\section*{SVOMPT a shoda}
+\section{SVOMPT a shoda}
 
 Struktura anglické věty je SVOPMT: SUBJECT VERB OBJECT MANNER PLACE TIME a přes to nejede vlak! Není volná jako v češtině. Jinak to je maximálně v nějaké divadelní hře, kde je potřeba něco zdůraznit. Hlavně podmět tam musí vždy být, na to se často zapomíná, protože v CZ/SK může být zamlčený nebo nevyjádřený. SVOMPT platí i~ve vedlejších větách!
 \begin{verbatim}
@@ -153,7 +153,7 @@ Struktura anglické věty je SVOPMT: SUBJECT VERB OBJECT MANNER PLACE TIME a př
   people were 
 \end{verbatim}
 
-\section*{Členy}
+\section{Členy}
 
 Členy v angličtině jsou noční můra a téměř nikdo z nás je nedává dobře. Základní pravidlo je, že když je něco určitého, musí předtím být \uv{the}. Členy musí být určitě u těchto spojení:
 \begin{verbatim}
@@ -183,7 +183,7 @@ Struktura anglické věty je SVOPMT: SUBJECT VERB OBJECT MANNER PLACE TIME a př
 \end{verbatim}
 \end{samepage}
 
-\section*{Slovesa}
+\section{Slovesa}
 
 Pozor na trpné tvary sloves -- u pravidelných je to většinou bez problémů, u nepravidelných často špatně, typicky
 \begin{verbatim}
@@ -200,7 +200,7 @@ Pozor na časy, občas je v nich pěkný nepořádek. Pokud něco nějak obecně
   with a GMM baseline, the results are completely bad. 
 \end{verbatim}
 
-\section*{Délka vět a struktura}
+\section{Délka vět a struktura}
 
 \begin{itemize}
   \item{Pište kratší věty a souvětí, pokud máte něco na 5 řádků, většinou se to nedá číst.}
@@ -212,7 +212,7 @@ Pozor na časy, občas je v nich pěkný nepořádek. Pokud něco nějak obecně
   and the third one also did not work. 
 \end{verbatim}
 
-\section*{Specifika technického textu}
+\section{Specifika technického textu}
 
 Píšete technický text, proto nepoužívejte zkratky
 \begin{verbatim}
@@ -276,7 +276,7 @@ Velká bezpečnost letecké dopravy stojí z části na tom, že lidé kolem let
 \subsubsection*{Citace}
 \begin{checklist}
     \item \textbf{Všechny použité zdroje jsou citovány.}
-	\item Adresy URL odkazující na služby, projekty, zdroje, github apod. jsou odkazovány pomocí \verb|\footnote{\url{...}}|.
+	\item Adresy URL odkazující na služby, projekty, zdroje, Github apod. jsou odkazovány pomocí \verb|\footnote{\url{...}}|.
     \item Všechny citace používají správné typy.
 	\item Citace mají autora, název, vydavatele (název konference), rok vydání.  Když některá nemá, je to dobře zdůvodněný zvláštní případ a vedoucí to odsouhlasil.
 	\item Je-li ve zdrojových textech programu něco převzaté, je to tam řádně citováno v souladu s licencí.
@@ -302,17 +302,10 @@ Velká bezpečnost letecké dopravy stojí z části na tom, že lidé kolem let
 	\item V českém či slovenském textu se zbytečně nepoužívají anglické výrazy, které mají ustálené české překlady. Např. slovo \textit{defaultní} se nahradí např. slovem \textit{implicitní} nebo \textit{výchozí}.
 \end{checklist}
 
-\subsubsection*{Výsledek na datovém médiu, tj. software}
+\subsubsection*{Elektronická forma odevzdání, software}
 \begin{checklist}
-	\item Mám připravené nepřepisovatelné datové médium 
-      \begin{itemize}
-	  		\item CD-R,
-            \item DVD-R,
-            \item DVD+R ve formátu ISO9660 (s rozšířením RockRidge a/nebo Jolliet) nebo UDF,
-            \item paměťová karta SD (Secure Digital) ve formátu FAT32 nebo exFAT s nastavenou ochranou proti přepisu.
-      \end{itemize}
 	\item Pokud je výsledek online (služba, aplikace, \dots), URL je viditelně v úvodu a závěru, aby bylo jasné, kde výsledek hledat.
-	\item Na médiu nechybí povinné: 
+	\item V rámci elektronického odevzdání do úložiště nechybí povinné: 
     	\begin{itemize}
     		\item zdrojové kódy (např. Matlab, C/C++, Python, \dots)
             \item knihovny potřebné pro překlad,
@@ -334,18 +327,18 @@ Velká bezpečnost letecké dopravy stojí z části na tom, že lidé kolem let
 \subsubsection*{Odevzdání}
 
 \begin{checklist}
-\item Chci práci (na max. 3 roky) utajit? Pokud ano, nejpozději měsíc před termínem odevzdání práce si podám žádost (v IS), ke které přiložím případné stanovisko firmy, jejíž duševní vlastnictví je třeba chránit.
-\item Mám splněný minimální počet normostran textu (lze spočítat pomocí Makefile a~odhadem přičíst obrázky). Pokud jsem těsně pod minimem, konzultoval(a) jsem to s~vedoucím.
+\item Chci práci (na max. 5 let) utajit? Pokud ano, nejpozději měsíc před termínem odevzdání práce si podám žádost (v IS), ke které přiložím případné stanovisko firmy, jejíž duševní vlastnictví je třeba chránit.
+\item Mám splněný minimální počet normostran textu (lze spočítat pomocí Makefile a~odhadem přičíst obrázky, případně pomocí \url{https://app.fit.vut.cz/theses-checker}). Pokud jsem těsně pod minimem, konzultoval(a) jsem to s~vedoucím.
 \item Pokud chci tisknout oboustranně, konzultoval(a) jsem to s~vedoucím a mám správně nastavenou šablonu. Kapitoly začínají na liché stránce.
-\item Technickou zprávu mám v deskách z knihařství (min. 1 výtisk, při utajení oba).
+\item Technickou zprávu mám v deskách z knihařství.
 \item Za titulním listem práce je zadání (tzn. mám jej stažené z IS a vložené do šablony).
 \item V IS jsou abstrakty a klíčová slova.
   \begin{itemize}
     \item V abstraktu a klíčových slovech v IS nejsou zkopírované vlnky pro nezlomitelné mezery.
   \end{itemize}      
 \item V IS je PDF práce (s klikatelnými odkazy).
-\item Vytištěná verze práce je podepsaná (při utajení jsou podepsané oba výtisky).
-\item Ve vytištěné verzi práce je paměťové médium (při utajení v obou výtiscích), na kterém je fixkou napsaný login (fixku na CD lze zapůjčit v knihovně, na Studijním oddělení nebo až při odevzdání).
+\item Prohlášení ve vytištěné verzi práce je podepsané.
+\item Při utajeném zveřejnění je ve vytištěné verzi práce paměťové médium. Na médiu je fixkou uveden login (fixku na CD lze zapůjčit v knihovně, na Studijním oddělení nebo až při odevzdání).
 \end{checklist}
 
 
@@ -419,12 +412,12 @@ a dvou horizontálně zarovnaných rovnic: % znak & řídí zarovnání
 	x &= 2y + 4 
 \end{align}
 
-Pokud je třeba rovnici citovat v textu, lze použít příkaz \verb|\eqref|. Například na rovnici výše lze odkázat~\eqref{eq:rovnice2}. Pokud chcete srovnat číslo rovnic u soustavy, lze použít prostředí \texttt{split}:
+Pokud je třeba rovnici citovat v textu, lze použít příkaz \verb|\eqref|. Například na rovnici výše lze odkázat~\eqref{eq:rovnice2}. Pokud chcete srovnat číslo rovnic u soustavy, lze použít prostředí \texttt{aligned}:
 \begin{equation} \label{eq:soustavaSrovnana}
-\begin{split}
+\begin{aligned}
 	3x &= 6y + 12 \\
 	x &= 2y + 4
-\end{split}
+\end{aligned}
 \end{equation}
 
 Matematické symboly ($\alpha$) a výrazy lze umístit i do textu $\cos\pi=-1$ a mohou být i~v~poznámce pod čarou%
@@ -506,396 +499,398 @@ U vedlejšího nadpisu nový řádek vyvolá škaredou mezeru, takže tam ho nep
 
 \chapter{Příklady bibliografických citací}
 \label{priloha-priklady-citaci}
-Styl czplain vychází ze stylu vytvořeného v rámci práce pana Pyšného \cite{Pysny}. Obsahuje sadu podporovaných typů citací s konkrétními příklady bibliografických citací. 
+Styl czplain vychází ze stylu vytvořeného v rámci práce pana Pyšného \cite{Pysny}. Obsahuje sadu podporovaných typů citací s konkrétními příklady bibliografických citací.
 
-Na následujících stránkách přílohy jsou uvedeny příklady, jenž znázorňují bibliografické citace následujících publikací a~jejich částí:
-\begin{itemize}
-   \item článku v seriálové publikaci (časopisu) (str. \pageref{pr-casopis-clanek}),
-   \item monografické publikace (str. \pageref{pr-monografie}),
-   \item sborníku (str. \pageref{pr-sbornik}),
-   \item článku ve sborníku nebo kapitoly v knize (str. \pageref{pr-kapitola}),
-   \item manuálu, dokumentace, technické zprávy a nepublikovaných materiálů (str. \pageref{pr-manual}),
-   \item akademické práce (str. \pageref{pr-thesis}),
-   \item webové stránky (str. \pageref{pr-webpage}),
-   \item a webové domény (str. \pageref{pr-website}).
-\end{itemize}
+Příklady bibliografických citací jsou uvedeny na \url{https://www.fit.vut.cz/study/theses/citations/#priklady}.
 
-\noindent Položky jsou označený barevně podle povinnosti:
-\begin{itemize}
-    \item prvek je dle normy povinný
-    \item \textcolor{blue}{prvek, který je dle normy volitelný}
-    \item \textcolor{magenta}{prvek, který je dle normy povinný pro online informační zdroje}
-    \item \textcolor{red}{prvek, který není předepsán normou a je v bibliografickém stylu v šabloně volitelný}
-\end{itemize}
-Povinné položky se uvádí pouze pokud existují.
-
-\newpage
-\noindent V souboru s bibliografií se záznamy uvádí následujícím způsobem:
-\begin{verbatim}
-@Article{Doe:2020,
-   author               = "Doe, John",
-   title                = "Jak citovat",
-   subtitle             = "Citace článku",
-   journal              = "Seriál o tvorbě prací",
-   journalsubtitle      = "Formální náležitosti",
-   howpublished         = "online",
-   address              = "Brno",
-   publisher            = "Fakulta informačních technologií VUT v Brně",
-   contributory         = "Přeložil Jan NOVÁK",
-   edition              = "1",
-   version              = "verze 1.0",
-   month                = 2,
-   year                 = "2020",
-   revised              = "revidováno 12. 2. 2020",
-   volume               = "4",
-   number               = "24",
-   pages                = "8--21",
-   cited                = "2020-02-12",
-   doi                  = "10.1000/BC1.0",
-   issn                 = "1234-5678",
-   note                 = "Toto je zcela vymyšlená citace",
-   url                  = "https://merlin.fit.vutbr.cz"
-}
-\end{verbatim}
-
-Citace jsou seřazeny podle abecedy. Řazení jmen s písmeny s diakritikou můžeme ovlivnit prvkem \texttt{key}, jehož  hodnotu nastavíme na příjmení bez diakritiky. Pokud není vyplněn autor, citace se řadí na začátek seznamu, což není vhodné. Řazení v tomto případě můžeme taktéž ovlivnit vhodně nastaveným prvkem key.
-
-\medskip
-\medskip
-\noindent \textbf{Příklad}:
-\begin{verbatim}
-   @Article{Cech:2020:Citace,
-	   author               = "Čech, Jan",
-	   key                  = "Cech",
-	   ... 
-\end{verbatim}
-
-
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Článek v seriálové publikaci -- @Article}
-\label{pr-casopis-clanek}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad \\\hline
-    Tvůrce & author & Doe, John\\
-    Název příspěvku & title & Jak citovat\\
-    \textcolor{blue}{Vedlejší název} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace článku}\\
-    Název seriálové publikace & journal & Seriál o tvorbě prací\\
-    \textcolor{blue}{Vedlejší názvy seriálu} & \textcolor{blue}{journalsubtitle} & \textcolor{blue}{Formální náležitosti}\\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    Vydání & edition & 1\\
-    Verze & version & verze 1.0\\
-    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
-    Místo vydání & address & Brno\\
-    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
-    Měsíc & month & 2\\
-    Rok & year & 2020\\
-    Svazek & volume & 4\\
-    Číslo & number & 24\\
-    Rozsah příspěvku & pages & 8-21\\
-    Revize & revised & revidováno 12. 2. 2020\\
-    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
-    Název edice & series & Návody k tvorbě prací\\
-    Číslo edice & editionnumber & 42\\
-    \textcolor{magenta}{Identifikátor digitálního obsahu*} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
-    Standardní číslo  & issn & 1234-5678\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    \textcolor{magenta}{Dostupnost a přístup*} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}
-\end{tabularx}
-
-\bigskip
-\textcolor{magenta}{*} Pokud je uvedeno doi, url se neuvádí.
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{Doe}, J. Jak Citovat: Citace článku. \textit{Seriál o tvorbě prací: Formální náležitosti} online. 1.~vyd., verze 1.0. Přeložil Jan NOVÁK. Brno: Fakulta informačních technologií VUT v~Brně. Únor 2020, sv. 4, č. 24, s. 8–21, revidováno 12. 2. 2020. Návody k~tvorbě prací, č. 42. ISSN 1234-5678. Dostupné z: \url{https://doi.org/10.1000/BC1.0.} [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
-
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Monografická publikace -- @Book, @Booklet (kniha, brožura)}
-\label{pr-monografie}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    Tvůrce & author & John von Doe\\
-    Titul & title & Jak citovat\\
-    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace monografické publikace}\\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    Vydání & edition & 1\\
-    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
-    Místo vydání & address & Brno\\
-    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
-    Měsíc vydání & month & 2\\
-    Rok vydání & year & 2020\\
-    Revize & revision & revidováno 12. 2. 2020\\
-    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
-    \textcolor{red}{Rozsah} & \textcolor{red}{pages} & \textcolor{red}{220}\\
-    Edice & series & Návody k tvorbě prací\\
-    Číslo edice & editionnumber & 2\\
-    Standardní číslo & isbn & 01-234-5678-9\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}\\
-\end{tabularx}
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{von Doe}, J. \textit{Jak citovat: Citace monografické publikace} online . 1. vyd. Přeložil Jan NOVÁK.
-Brno:Fakulta informačních technologií VUT v Brně, únor 2020, revidováno 12. 2. 2020. 220 s. Návody k tvorbě prací, č. 2. ISBN 01-234-5678-9. Dostupné z: \url{https://merlin.fit.vutbr.cz}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace. 
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Sborník -- @Proceedings}
-\label{pr-sbornik}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    \textcolor{red}{Tvůrce*} & \textcolor{red}{author} & \textcolor{red}{Čechmánek, Jan}\\
-    \textcolor{red}{Editor*} & \textcolor{red}{editor} & \textcolor{red}{Čechmánek, Jan}\\
-    Titul & title & Jak citovat\\
-    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace monografické publikace}\\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    Vydání & edition & 1\\
-    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
-    Místo vydání & address & Brno\\
-    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
-    Měsíc vydání & month & 2\\
-    Rok vydání & year & 2020\\
-    Svazek & volume & 4\\
-    Číslo svazku & number & 24\\
-    Rozsah příspěvku & pages & 8-21\\
-    \textcolor{magenta}{Revize} & \textcolor{magenta}{revised} & \textcolor{magenta}{revidováno 12. 2. 2020}\\
-    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
-    Edice & series & Návody k tvorbě prací\\
-    Číslo edice & editionnumber & 2\\
-    \textcolor{magenta}{Identifikátor digitálního objektu*} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
-    Standardní číslo & isbn nebo issn & 01-234-5678-9\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlná citace}\\
-    \textcolor{magenta}{Dostupnost a přístup*} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}
-\end{tabularx}
-
-
-\bigskip
-\noindent \textcolor{red}{*} Uvádí se buď autor, nebo editor. \\
-\noindent \textcolor{magenta}{*} Pokud je uvedeno doi, url se neuvádí.
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{Čechmánek}, J. \textit{Jak citovat: Citace sborníku} online. 1. vyd. Přeložil Jan NOVÁK.
-Brno: Fakulta informačních technologií VUT v Brně, únor 2020, sv. 4, č. 24, s. 8–21, revidováno 12. 2. 2020. Návody k tvorbě prací, č. 2. ISBN 01-234-5678-9. Dostupné z: \url{https://doi.org/10.1000/BC1.0}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.  
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Článek ve sborníku nebo kapitola v knize -- @InProceedings, @InCollection, @Conference, @InBook}
-\label{pr-kapitola}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    Tvůrce & author & John von Doe\\
-    Název příspěvku & title & Jak citovat\\
-    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace článku}\\
-    Jméno tvůrce mateřského dokumentu & editor nebo organisation & Smith, Peter\\
-    Název mateřského dokumentu & booktitle & Sborník konference o~tvorbě prací\\
-    \textcolor{blue}{Vedlejší názvy mateřského dokumentu} & \textcolor{blue}{booksubtitle} & \textcolor{blue}{Formální náležitosti}\\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    Vydání & edition & 1\\
-    Verze & version & verze 1.0\\
-    \textcolor{blue}{Další původce mateřského dokumentu} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
-    Místo vydání & address & Brno\\
-    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
-    Měsíc & month & 2\\
-    Rok & year & 2020\\
-    Svazek & volume & 4\\
-    Číslo svazku & number & 24\\
-    \textcolor{blue}{Kapitola} & \textcolor{blue}{chapter} & \textcolor{blue}{5}\\
-    Rozsah příspěvku & pages & 8-21\\
-    Revize & revised & revidováno 12. 2. 2020\\
-    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
-    Edice & series & Návody k tvorbě prací\\
-    Číslo edice & editionnumber & 2\\
-    Standardní číslo & isbn nebo issn & 1234-5678\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}\\
-\end{tabularx}
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}\\
-\textsc{Doe}, J. Jak citovat: Citace článku.
-In: \textsc{Smith}, P., ed. \textit{Sborník konference o tvorbě prací: Formální náležitosti} online. 1. vyd., verze 1.0. Přeložil Jan NOVÁK. Brno: Fakulta informačních technologií VUT v Brně, únor 2020, sv. 4, č. 24, kap. 5, s. 8–21, revidováno 12. 2. 2020. Návody k tvorbě prací, č. 2. ISSN 1234-5678. Dostupné z: \url{https://merlin.fit.vutbr.cz}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Manuál, dokumentace, technická zpráva a nepublikované materiály -- @Manual, @TechReport, @Unpublished}
-\label{pr-manual}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    Tvůrce (osoba nebo organizace) & author & Fakulta informačních technologií VUT v Brně\\
-    Titul & title & Manuál k tvorbě prací\\
-    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace manuálu}\\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    \textcolor{red}{Typ dokumantu} & \textcolor{red}{type} & \textcolor{red}{Uživatelský manuál}\\
-    \textcolor{red}{Číslo dokumentu} & \textcolor{red}{number} & \textcolor{red}{3}\\
-    Vydání & edition & 1\\
-    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Editoval Jan NOVÁK}\\
-    Místo vydání & address & Brno\\
-    Organizace nebo instituce & organization nebo institution & Fakulta informačních technologií VUT v Brně\\
-    Měsíc vydání & month & 2\\
-    Rok vydání & year & 2020\\
-    Revize & revised & revidováno 12. 2. 2020\\
-    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
-    \textcolor{red}{Rozsah} & \textcolor{red}{pages} & \textcolor{red}{220}\\   
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}\\
-\end{tabularx}
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{Fakulta informačních technologií VUT v Brně}. \textit{Manuál k tvorbě prací: Citace manuálu} online. Uživatelský manuál 3, 1. vyd. Editoval Jan NOVÁK.
-Brno: Fakulta informačních technologií VUT v Brně, únor 2020, revidováno 12. 2. 2020. 220 s. Dostupné z: \url{https://merlin.fit.vutbr.cz}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Akademická práce -- @BachelorsThesis, @MastersThesis, \\@PhdThesis, @Thesis}
-\label{pr-thesis}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    Tvůrce & author & Fakulta informačních technologií VUT v Brně\\
-    Titul & title & BiBTeX styl pro ČSN ISO 690 a ČSN ISO 690-2\\
-    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    \textcolor{red}{Typ dokumantu} & \textcolor{red}{type} & \textcolor{red}{Diplomová práce}\\
-    Místo vydání & address nebo location & Brno\\
-    Škola & school & Vysoké učení technické v~Brně, Fakulta informačních technologií\\
-    Rok vydání & year & 2020\\
-    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
-    \textcolor{red}{Rozsah} & \textcolor{red}{pages} & \textcolor{red}{220}\\
-    \textcolor{red}{Rozsah příloh} & \textcolor{red}{inserts} & \textcolor{red}{20}\\
-    Standardní číslo & isbn & 01-234-5678-9\\
-    \textcolor{red}{Vedoucí práce} & \textcolor{red}{Supervisor} & \textcolor{red}{Dytrych, Jaroslav}\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://www.fit.vut.cz/\-study/theses}\\
-\end{tabularx}
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{Novák}, J. \textit{BiBTeX styl pro ČSN ISO 690 a ČSN ISO 690-2} online. Brno, CZ, 2020. 80 s., 20. s. příl. Diplomová práce. Vysoké učení technické v Brně, Fakulta informačních technologií. ISBN 01-2345-678-9. Vedoucí práce \textsc{Dytrych}, J. Dostupné z: \url{https://www.fit.vut.cz/study/theses}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Webová stránka -- @Webpage}
-\label{pr-webpage}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    Tvůrce & author & Nováková, Jana\\
-    Název příspěvku & secondarytitle & Citace příspěvku\\
-    Název stránky & title & Web tvorby prací\\
-    \textcolor{blue}{Vedlejší název stránky}  &  \textcolor{blue}{subtitle} & \\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Editoval Jan NOVÁK}\\
-    \textcolor{red}{Verze} & \textcolor{red}{version} & \textcolor{red}{Verze 1.0}\\
-    \textcolor{red}{Místo vydání} & \textcolor{red}{address} & \textcolor{red}{Brno}\\
-    \textcolor{red}{Vydavatel} & \textcolor{red}{publisher} & \textcolor{red}{Fakulta informačních technologií VUT v Brně}\\
-    Den & day & 12\\
-    Měsíc vydání & month & 2\\
-    Rok vydání & year & 2020\\
-    \textcolor{blue}{Čas publikování} & \textcolor{blue}{time} & \textcolor{blue}{14:00}\\
-    Revize & revised & Revidováno 12. 2. 2020\\
-    \textcolor{magenta}{Identifikátor digitálního objektu*} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
-    Standardní číslo & issn & 1234-5678\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    Dostupnost a přístup & url & https://merlin.fit.vutbr.cz\\
-    Cesta & path & Domů; Umění; Umění citace
-\end{tabularx}
-
-\bigskip
-* Pokud je uvedeno doi, url se neuvádí.
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{Nováková}, J. Citace příspěvku. \textit{Web tvorby prací} online. Editoval Jan NOVÁK. Verze 1.0. Brno: Fakulta informačních technologií VUT v Brně, 2. března 1998 14:10. Revidováno 12. 2. 2020. ISSN 1234-5678.  Dostupné z: \url{https://doi.org/10.1000/BC1.0.}. [cit. 2020-02-12]. Path: Domů; Umění; Umění citace. Toto je zcela vymyšlená citace.
-%-------------------------------------------------------------------------------
-\newpage
-\section*{Webová doména -- @Website}
-\label{pr-website}
-\noindent \textbf{Položky záznamu}
-
-\medskip
-
-\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
-    Prvek & Zápis v BibTeXu & Příklad\\\hline
-    Tvůrce (osoba nebo organizace) & author & Nováková, Jana\\
-    Název webu & title & Web tvorby prací\\
-    \textcolor{blue}{Vedlejší název webu} &  \textcolor{blue}{subtitle} & \\
-    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
-    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Editoval Jan NOVÁK}\\
-    \textcolor{red}{Verze} & \textcolor{red}{version} & \textcolor{red}{Verze 1.0}\\
-    \textcolor{red}{Místo vydání} & \textcolor{red}{address} & \textcolor{red}{Brno}\\
-    \textcolor{red}{Vydavatel} & \textcolor{red}{publisher} & \textcolor{red}{Fakulta informačních technologií VUT v Brně}\\
-    \textcolor{blue}{Den} & \textcolor{blue}{day} & \textcolor{blue}{12}\\
-    \textcolor{blue}{Měsíc vydání} & \textcolor{blue}{month} & \textcolor{blue}{2}\\
-    Rok vydání & year & 2020\\
-    \textcolor{blue}{Čas publikování} & \textcolor{blue}{time} & \textcolor{blue}{14:00}\\
-    Revize & revised & Revidováno 12. 2. 2020\\
-    Datum & citování & cited 2020-02-12\\
-    \textcolor{magenta}{Identifikátor digitálního objektu} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
-    Standardní číslo & issn & 1234-5678\\
-    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
-    Dostupnost a přístup & url & https://merlin.fit.vutbr.cz
-\end{tabularx}
-
-\bigskip
-* Pokud je uvedeno doi, url se neuvádí.
-
-\bigskip
-
-\noindent \textbf{Bibliografická citace}
-
-\medskip
-
-\noindent \textsc{Nováková}, J. \textit{Web tvorby prací} online. Editoval Jan NOVÁK. Verze 1.0. Brno: Fakulta informačních technologií VUT v Brně, 2. března 1998 14:10. Revidováno 12. 2. 2020. ISSN 1234-5678. Dostupné z: \url{https://doi.org/10.1000/BC1.0.}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
+%Na následujících stránkách přílohy jsou uvedeny příklady, jenž znázorňují bibliografické citace následujících publikací a~jejich částí:
+%\begin{itemize}
+%   \item článku v seriálové publikaci (časopisu) (str. \pageref{pr-casopis-clanek}),
+%   \item monografické publikace (str. \pageref{pr-monografie}),
+%   \item sborníku (str. \pageref{pr-sbornik}),
+%   \item článku ve sborníku nebo kapitoly v knize (str. \pageref{pr-kapitola}),
+%   \item manuálu, dokumentace, technické zprávy a nepublikovaných materiálů (str. \pageref{pr-manual}),
+%   \item akademické práce (str. \pageref{pr-thesis}),
+%   \item webové stránky (str. \pageref{pr-webpage}),
+%   \item a webové domény (str. \pageref{pr-website}).
+%\end{itemize}
+%
+%\noindent Položky jsou označený barevně podle povinnosti:
+%\begin{itemize}
+%    \item prvek je dle normy povinný
+%    \item \textcolor{blue}{prvek, který je dle normy volitelný}
+%    \item \textcolor{magenta}{prvek, který je dle normy povinný pro online informační zdroje}
+%    \item \textcolor{red}{prvek, který není předepsán normou a je v bibliografickém stylu v šabloně volitelný}
+%\end{itemize}
+%Povinné položky se uvádí pouze pokud existují.
+%
+%\newpage
+%\noindent V souboru s bibliografií se záznamy uvádí následujícím způsobem:
+%\begin{verbatim}
+%@Article{Doe:2020,
+%   author               = "Doe, John",
+%   title                = "Jak citovat",
+%   subtitle             = "Citace článku",
+%   journal              = "Seriál o tvorbě prací",
+%   journalsubtitle      = "Formální náležitosti",
+%   howpublished         = "online",
+%   address              = "Brno",
+%   publisher            = "Fakulta informačních technologií VUT v Brně",
+%   contributory         = "Přeložil Jan NOVÁK",
+%   edition              = "1",
+%   version              = "verze 1.0",
+%   month                = 2,
+%   year                 = "2020",
+%   revised              = "revidováno 12. 2. 2020",
+%   volume               = "4",
+%   number               = "24",
+%   pages                = "8--21",
+%   cited                = "2020-02-12",
+%   doi                  = "10.1000/BC1.0",
+%   issn                 = "1234-5678",
+%   note                 = "Toto je zcela vymyšlená citace",
+%   url                  = "https://merlin.fit.vutbr.cz"
+%}
+%\end{verbatim}
+%
+%Citace jsou seřazeny podle abecedy. Řazení jmen s písmeny s diakritikou můžeme ovlivnit prvkem \texttt{key}, jehož  hodnotu nastavíme na příjmení bez diakritiky. Pokud není vyplněn autor, citace se řadí na začátek seznamu, což není vhodné. Řazení v tomto případě můžeme taktéž ovlivnit vhodně nastaveným prvkem key.
+%
+%\medskip
+%\medskip
+%\noindent \textbf{Příklad}:
+%\begin{verbatim}
+%   @Article{Cech:2020:Citace,
+%	   author               = "Čech, Jan",
+%	   key                  = "Cech",
+%	   ... 
+%\end{verbatim}
+%
+%
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Článek v seriálové publikaci -- @Article}
+%\label{pr-casopis-clanek}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad \\\hline
+%    Tvůrce & author & Doe, John\\
+%    Název příspěvku & title & Jak citovat\\
+%    \textcolor{blue}{Vedlejší název} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace článku}\\
+%    Název seriálové publikace & journal & Seriál o tvorbě prací\\
+%    \textcolor{blue}{Vedlejší názvy seriálu} & \textcolor{blue}{journalsubtitle} & \textcolor{blue}{Formální náležitosti}\\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    Vydání & edition & 1\\
+%    Verze & version & verze 1.0\\
+%    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
+%    Místo vydání & address & Brno\\
+%    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
+%    Měsíc & month & 2\\
+%    Rok & year & 2020\\
+%    Svazek & volume & 4\\
+%    Číslo & number & 24\\
+%    Rozsah příspěvku & pages & 8-21\\
+%    Revize & revised & revidováno 12. 2. 2020\\
+%    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
+%    Název edice & series & Návody k tvorbě prací\\
+%    Číslo edice & editionnumber & 42\\
+%    \textcolor{magenta}{Identifikátor digitálního obsahu*} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
+%    Standardní číslo  & issn & 1234-5678\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    \textcolor{magenta}{Dostupnost a přístup*} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}
+%\end{tabularx}
+%
+%\bigskip
+%\textcolor{magenta}{*} Pokud je uvedeno doi, url se neuvádí.
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{Doe}, J. Jak Citovat: Citace článku. \textit{Seriál o tvorbě prací: Formální náležitosti} online. 1.~vyd., verze 1.0. Přeložil Jan NOVÁK. Brno: Fakulta informačních technologií VUT v~Brně. Únor 2020, sv. 4, č. 24, s. 8–21, revidováno 12. 2. 2020. Návody k~tvorbě prací, č. 42. ISSN 1234-5678. Dostupné z: \url{https://doi.org/10.1000/BC1.0.} [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
+%
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Monografická publikace -- @Book, @Booklet (kniha, brožura)}
+%\label{pr-monografie}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    Tvůrce & author & John von Doe\\
+%    Titul & title & Jak citovat\\
+%    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace monografické publikace}\\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    Vydání & edition & 1\\
+%    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
+%    Místo vydání & address & Brno\\
+%    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
+%    Měsíc vydání & month & 2\\
+%    Rok vydání & year & 2020\\
+%    Revize & revision & revidováno 12. 2. 2020\\
+%    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
+%    \textcolor{red}{Rozsah} & \textcolor{red}{pages} & \textcolor{red}{220}\\
+%    Edice & series & Návody k tvorbě prací\\
+%    Číslo edice & editionnumber & 2\\
+%    Standardní číslo & isbn & 01-234-5678-9\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}\\
+%\end{tabularx}
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{von Doe}, J. \textit{Jak citovat: Citace monografické publikace} online . 1. vyd. Přeložil Jan NOVÁK.
+%Brno:Fakulta informačních technologií VUT v Brně, únor 2020, revidováno 12. 2. 2020. 220 s. Návody k tvorbě prací, č. 2. ISBN 01-234-5678-9. Dostupné z: \url{https://merlin.fit.vutbr.cz}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace. 
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Sborník -- @Proceedings}
+%\label{pr-sbornik}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    \textcolor{red}{Tvůrce*} & \textcolor{red}{author} & \textcolor{red}{Čechmánek, Jan}\\
+%    \textcolor{red}{Editor*} & \textcolor{red}{editor} & \textcolor{red}{Čechmánek, Jan}\\
+%    Titul & title & Jak citovat\\
+%    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace monografické publikace}\\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    Vydání & edition & 1\\
+%    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
+%    Místo vydání & address & Brno\\
+%    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
+%    Měsíc vydání & month & 2\\
+%    Rok vydání & year & 2020\\
+%    Svazek & volume & 4\\
+%    Číslo svazku & number & 24\\
+%    Rozsah příspěvku & pages & 8-21\\
+%    \textcolor{magenta}{Revize} & \textcolor{magenta}{revised} & \textcolor{magenta}{revidováno 12. 2. 2020}\\
+%    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
+%    Edice & series & Návody k tvorbě prací\\
+%    Číslo edice & editionnumber & 2\\
+%    \textcolor{magenta}{Identifikátor digitálního objektu*} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
+%    Standardní číslo & isbn nebo issn & 01-234-5678-9\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlná citace}\\
+%    \textcolor{magenta}{Dostupnost a přístup*} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}
+%\end{tabularx}
+%
+%
+%\bigskip
+%\noindent \textcolor{red}{*} Uvádí se buď autor, nebo editor. \\
+%\noindent \textcolor{magenta}{*} Pokud je uvedeno doi, url se neuvádí.
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{Čechmánek}, J. \textit{Jak citovat: Citace sborníku} online. 1. vyd. Přeložil Jan NOVÁK.
+%Brno: Fakulta informačních technologií VUT v Brně, únor 2020, sv. 4, č. 24, s. 8–21, revidováno 12. 2. 2020. Návody k tvorbě prací, č. 2. ISBN 01-234-5678-9. Dostupné z: \url{https://doi.org/10.1000/BC1.0}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.  
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Článek ve sborníku nebo kapitola v knize -- @InProceedings, @InCollection, @Conference, @InBook}
+%\label{pr-kapitola}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    Tvůrce & author & John von Doe\\
+%    Název příspěvku & title & Jak citovat\\
+%    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace článku}\\
+%    Jméno tvůrce mateřského dokumentu & editor nebo organisation & Smith, Peter\\
+%    Název mateřského dokumentu & booktitle & Sborník konference o~tvorbě prací\\
+%    \textcolor{blue}{Vedlejší názvy mateřského dokumentu} & \textcolor{blue}{booksubtitle} & \textcolor{blue}{Formální náležitosti}\\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    Vydání & edition & 1\\
+%    Verze & version & verze 1.0\\
+%    \textcolor{blue}{Další původce mateřského dokumentu} & \textcolor{blue}{contributory} & \textcolor{blue}{Přeložil Jan NOVÁK}\\
+%    Místo vydání & address & Brno\\
+%    Nakladatel & publisher & Fakulta informačních technologií VUT v Brně\\
+%    Měsíc & month & 2\\
+%    Rok & year & 2020\\
+%    Svazek & volume & 4\\
+%    Číslo svazku & number & 24\\
+%    \textcolor{blue}{Kapitola} & \textcolor{blue}{chapter} & \textcolor{blue}{5}\\
+%    Rozsah příspěvku & pages & 8-21\\
+%    Revize & revised & revidováno 12. 2. 2020\\
+%    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
+%    Edice & series & Návody k tvorbě prací\\
+%    Číslo edice & editionnumber & 2\\
+%    Standardní číslo & isbn nebo issn & 1234-5678\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}\\
+%\end{tabularx}
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}\\
+%\textsc{Doe}, J. Jak citovat: Citace článku.
+%In: \textsc{Smith}, P., ed. \textit{Sborník konference o tvorbě prací: Formální náležitosti} online. 1. vyd., verze 1.0. Přeložil Jan NOVÁK. Brno: Fakulta informačních technologií VUT v Brně, únor 2020, sv. 4, č. 24, kap. 5, s. 8–21, revidováno 12. 2. 2020. Návody k tvorbě prací, č. 2. ISSN 1234-5678. Dostupné z: \url{https://merlin.fit.vutbr.cz}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Manuál, dokumentace, technická zpráva a nepublikované materiály -- @Manual, @TechReport, @Unpublished}
+%\label{pr-manual}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    Tvůrce (osoba nebo organizace) & author & Fakulta informačních technologií VUT v Brně\\
+%    Titul & title & Manuál k tvorbě prací\\
+%    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \textcolor{blue}{Citace manuálu}\\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    \textcolor{red}{Typ dokumantu} & \textcolor{red}{type} & \textcolor{red}{Uživatelský manuál}\\
+%    \textcolor{red}{Číslo dokumentu} & \textcolor{red}{number} & \textcolor{red}{3}\\
+%    Vydání & edition & 1\\
+%    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Editoval Jan NOVÁK}\\
+%    Místo vydání & address & Brno\\
+%    Organizace nebo instituce & organization nebo institution & Fakulta informačních technologií VUT v Brně\\
+%    Měsíc vydání & month & 2\\
+%    Rok vydání & year & 2020\\
+%    Revize & revised & revidováno 12. 2. 2020\\
+%    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
+%    \textcolor{red}{Rozsah} & \textcolor{red}{pages} & \textcolor{red}{220}\\   
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://merlin.fit.vutbr.cz}\\
+%\end{tabularx}
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{Fakulta informačních technologií VUT v Brně}. \textit{Manuál k tvorbě prací: Citace manuálu} online. Uživatelský manuál 3, 1. vyd. Editoval Jan NOVÁK.
+%Brno: Fakulta informačních technologií VUT v Brně, únor 2020, revidováno 12. 2. 2020. 220 s. Dostupné z: \url{https://merlin.fit.vutbr.cz}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Akademická práce -- @BachelorsThesis, @MastersThesis, \\@PhdThesis, @Thesis}
+%\label{pr-thesis}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    Tvůrce & author & Fakulta informačních technologií VUT v Brně\\
+%    Titul & title & BiBTeX styl pro ČSN ISO 690 a ČSN ISO 690-2\\
+%    \textcolor{blue}{Vedlejší názvy} & \textcolor{blue}{subtitle} & \\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    \textcolor{red}{Typ dokumantu} & \textcolor{red}{type} & \textcolor{red}{Diplomová práce}\\
+%    Místo vydání & address nebo location & Brno\\
+%    Škola & school & Vysoké učení technické v~Brně, Fakulta informačních technologií\\
+%    Rok vydání & year & 2020\\
+%    \textcolor{magenta}{Datum citování} & \textcolor{magenta}{cited} & \textcolor{magenta}{2020-02-12}\\
+%    \textcolor{red}{Rozsah} & \textcolor{red}{pages} & \textcolor{red}{220}\\
+%    \textcolor{red}{Rozsah příloh} & \textcolor{red}{inserts} & \textcolor{red}{20}\\
+%    Standardní číslo & isbn & 01-234-5678-9\\
+%    \textcolor{red}{Vedoucí práce} & \textcolor{red}{Supervisor} & \textcolor{red}{Dytrych, Jaroslav}\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    \textcolor{magenta}{Dostupnost a přístup} & \textcolor{magenta}{url} & \textcolor{magenta}{https://www.fit.vut.cz/\-study/theses}\\
+%\end{tabularx}
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{Novák}, J. \textit{BiBTeX styl pro ČSN ISO 690 a ČSN ISO 690-2} online. Brno, CZ, 2020. 80 s., 20. s. příl. Diplomová práce. Vysoké učení technické v Brně, Fakulta informačních technologií. ISBN 01-2345-678-9. Vedoucí práce \textsc{Dytrych}, J. Dostupné z: \url{https://www.fit.vut.cz/study/theses}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Webová stránka -- @Webpage}
+%\label{pr-webpage}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    Tvůrce & author & Nováková, Jana\\
+%    Název příspěvku & secondarytitle & Citace příspěvku\\
+%    Název stránky & title & Web tvorby prací\\
+%    \textcolor{blue}{Vedlejší název stránky}  &  \textcolor{blue}{subtitle} & \\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Editoval Jan NOVÁK}\\
+%    \textcolor{red}{Verze} & \textcolor{red}{version} & \textcolor{red}{Verze 1.0}\\
+%    \textcolor{red}{Místo vydání} & \textcolor{red}{address} & \textcolor{red}{Brno}\\
+%    \textcolor{red}{Vydavatel} & \textcolor{red}{publisher} & \textcolor{red}{Fakulta informačních technologií VUT v Brně}\\
+%    Den & day & 12\\
+%    Měsíc vydání & month & 2\\
+%    Rok vydání & year & 2020\\
+%    \textcolor{blue}{Čas publikování} & \textcolor{blue}{time} & \textcolor{blue}{14:00}\\
+%    Revize & revised & Revidováno 12. 2. 2020\\
+%    \textcolor{magenta}{Identifikátor digitálního objektu*} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
+%    Standardní číslo & issn & 1234-5678\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    Dostupnost a přístup & url & https://merlin.fit.vutbr.cz\\
+%    Cesta & path & Domů; Umění; Umění citace
+%\end{tabularx}
+%
+%\bigskip
+%* Pokud je uvedeno doi, url se neuvádí.
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{Nováková}, J. Citace příspěvku. \textit{Web tvorby prací} online. Editoval Jan NOVÁK. Verze 1.0. Brno: Fakulta informačních technologií VUT v Brně, 2. března 1998 14:10. Revidováno 12. 2. 2020. ISSN 1234-5678.  Dostupné z: \url{https://doi.org/10.1000/BC1.0.}. [cit. 2020-02-12]. Path: Domů; Umění; Umění citace. Toto je zcela vymyšlená citace.
+%%-------------------------------------------------------------------------------
+%\newpage
+%\section*{Webová doména -- @Website}
+%\label{pr-website}
+%\noindent \textbf{Položky záznamu}
+%
+%\medskip
+%
+%\begin{tabularx}{0.95\linewidth}{>{\raggedright\arraybackslash}X X >{\raggedright\arraybackslash}X}
+%    Prvek & Zápis v BibTeXu & Příklad\\\hline
+%    Tvůrce (osoba nebo organizace) & author & Nováková, Jana\\
+%    Název webu & title & Web tvorby prací\\
+%    \textcolor{blue}{Vedlejší název webu} &  \textcolor{blue}{subtitle} & \\
+%    \textcolor{magenta}{Typ nosiče} & \textcolor{magenta}{howpublished} & \textcolor{magenta}{online}\\
+%    \textcolor{blue}{Další tvůrce} & \textcolor{blue}{contributory} & \textcolor{blue}{Editoval Jan NOVÁK}\\
+%    \textcolor{red}{Verze} & \textcolor{red}{version} & \textcolor{red}{Verze 1.0}\\
+%    \textcolor{red}{Místo vydání} & \textcolor{red}{address} & \textcolor{red}{Brno}\\
+%    \textcolor{red}{Vydavatel} & \textcolor{red}{publisher} & \textcolor{red}{Fakulta informačních technologií VUT v Brně}\\
+%    \textcolor{blue}{Den} & \textcolor{blue}{day} & \textcolor{blue}{12}\\
+%    \textcolor{blue}{Měsíc vydání} & \textcolor{blue}{month} & \textcolor{blue}{2}\\
+%    Rok vydání & year & 2020\\
+%    \textcolor{blue}{Čas publikování} & \textcolor{blue}{time} & \textcolor{blue}{14:00}\\
+%    Revize & revised & Revidováno 12. 2. 2020\\
+%    Datum & citování & cited 2020-02-12\\
+%    \textcolor{magenta}{Identifikátor digitálního objektu} & \textcolor{magenta}{doi} & \textcolor{magenta}{10.1000/BC1.0}\\
+%    Standardní číslo & issn & 1234-5678\\
+%    \textcolor{red}{Poznámky} & \textcolor{red}{note} & \textcolor{red}{Toto je zcela vymyšlená citace}\\
+%    Dostupnost a přístup & url & https://merlin.fit.vutbr.cz
+%\end{tabularx}
+%
+%\bigskip
+%* Pokud je uvedeno doi, url se neuvádí.
+%
+%\bigskip
+%
+%\noindent \textbf{Bibliografická citace}
+%
+%\medskip
+%
+%\noindent \textsc{Nováková}, J. \textit{Web tvorby prací} online. Editoval Jan NOVÁK. Verze 1.0. Brno: Fakulta informačních technologií VUT v Brně, 2. března 1998 14:10. Revidováno 12. 2. 2020. ISSN 1234-5678. Dostupné z: \url{https://doi.org/10.1000/BC1.0.}. [cit. 2020-02-12]. Toto je zcela vymyšlená citace.
 
 % Pro kompilaci po částech (viz projekt.tex) nutno odkomentovat
 %\end{document}

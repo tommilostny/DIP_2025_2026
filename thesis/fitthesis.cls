@@ -83,7 +83,7 @@
 \usepackage{url}
 \usepackage{ragged2e}
 \usepackage{color}
-\usepackage{etoolbox}
+\RequirePackage{etoolbox}
 \usepackage{enumitem}
 
 \ifczech
@@ -111,6 +111,9 @@
 \ifphdsummary
   \toggletrue{phd_summary}
 \fi
+
+\newtoggle{phd_specialist}
+\togglefalse{phd_specialist}
 
 \newtoggle{slovak_used}
 \togglefalse{slovak_used}
@@ -222,6 +225,20 @@
   \ifx\testa\testb \def#4{#3} \naseltrue \fi%
 }
 
+% ifEq pro prepinac - prepni true
+\def\ifEqStringSwitchTrue#1#2{\def\testa{#1}\def\testb{#2}%
+	\ifx\testa\testb \toggletrue{phd_specialist} \fi%
+}
+
+% 2025 - vytvoreno pomoci ChatGPT
+% porovnani dvou retezcu na prazdnost
+% {<arg1>}{<arg2>}{<true>}{<false>}
+\newcommand{\ifBothEmpty}[4]{%
+	\ifdefempty{#1}{%
+		\ifdefempty{#2}{#3}{#4}%
+	}{#4}%
+}
+
 %Vyber typu projektu / project type selection
 \newcommand{\set@project}[1]{%
  \naselfalse
@@ -257,6 +274,11 @@
 % \ifEqString{#1}{DR}{Školiteľ}{\@supervisor@SK}%
  \ifEqString{#1}{DR}{Školitel}{\@supervisor@SK}%
  \ifEqString{#1}{DR}{Supervisor}{\@supervisor@EN}%
+ \ifEqString{#1}{DR}{Školitel specialista}{\@specialist@CS}%
+ % \ifEqString{#1}{DR}{Školiteľ}{\@supervisor@SK}%
+ \ifEqString{#1}{DR}{Školitel specialista}{\@specialist@SK}%
+ \ifEqString{#1}{DR}{Supervisor specialist}{\@specialist@EN}%
+ 
  \ifEqString{#1}{DA}{Teze disertační práce -- autoreferát}{\@projecttype@CS}%
 % \ifEqString{#1}{DA}{Tézy dizertačnej práce -- autoreferát}{\@projecttype@SK}%
  \ifEqString{#1}{DA}{Teze disertační práce -- autoreferát}{\@projecttype@SK}%
@@ -274,6 +296,10 @@
 % \ifEqString{#1}{DT}{Školiteľ}{\@supervisor@SK}%
  \ifEqString{#1}{DT}{Školitel}{\@supervisor@SK}%
  \ifEqString{#1}{DT}{Supervisor}{\@supervisor@EN}%
+ \ifEqString{#1}{DT}{Školitel specialista}{\@specialist@CS}%
+ % \ifEqString{#1}{DT}{Školiteľ}{\@supervisor@SK}%
+ \ifEqString{#1}{DT}{Školitel specialista}{\@specialist@SK}%
+ \ifEqString{#1}{DT}{Supervisor specialist}{\@specialist@EN}%
  \ifEqString{#1}{PP}{Projektová praxe}{\@projecttype@CS}%
  \ifEqString{#1}{PP}{Projektová prax}{\@projecttype@SK}%
  \ifEqString{#1}{PP}{Project practice}{\@projecttype@EN}%
@@ -283,6 +309,10 @@
  \ifEqString{#1}{YP}{Ročníkový projekt}{\@projecttype@CS}%
  \ifEqString{#1}{YP}{Ročníkový projekt}{\@projecttype@SK}%
  \ifEqString{#1}{YP}{Year project}{\@projecttype@EN}%
+ % skolitel specialista / supervisor specialist
+ % zobrazi se pouze pro typy DR a DT / only for DR and DT
+ \ifEqStringSwitchTrue{#1}{DR}
+ \ifEqStringSwitchTrue{#1}{DT}
  \ifnasel
  \else
    \typeout{Spatny typ projektu! Moznosti: BP, SP, DP, DR, DT, DA, PP, YP}\set@project{BP}
@@ -377,7 +407,9 @@ Management}{\@fit@EN}%
 %Jmeno, prijmeni, tituly vedouciho / name surname and the titles of the supervisor
 \def\get@supervisor{\ifx\undefined\@supervisor@tp\else%
 \@supervisor@tp~\fi\MakeUppercase{\@supervisor}\ifx\undefined\@supervisor@ta\else,~\@supervisor@ta\fi}
-
+%Jmeno, prijmeni, tituly školitele specialisty / name surname and the titles of the supervisor specialist
+\def\get@specialist{\ifx\undefined\@specialist@tp\else%
+\@specialist@tp~\fi\MakeUppercase{\@specialist}\ifx\undefined\@specialist@ta\else,~\@specialist@ta\fi}
 %-----------------------------------------------------------------------------
 % Projectinfo - parametrizace sablony / template parameters
 %-----------------------------------------------------------------------------
@@ -402,6 +434,10 @@ Management}{\@fit@EN}%
 \define@key{projinfo}{supervisor.surname}{\def\@supervisor@s{#1}}
 \define@key{projinfo}{supervisor.title.a}{\def\@supervisor@ta{#1}}
 \define@key{projinfo}{supervisor.title.p}{\def\@supervisor@tp{#1}}
+\define@key{projinfo}{specialist.name}{\def\@specialist@n{#1}}
+\define@key{projinfo}{specialist.surname}{\def\@specialist@s{#1}}
+\define@key{projinfo}{specialist.title.a}{\def\@specialist@ta{#1}}
+\define@key{projinfo}{specialist.title.p}{\def\@specialist@tp{#1}}
 \define@key{projinfo}{keywords.cs}{\def\@tkeywords@CS{#1}}
 \define@key{projinfo}{keywords.en}{\def\@tkeywords@EN{#1}}
 \define@key{projinfo}{abstract.cs}{\def\@tabstract@CS{#1}}
@@ -420,7 +456,8 @@ Management}{\@fit@EN}%
   date=\today, project=BP, department=DEF, declaration=, 
   abstract.cs=, abstract.en=, keywords.cs=, keywords.en=,
   author.name=Jméno, author.surname=Příjmení, supervisor.name=Jméno, 
-  supervisor.surname=Příjmení, extendedabstract=, extabstract.odd=,
+  supervisor.surname=Příjmení, specialist.name=Jmeno, 
+  specialist.surname=Prijmeni, extendedabstract=, extabstract.odd=,
   department.cs=,department.en=,title.length=,
   sectitle.length=,dectitle.length=,
   faculty.cs=,faculty.en=,faculty=FIT
@@ -430,6 +467,7 @@ Management}{\@fit@EN}%
 
 \def\@author{\@author@n\ \@author@s}
 \def\@supervisor{\@supervisor@n\ \@supervisor@s}
+\def\@specialist{\@specialist@n\ \@specialist@s}
 
 %Prohlaseni / Declaration
 \newcommand{\declaration}[1]{\def\@declaration{#1}}
@@ -1015,6 +1053,21 @@ Management}{\@fit@EN}%
   }{
     \mkuctxtt{10}{\ifenslovak\@supervisor@SK\else\ifczech\@supervisor@EN\else\@supervisor@CS\fi\fi}
   }
+  
+  % pokud jsou jmeno a prijmeni skolitele specialisty prazdne, nebudeme zobrazovat
+  % if name and surname of the supervisor specialist are empty, it will not be printed
+  \ifBothEmpty{\@specialist@n}{\@specialist@s}{\togglefalse{phd_specialist}}{}	
+  % ma byt zobrazen skolitel specialista? / should supervisor specialist be printed?	
+  \iftoggle{phd_specialist}{
+	  \vspace{5mm}
+	  \mktxtt{14}{\MakeUppercase{\ifslovak\@specialist@SK\else\ifczech\@specialist@CS\else\@specialist@EN\fi\fi} \hfill \get@specialist}
+	  \iftoggle{slovak_used}{
+	  \mkuctxtt{10}{\@specialist@EN}
+	  }{
+		\mkuctxtt{10}{\ifenslovak\@specialist@SK\else\ifczech\@specialist@EN\else\@specialist@CS\fi\fi}
+	  }
+  }{}
+  
 
   \vspace{10mm}
 
@@ -1077,7 +1130,8 @@ Management}{\@fit@EN}%
 }{}
 
 \clearpage
-\setcounter{tocdepth}{2}\setcounter{page}{1}
+\setcounter{tocdepth}{1} % v obsahu pouze kapitoly a sekce / only chapters and sections in the Table of Contents
+\setcounter{page}{1}
 }
 
 %-----------------------------------------------------------------------------
