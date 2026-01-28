@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="DPCS.Agent/DPCS.Agent.csproj" />
+  <Project Path="DPCS.Coordinator/DPCS.Coordinator.csproj" />
+  <Project Path="DPCS.Shared/DPCS.Shared.csproj" />
+</Solution>

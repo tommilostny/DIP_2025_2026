@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+option csharp_namespace = "DPCS.Shared";
+
+import "google/protobuf/empty.proto";
+import "Messages.proto";
+
+/*=================== COORDINATOR GRAINS ==================================================*/
+
+service JobManagerGrain {
+  rpc JobDiscovery (google.protobuf.Empty) returns (JobAssignment);
+  rpc MaskJobSubmission (HashcatMaskJobSpecs) returns (google.protobuf.Empty);
+  rpc DictionaryJobSubmission (HashcatDictionaryJobSpecs) returns (google.protobuf.Empty);
+}
+
+service JobCoordinatorGrain {
+  rpc MaskWorkRequest (WorkRequest) returns (MaskWorkAssignment);
+  rpc DictionaryWorkRequest (WorkRequest) returns (DictionaryWorkAssignment);
+  rpc WorkResultSubmission (WorkResult) returns (google.protobuf.Empty);
+  rpc Heartbeat (AgentTelemetry) returns (google.protobuf.Empty);
+}
+
+service ResultCollectorGrain {
+  rpc StoreResult (WorkResult) returns (google.protobuf.Empty);
+}
+
+/*==================== AGENT GRAINS =======================================================*/
+
+service NodeGuardianGrain {
+  /*
+  rpc StartMaskWork (MaskWorkAssignment) returns (WorkResult);
+  rpc StartDictionaryWork (DictionaryWorkAssignment) returns (WorkResult);
+  */
+  rpc StopWork (google.protobuf.Empty) returns (google.protobuf.Empty);
+}

@@ -1,0 +1,70 @@
+syntax = "proto3";
+
+option csharp_namespace = "DPCS.Shared";
+
+// Job assignment message returned by JobManagerGrain in response to JobDiscovery RPC
+message JobAssignment {
+  string job_id = 1;
+  int64 mode_id = 2;
+}
+
+// Parameters for submitting a Hashcat mask attack job by user in the web interface
+message HashcatMaskJobSpecs {
+  string hash_type = 1;
+  repeated string hashes = 2;
+  string mask = 3;
+  int32 min_length = 4;
+  int32 max_length = 5;
+}
+
+// Parameters for submitting a Hashcat dictionary attack job by user in the web interface
+message HashcatDictionaryJobSpecs {
+  string hash_type = 1;
+  repeated string hashes = 2;
+  repeated string wordlists = 3;
+}
+
+// Message sent by agent to request more work
+message WorkRequest {
+  string agent_id = 1;
+  string job_id = 2;
+  double current_hashrate = 3;
+}
+
+// Shared metadata for tracking and idempotency
+message WorkMetadata {
+  string job_id = 1;
+  string request_id = 2; // Unique ID for deduplication
+  repeated string extra_args = 3; // e.g. "--optimized-kernel"
+}
+
+// Message for Attack Mode 3 (Stateless) - JobCoordinator provides mask and keyspace info
+message MaskWorkAssignment {
+  WorkMetadata meta = 1;
+  string mask = 2;
+  uint64 keyspace_start = 3;
+  uint64 keyspace_length = 4;
+}
+
+// Message for Attack Mode 0 (Stateful) - JobCoordinator provides dictionary chunk info
+message DictionaryWorkAssignment {
+  WorkMetadata meta = 1;
+  string dictionary_chunk_url = 2; // HTTP URL to download the chunk
+  string dictionary_chunk_checksum = 3; // SHA256 to verify integrity
+  string rule_file_content = 4; // Optional rules to apply
+}
+
+// Message sent by agent to submit work result
+message WorkResult {
+  string job_id = 1;
+  bool success = 2;
+  repeated string recovered_passwords = 3; // Optional
+}
+
+// Telemetry data sent by agent to coordinator, to mark it as alive and provide status
+message AgentTelemetry {
+  string agent_id = 1;
+  double current_hashrate = 2;
+  double average_temperature = 3;
+  double average_fan_speed = 4;
+}

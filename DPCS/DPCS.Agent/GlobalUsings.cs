@@ -1,0 +1,10 @@
+global using DPCS.Shared;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.Extensions.Hosting;
+global using Proto;
+global using Proto.Cluster;
+global using Proto.Cluster.Partition;
+global using Proto.Cluster.Testing;
+global using Proto.DependencyInjection;
+global using Proto.Remote;
+global using Proto.Remote.GrpcNet;
