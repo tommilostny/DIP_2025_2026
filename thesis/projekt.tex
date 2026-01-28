@@ -112,6 +112,7 @@
 % Řešení problému, kdy klikací odkazy na obrázky vedou za obrázek
 % This solves the problems with links which leads after the picture
 \usepackage[all]{hypcap}
+\usepackage{verbatim}
 
 
 % Informace o práci/projektu / Information about the thesis
@@ -140,25 +141,27 @@
   supervisor.title.p={Ing.},   %titul před jménem (nepovinné) / title before the name (optional)
   supervisor.title.a={Ph.D.},    %titul za jménem (nepovinné) / title after the name (optional)
   % Klíčová slova / keywords
-  keywords.cs={Sem budou zapsána jednotlivá klíčová slova v českém (slovenském) jazyce, oddělená čárkami.}, % klíčová slova v českém či slovenském jazyce / keywords in czech or slovak language
-  keywords.en={Sem budou zapsána jednotlivá klíčová slova v anglickém jazyce, oddělená čárkami.}, % klíčová slova v anglickém jazyce / keywords in english
+  keywords.cs={Distribuované výpočty, obnova hesel, model aktorů, Proto.Actor, Hashcat, .NET}, % klíčová slova v českém či slovenském jazyce / keywords in czech or slovak language
+  keywords.en={Distributed Computing, Password Recovery, Actor Model, Proto.Actor, Hashcat, .NET}, % klíčová slova v anglickém jazyce / keywords in english
   %keywords.en={Here, individual keywords separated by commas will be written in English.},
   % Abstrakt / Abstract
-  abstract.cs={Do tohoto odstavce bude zapsán výtah (abstrakt) práce v českém (slovenském) jazyce.}, % abstrakt v českém či slovenském jazyce / abstract in czech or slovak language
-  abstract.en={Do tohoto odstavce bude zapsán výtah (abstrakt) práce v anglickém jazyce.}, % abstrakt v anglickém jazyce / abstract in english
+  abstract.cs={Tato práce se zabývá rostoucí výpočetní náročností obnovy hesel návrhem vysoce výkonné architektury distribuovaného systému založené na modelu aktorů v .NET. Prostřednictvím důkladné analýzy kryptografických primitiv a enginu Hashcat, výzkum identifikuje odlišné architektonické požadavky pro útoky hrubou silou zaměřené na výpočetní výkon a slovníkové útoky zaměřené na I/O. Studie hodnotí distribuované frameworky a vybírá Proto.Actor pro jeho vynikající propustnost přes framework gRPC. Hlavním přínosem je navržený systém koordinátor-agent odolný vůči chybám, který využívá polymorfní zasílání zpráv mezi aktory k optimalizaci distribuce pracovní zátěže.}, % abstrakt v českém či slovenském jazyce / abstract in czech or slovak language
+  abstract.en={This thesis addresses the computational demands of modern password recovery by proposing a high-performance distributed system architecture based on the Actor Model in .NET. Through a rigorous analysis of cryptographic primitives and the Hashcat engine, the research identifies distinct architectural requirements for compute-bound brute-force attacks and I/O-bound dictionary attacks. The study evaluates distributed frameworks, selecting Proto.Actor for its superior gRPC throughput. The core contribution is a fault-tolerant, coordinator-agent system that utilizes polymorphic actor messaging to optimize workload distribution.}, % abstrakt v anglickém jazyce / abstract in english
   %abstract.en={An abstract of the work in English will be written in this paragraph.},
   % Prohlášení (u anglicky psané práce anglicky, u slovensky psané práce slovensky; u projektové praxe lze zakomentovat) / Declaration (for thesis in english should be in english; for project practice can be commented out)
-  declaration={Prohlašuji, že jsem tuto bakalářskou práci vypracoval samostatně pod vedením pana Ing. Jana Pluskala, Ph.D.
-Další informace mi poskytli...
-Uvedl jsem všechny literární prameny, publikace a další zdroje, ze kterých jsem čerpal. 
-Pro jazykovou revizi technické zprávy jsem použil(a) nástroj Google Gemini. 
-Při tvorbě odevzdaného programového kódu jsem využíval nástroj Github Copilot. [konkretizujte a upravte podle skutečnosti].},
-  %declaration={I hereby declare that this Bachelor's thesis was prepared as an original work by the author under the supervision of Mr. X
+  %declaration={Prohlašuji, že jsem tuto bakalářskou práci vypracoval samostatně pod vedením pana Ing. Jana Pluskala, Ph.D.
+%Další informace mi poskytli...
+%Uvedl jsem všechny literární prameny, publikace a další zdroje, ze kterých jsem čerpal. 
+%Pro jazykovou revizi technické zprávy jsem použil(a) nástroj Google Gemini. 
+%Při tvorbě odevzdaného programového kódu jsem využíval nástroj Github Copilot. [konkretizujte a upravte podle skutečnosti].},
+  declaration={I hereby declare that this Master's thesis was prepared as an original work by the author under the supervision of Ing. Jan Pluskal, Ph.D.
 % The supplementary information was provided by Mr. Y
-% I have listed all the literary sources, publications and other sources, which were used during the preparation of this thesis.},
+ I have listed all the literary sources, publications and other sources, which were used during the preparation of this thesis.
+ I used the Google Gemini tool for the language revision of the technical report. During the creation of the submitted program code, I utilized the GitHub Copilot tool.},
   % Poděkování (nepovinné, nejlépe v jazyce práce; nechcete-li, zakomentujte pro skrytí nadpisu) / Acknowledgement (optional, ideally in the language of the thesis; comment out for hiding including heading)
-  acknowledgment={V této sekci je možno uvést poděkování vedoucímu práce a těm, kteří poskytli odbornou pomoc
-(externí zadavatel, konzultant apod.).},
+  %acknowledgment={V této sekci je možno uvést poděkování vedoucímu práce a těm, kteří poskytli odbornou pomoc
+%(externí zadavatel, konzultant apod.).},
+  acknowledgment={I would like to express my sincere gratitude to my supervisor, Ing. Jan Pluskal, Ph.D., for his expert guidance, valuable advice, and patience throughout the creation of this thesis.},
   %acknowledgment={Here it is possible to express thanks to the supervisor and to the people which provided professional help
 %(external submitter, consultant, etc.).},
   % Rozšířený abstrakt (cca 3 normostrany) - lze definovat zde nebo níže / Extended abstract (approximately 3 standard pages) - can be defined here or below
@@ -212,7 +215,8 @@ Při tvorbě odevzdaného programového kódu jsem využíval nástroj Github Co
   
   % Seznam obrazku a tabulek (pokud prace obsahuje velke mnozstvi obrazku, tak se to hodi)
   % List of figures and list of tables (if the thesis contains a lot of pictures, it is good)
-  \ifczech
+\begin{comment}
+\ifczech
     \renewcommand\listfigurename{Seznam obrázků}
   \fi
   \ifslovak
@@ -227,7 +231,7 @@ Při tvorbě odevzdaného programového kódu jsem využíval nástroj Github Co
     \renewcommand\listtablename{Zoznam tabuliek}
   \fi
   % {\hypersetup{hidelinks}\listoftables}
-
+\end{comment}
   % Seznam zkratek / List of abbreviations
   %\ifczech
   %  \renewcommand*\glossaryname{Seznam zkratek}%
@@ -363,11 +367,11 @@ Při tvorbě odevzdaného programového kódu jsem využíval nástroj Github Co
   \fi
   
   % Přílohy / Appendices
-  \ifenglish
-    \input{projekt-30-prilohy-appendices-en}
-  \else
-    \input{projekt-30-prilohy-appendices}
-  \fi
+  %\ifenglish
+  %  \input{projekt-30-prilohy-appendices-en}
+  %\else
+  %  \input{projekt-30-prilohy-appendices}
+  %\fi
   
   % Kompilace po částech (viz výše, nutno odkomentovat)
   % Compilation piecewise (see above, it is necessary to uncomment it)

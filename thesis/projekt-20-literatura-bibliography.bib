@@ -1,4 +1,370 @@
-    @BOOK{Pravidla,
+ @misc{ enwiki:1333258481,
+    author = "{Wikipedia contributors}",
+    title = "Cryptographic hash function --- {Wikipedia}{,} The Free Encyclopedia",
+    year = "2026",
+    month = 1,
+    url = "https://en.wikipedia.org/w/index.php?title=Cryptographic_hash_function&oldid=1333258481",
+  }
+
+@webpage{password_storage,
+      author =       "",
+      title =        "Password Storage Cheat Sheet",
+      howpublished = "online",
+      publisher =    "The OWASP Foundation",
+      year =         "2026",
+      month =        1,
+      url =          "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html",
+    }
+
+@webpage{what_is_password_hashing,
+      author =       "{Stytch Team}",
+      title =        "What is password hashing?",
+      howpublished = "online",
+      publisher =    "Stytch",
+      year =         "2022",
+      month =        7,
+      day   =        27,
+      url =          "https://stytch.com/blog/what-is-password-hashing/",
+    }
+
+ @misc{ enwiki:1333530676,
+    author = "{Wikipedia contributors}",
+    title = "Rainbow table --- {Wikipedia}{,} The Free Encyclopedia",
+    year = "2026",
+    url = "https://en.wikipedia.org/w/index.php?title=Rainbow_table&oldid=1333530676",
+  }
+
+@webpage{phs_explained,
+      author =       "",
+      title =        "Password Hashing & Salting - Function and Algorithm Explained",
+      howpublished = "online",
+      publisher =    "Authgear",
+      year =         "2025",
+      month =        10,
+      day   =        30,
+      url =          "https://www.authgear.com/post/password-hashing-salting-function-and-algorithm-explained",
+    }
+
+@Article{app13169295,
+AUTHOR = {Eum, Siwoo and Kim, Hyunjun and Song, Minho and Seo, Hwajeong},
+TITLE = {Optimized Implementation of Argon2 Utilizing the Graphics Processing Unit},
+JOURNAL = {Applied Sciences},
+VOLUME = {13},
+YEAR = {2023},
+NUMBER = {16},
+ARTICLE-NUMBER = {9295},
+URL = {https://www.mdpi.com/2076-3417/13/16/9295},
+ISSN = {2076-3417},
+ABSTRACT = {In modern information technology systems, secure storage and transmission of personal and sensitive data are recognized as important tasks. These requirements are achieved through secure and robust encryption methods. Argon2 is an advanced cryptographic algorithm that emerged as the winner in the Password Hashing Competition (PHC), offering a concrete and secure measure. Argon2 also provides a secure mechanism against side-channel attacks and cracking attacks using parallel processing (e.g., GPU). In this paper, we analyze the existing GPU-based implementation of the Argon2 algorithm and further optimize the implementation by improving the performance of the hashing function during the computation process. The proposed method focuses on enhancing performance by distributing tasks between CPU and GPU units, reducing the data transfer cost for efficient GPU-based parallel processing. By shifting several stages from the CPU to the GPU, the data transfer cost is significantly reduced, resulting in faster processing times, particularly when handling a larger number of passwords and higher levels of parallelism. Additionally, we optimize the utilization of the GPU’s shared memory, which enhances memory access speed, especially in the computation of the hash value generation process. Furthermore, we leverage the parallel processing capabilities of the GPU to perform efficient brute-force attacks. By computing the H function on the GPU, the proposed implementation can generate initial blocks for multiple inputs in a single operation, making brute-force attacks in an efficient way. The proposed implementation outperforms existing methods, especially when processing a larger number of passwords and operating at higher levels of parallelism.},
+DOI = {10.3390/app13169295}
+}
+
+@webpage{complete_guide_passwd_hash,
+      author =       "",
+      title =        "The Complete Guide to Password Hashing: Argon2 vs Bcrypt vs Scrypt vs PBKDF2",
+      howpublished = "online",
+      publisher =    "Authgear",
+      year =         "2025",
+      month = 12,
+      url =          "https://guptadeepak.com/the-complete-guide-to-password-hashing-argon2-vs-bcrypt-vs-scrypt-vs-pbkdf2-2026/",
+    }
+
+@misc{ enwiki:1323935452,
+    author = "{Wikipedia contributors}",
+    title = "Brute-force attack --- {Wikipedia}{,} The Free Encyclopedia",
+    year = "2025",
+    url = "https://en.wikipedia.org/w/index.php?title=Brute-force_attack&oldid=1323935452",
+  }
+
+@webpage{brute_force_math,
+      author =       "",
+      title =        "What is the Math Behind a Strong Master Password?",
+      howpublished = "online",
+      publisher =    "Packetlabs",
+      year =         "2023",
+      month = 7,
+      day = 26,
+      url =          "https://www.packetlabs.net/posts/the-math-behind-a-strong-master-password/",
+    }
+
+@webpage{hashcat_mask,
+      author =       "{Hashcat project}",
+      title =        "Mask Attack",
+      howpublished = "online",
+      publisher =    "Hashcat Wiki",
+      year =         "2026",
+      url =          "https://hashcat.net/wiki/doku.php?id=mask_attack",
+    }
+
+@misc{ enwiki:1320882747,
+    author = "{Wikipedia contributors}",
+    title = "Dictionary attack --- {Wikipedia}{,} The Free Encyclopedia",
+    year = "2025",
+    url = "https://en.wikipedia.org/w/index.php?title=Dictionary_attack&oldid=1320882747",
+  }
+
+@webpage{hashcat_rules_based,
+      author =       "{Hashcat project}",
+      title =        "Rule-based Attack",
+      howpublished = "online",
+      publisher =    "Hashcat Wiki",
+      year =         "2026",
+      url =          "https://hashcat.net/wiki/doku.php?id=rule_based_attack",
+    }
+
+@webpage{hashcat_combinator,
+      author =       "{Hashcat project}",
+      title =        "Combinator Attack",
+      howpublished = "online",
+      publisher =    "Hashcat Wiki",
+      year =         "2026",
+      url =          "https://hashcat.net/wiki/doku.php?id=combinator_attack",
+    }
+
+@webpage{hashcat_hybrid,
+      author =       "{Hashcat project}",
+      title =        "Hybrid Attack",
+      howpublished = "online",
+      publisher =    "Hashcat Wiki",
+      year =         "2026",
+      url =          "https://hashcat.net/wiki/doku.php?id=hybrid_attack",
+    }
+
+@webpage{bitwarden_hashcat,
+      author =       "Austin Ralls",
+      title =        "Bitwarden Research 2: Hashcat Plugin",
+      howpublished = "online",
+      publisher =    "ivision Security Research",
+      year =         "2025",
+      month = 7,
+      day = 18,
+      url =          "https://research.ivision.com/bitwarden-server-hashcat-plugin-2-hashcat.html",
+    }
+
+@webpage{workload_profiles,
+      author =       "",
+      title =        "Optimize Cracking with Workload Profiles",
+      howpublished = "online",
+      publisher =    "LabEx Technology Limited",
+      year =         "2026",
+      url =          "https://labex.io/tutorials/kali-optimize-cracking-with-workload-profiles-594506",
+    }
+
+@webpage{hashcat_work_dist,
+      author =       "{Hashcat project}",
+      title =        "Distributing work",
+      howpublished = "online",
+      publisher =    "Hashcat Wiki",
+      year =         "2026",
+      url =          "https://hashcat.net/wiki/doku.php?id=distributing-work",
+    }
+
+@webpage{distribution_challenges,
+      author =       "Ashish Pratap Singh",
+      title =        "Challenges of Distribution",
+      howpublished = "online",
+      publisher =    "AlgoMaster",
+      year =         "2026",
+      url =          "https://algomaster.io/learn/system-design/challenges-of-distribution",
+    }
+
+@article{network_latency,
+author = {Cate, Mia},
+year = {2023},
+month = {08},
+pages = {},
+title = {Network Latency and Connectivity Challenges},
+url="https://www.researchgate.net/publication/389676278_Network_Latency_and_Connectivity_Challenges",
+journal="ResearchGate"
+}
+
+
+@webpage{distribution_challenges_amazon,
+      author =       "Jacob Gabrielson",
+      title =        "Challenges with distributed systems",
+      howpublished = "online",
+      publisher =    "Amazon Builders' Library",
+      year =         "2026",
+      url =          "https://aws.amazon.com/builders-library/challenges-with-distributed-systems/",
+    }
+
+
+@article{checkpointing,
+author = "{C.-J. Hou, K.S. Tsoi, and C.-C. Han}",
+year = {1997},
+month = {09},
+pages = {23},
+title = {Effective and concurrent checkpointing and recovery in distributed systems},
+url="https://digital-library.theiet.org/doi/abs/10.1049/ip-cdt%3A19971527",
+journal="IEE Proceedings - Computers and Digital Techniques"
+}
+
+@webpage{hashcat_restore,
+      author =       "{Hashcat project}",
+      title =        "restore format description",
+      howpublished = "online",
+      publisher =    "Hashcat Wiki",
+      year =         "2026",
+      url =          "https://hashcat.net/wiki/doku.php?id=restore",
+    }
+
+@webpage{idempotency,
+      author =       "",
+      title =        {Idempotency},
+      howpublished = "online",
+      publisher =    "RisingWave",
+      year =         "2025",
+      month = 6,
+      day = 18,
+      url =          "https://risingwave.com/glossary/idempotency/",
+    }
+
+ @misc{ enwiki:1323072662,
+    author = "{Wikipedia contributors}",
+    title = "Actor model --- {Wikipedia}{,} The Free Encyclopedia",
+    year = "2025",
+    url = "https://en.wikipedia.org/w/index.php?title=Actor_model&oldid=1323072662",
+  }
+
+@webpage{actor_model_understanding,
+      author =       "Apostolos Stephanou",
+      title =        {Understanding the Actor Model},
+      howpublished = "online",
+      publisher =    "MentorCruise",
+      year =         "2025",
+      month = 3,
+      day = 17,
+      url =          "https://mentorcruise.com/blog/understanding-the-actor-model/",
+    }
+
+@webpage{actor_supervision,
+      author =       "",
+      title =        {How Actors Recover from Failure},
+      howpublished = "online",
+      publisher =    "Petabridge, LLC",
+      year =         "2026",
+      url =          "https://petabridge.com/blog/how-actors-recover-from-failure-hierarchy-and-supervision/",
+    }
+
+@webpage{akka_cluster,
+      author =       "",
+      title =        {Akka.Cluster Overview},
+      howpublished = "online",
+      publisher =    "Petabridge, LLC",
+      year =         "2026",
+      url =          "https://getakka.net/articles/clustering/cluster-overview.html",
+    }
+
+@webpage{akka_persistance,
+      author =       "",
+      title =        {Persistence},
+      howpublished = "online",
+      publisher =    "Petabridge, LLC",
+      year =         "2026",
+      url =          "https://getakka.net/articles/persistence/architecture.html",
+    }
+
+@webpage{akka_performance,
+      author =       "",
+      title =        {Akka.Remote Performance Optimization},
+      howpublished = "online",
+      publisher =    "Petabridge, LLC",
+      year =         "2026",
+      url =          "https://getakka.net/articles/remoting/performance.html",
+    }
+
+@webpage{orleans_overview,
+      author =       "",
+      title =        {Microsoft Orleans},
+      howpublished = "online",
+      publisher =    "Microsoft Learn",
+      year =         "2026",
+      url =          "https://learn.microsoft.com/en-us/dotnet/orleans/overview?pivots=orleans-10-0",
+    }
+
+@webpage{orleans_benefits,
+      author =       "",
+      title =        {Orleans benefits},
+      howpublished = "online",
+      publisher =    "Microsoft Learn",
+      year =         "2026",
+      url =          "https://learn.microsoft.com/en-us/dotnet/orleans/benefits",
+    }
+
+@webpage{orleans_perf,
+      author =       "",
+      title =        {External tasks and grains},
+      howpublished = "online",
+      publisher =    "Microsoft Learn",
+      year =         "2026",
+      url =          "https://learn.microsoft.com/en-us/dotnet/orleans/grains/external-tasks-and-grains",
+    }
+
+@webpage{about_proto_actor,
+      author =       "",
+      title =        {What is Proto.Actor?},
+      howpublished = "online",
+      publisher =    "Asynkron Docs",
+      year =         "2026",
+      url =          "https://asynkron.se/docs/protoactor/what-is-protoactor/",
+    }
+
+@webpage{about_proto_actor,
+      author =       "",
+      title =        {High Availability using Proto.Cluster},
+      howpublished = "online",
+      publisher =    "Asynkron Docs",
+      year =         "2026",
+      url =          "https://proto.actor/docs/ProtoActor/clusterintro/",
+    }
+
+@misc{BUT168182,
+  author="Radek {Hranický} and Lukáš {Zobal} and Vojtěch {Večeřa} and Matúš {Múčka} and Adam {Horák} and Dávid {Bolvanský} and Tomáš {Ženčák}",
+  title="The architecture of Fitcrack distributed password cracking system, version 2",
+  year="2020",
+  pages="85",
+  publisher="Faculty of Information Technology BUT",
+  address="FIT-TR-2020-04, Brno",
+  url="https://www.fit.vut.cz/research/publication/12300/"
+}
+
+@webpage{hashtopolis,
+      author =       "",
+      title =        {What is Hashtopolis?},
+      howpublished = "online",
+      publisher =    "Hashtopolis",
+      year =         "2026",
+      url =          "https://docs.hashtopolis.org/",
+    }
+
+@phdthesis{FITPT890,
+    author = "Radek Hranick\'{y}",
+    type = "Ph.D. thesis",
+    title = "Digital Forensics: The Acceleration of Password Cracking",
+    school = "Brno University of Technology, Faculty of Information Technology",
+    year = 2022,
+    location = "Brno, CZ",
+    language = "english",
+    url = "https://www.fit.vut.cz/study/phd-thesis/890/"
+}
+
+@webpage{grpc_message_limits,
+      author =       "",
+      title =        {Security considerations in gRPC for ASP.NET Core},
+      howpublished = "online",
+      publisher =    "Microsoft Learn",
+      year =         "2026",
+      url =          "https://learn.microsoft.com/en-us/aspnet/core/grpc/security?view=aspnetcore-10.0",
+    }
+
+
+
+
+
+
+
+
+@BOOK{Pravidla,
       author =       "Zdeněk Hlavsa and others",
       title =        "Pravidla českého pravopisu",
       publisher =    "Academia",
