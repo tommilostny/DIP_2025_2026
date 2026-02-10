@@ -10,7 +10,6 @@ message JobAssignment {
 
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
 message HashcatMaskJobSpecs {
-  string hash_type = 1;
   repeated string hashes = 2;
   string mask = 3;
   int32 min_length = 4;
@@ -19,7 +18,6 @@ message HashcatMaskJobSpecs {
 
 // Parameters for submitting a Hashcat dictionary attack job by user in the web interface
 message HashcatDictionaryJobSpecs {
-  string hash_type = 1;
   repeated string hashes = 2;
   repeated string wordlists = 3;
 }

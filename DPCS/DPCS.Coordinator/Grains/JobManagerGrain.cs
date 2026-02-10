@@ -18,13 +18,23 @@ public class JobManagerGrain : JobManagerGrainBase
         return await Task.FromResult(new JobAssignment());
     }
 
-    public override Task MaskJobSubmission(HashcatMaskJobSpecs request)
+    public override async Task<JobAssignment> MaskJobSubmission(HashcatMaskJobSpecs request)
     {
-        return Task.CompletedTask;
+        var job = new JobAssignment
+        {
+            JobId = Guid.NewGuid().ToString(),
+            ModeId = 0,
+        };
+        return await Task.FromResult(job);
     }
     
-    public override Task DictionaryJobSubmission(HashcatDictionaryJobSpecs request)
+    public override async Task<JobAssignment> DictionaryJobSubmission(HashcatDictionaryJobSpecs request)
     {
-        return Task.CompletedTask;
+        var job = new JobAssignment
+        {
+            JobId = Guid.NewGuid().ToString(),
+            ModeId = 1,
+        };
+        return await Task.FromResult(job);
     }
 }

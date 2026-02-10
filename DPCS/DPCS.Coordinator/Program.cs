@@ -1,5 +1,4 @@
 using DPCS.Coordinator;
-using DPCS.Coordinator.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,7 +10,8 @@ builder.Services.AddActorSystem();
 
 builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 
-builder.Services.AddHostedService<JobManagerService>();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
@@ -19,6 +19,11 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "DPCS Coordinator API v1");
+    });
 }
 
 app.UseHttpsRedirection();
@@ -26,19 +31,20 @@ app.UseHttpsRedirection();
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 Proto.Log.SetLoggerFactory(loggerFactory);
 
-app.MapGet("/", () =>
+app.MapPost("/submit-job/mask", async (HashcatMaskJobSpecs request, ActorSystem actorSystem) =>
 {
-    return Task.FromResult("Hello World!");
+    var jobManager = actorSystem.Cluster().GetJobManagerGrain("root");
+    var job = await jobManager.MaskJobSubmission(request, CancellationToken.None);
+
+    return Results.Ok(job);
 });
 
-/*
-app.MapGet("/smart-bulbs/{identity}", async (ActorSystem actorSystem, string identity) =>
+app.MapPost("/submit-job/dictionary", async (HashcatDictionaryJobSpecs request, ActorSystem actorSystem) =>
 {
-    return await actorSystem
-        .Cluster()
-        .GetSmartBulbGrain(identity)
-        .GetState(CancellationToken.None);
+    var jobManager = actorSystem.Cluster().GetJobManagerGrain("root");
+    var job = await jobManager.DictionaryJobSubmission(request, CancellationToken.None);
+
+    return Results.Ok(job);
 });
-*/
 
 app.Run();

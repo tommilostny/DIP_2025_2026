@@ -9,8 +9,8 @@ import "Messages.proto";
 
 service JobManagerGrain {
   rpc JobDiscovery (google.protobuf.Empty) returns (JobAssignment);
-  rpc MaskJobSubmission (HashcatMaskJobSpecs) returns (google.protobuf.Empty);
-  rpc DictionaryJobSubmission (HashcatDictionaryJobSpecs) returns (google.protobuf.Empty);
+  rpc MaskJobSubmission (HashcatMaskJobSpecs) returns (JobAssignment);
+  rpc DictionaryJobSubmission (HashcatDictionaryJobSpecs) returns (JobAssignment);
 }
 
 service JobCoordinatorGrain {

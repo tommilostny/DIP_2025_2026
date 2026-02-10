@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,16 +7,16 @@
   </PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Grpc.Tools" Version="2.76.0">
+		<PackageReference Include="Grpc.Tools" Version="2.78.0">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Proto.Actor" Version="1.8.1-alpha.0.2" />
-		<PackageReference Include="Proto.Cluster" Version="1.8.1-alpha.0.2" />
-		<PackageReference Include="Proto.Cluster.CodeGen" Version="1.8.1-alpha.0.2" />
-		<PackageReference Include="Proto.Cluster.TestProvider" Version="1.8.1-alpha.0.2" />
-		<PackageReference Include="Proto.OpenTelemetry" Version="1.8.1-alpha.0.2" />
-		<PackageReference Include="Proto.Remote" Version="1.8.1-alpha.0.2" />
+		<PackageReference Include="Proto.Actor" Version="1.8.0" />
+		<PackageReference Include="Proto.Cluster" Version="1.8.0" />
+		<PackageReference Include="Proto.Cluster.CodeGen" Version="1.8.0" />
+		<PackageReference Include="Proto.Cluster.TestProvider" Version="1.8.0" />
+		<PackageReference Include="Proto.OpenTelemetry" Version="1.8.0" />
+		<PackageReference Include="Proto.Remote" Version="1.8.0" />
 	</ItemGroup>
 
 	<ItemGroup>

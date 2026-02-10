@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace DPCS.Agent;
+namespace DPCS.Agent.Hashcat;
 
 public class HashcatWrapper
 {
