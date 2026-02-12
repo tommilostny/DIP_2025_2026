@@ -8,19 +8,41 @@ import "Messages.proto";
 /*=================== COORDINATOR GRAINS ==================================================*/
 
 service JobManagerGrain {
+  // RPC for agents to discover if there are any jobs available to work on
   rpc JobDiscovery (google.protobuf.Empty) returns (JobAssignment);
+
+  // RPCs called by web interface to submit new jobs and query for work
   rpc MaskJobSubmission (HashcatMaskJobSpecs) returns (JobAssignment);
   rpc DictionaryJobSubmission (HashcatDictionaryJobSpecs) returns (JobAssignment);
+  
+  // RPC for web interface to cancel a job
+  rpc CancelJob (JobId) returns (google.protobuf.Empty);
 }
 
 service JobCoordinatorGrain {
+  // Initialization RPCs for new jobs submitted by JobManagerGrain
+  rpc MaskJobInit (HashcatMaskJobSpecs) returns (google.protobuf.Empty);
+  rpc DictionaryJobInit (HashcatDictionaryJobSpecs) returns (google.protobuf.Empty);
+  
+  // Work assignment RPCs called by agents to request more work
   rpc MaskWorkRequest (WorkRequest) returns (MaskWorkAssignment);
   rpc DictionaryWorkRequest (WorkRequest) returns (DictionaryWorkAssignment);
+  
+  // RPCs called by agents to submit results and report status
   rpc WorkResultSubmission (WorkResult) returns (google.protobuf.Empty);
+  
+  // RPC for agents to send periodic heartbeats with telemetry data
   rpc Heartbeat (AgentTelemetry) returns (google.protobuf.Empty);
+  
+  // RPC for web interface to query job status and progress
+  rpc GetJobStatus (google.protobuf.Empty) returns (JobStatus);
+
+  // RPC for web interface to cancel an ongoing job
+  rpc CancelJob (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
 
 service ResultCollectorGrain {
+  // RPC for JobCoordinatorGrain to store results submitted by agents
   rpc StoreResult (WorkResult) returns (google.protobuf.Empty);
 }
 

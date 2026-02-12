@@ -2,6 +2,10 @@ syntax = "proto3";
 
 option csharp_namespace = "DPCS.Shared";
 
+message JobId {
+  string id = 1;
+}
+
 // Job assignment message returned by JobManagerGrain in response to JobDiscovery RPC
 message JobAssignment {
   string job_id = 1;
@@ -65,4 +69,11 @@ message AgentTelemetry {
   double current_hashrate = 2;
   double average_temperature = 3;
   double average_fan_speed = 4;
+}
+
+// Message for reporting job status in response to GetJobStatus RPC
+message JobStatus {
+  string job_id = 1;
+  string status = 2; // e.g. "In Progress", "Completed", "Cancelled"
+  double progress_percentage = 3; // e.g. 75.5 for 75.5% completed
 }

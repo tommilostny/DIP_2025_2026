@@ -1,4 +1,6 @@
+global using DPCS.Coordinator.Security;
 global using DPCS.Shared;
+global using JsonSerializer = System.Text.Json.JsonSerializer;
 global using Proto;
 global using Proto.Cluster;
 global using Proto.Cluster.Partition;

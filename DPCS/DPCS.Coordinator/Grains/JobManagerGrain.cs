@@ -4,37 +4,83 @@ public class JobManagerGrain : JobManagerGrainBase
 {
     private readonly ClusterIdentity _clusterIdentity;
 
-    private Dictionary<ClusterIdentity, object> _jobs = [];
+    private readonly Lock _globalCursorLock = new();
+
+    private int _globalCursor = 0;
+
+    private readonly Dictionary<string, JobAssignment> _unfinishedJobs = [];
 
     public JobManagerGrain(IContext context, ClusterIdentity clusterIdentity) : base(context)
     {
         _clusterIdentity = clusterIdentity;
-
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
     }
 
     public override async Task<JobAssignment> JobDiscovery()
     {
-        return await Task.FromResult(new JobAssignment());
+        lock (_globalCursorLock)
+        {
+            return _unfinishedJobs.Count > 0
+                ? _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count)
+                : new JobAssignment { JobId = "", ModeId = -1 };
+        }
     }
 
     public override async Task<JobAssignment> MaskJobSubmission(HashcatMaskJobSpecs request)
     {
-        var job = new JobAssignment
+        var guid = Guid.NewGuid();
+        var signedJobId = JobIdSecurity.GenerateSignedId(guid);
+        var assignment = new JobAssignment
         {
-            JobId = Guid.NewGuid().ToString(),
-            ModeId = 0,
+            JobId = signedJobId,
+            ModeId = (long)AttackMode.Mask,
         };
-        return await Task.FromResult(job);
+        _unfinishedJobs[signedJobId] = assignment;
+
+        Console.WriteLine($"{_clusterIdentity.Identity}: received mask job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(request)}");
+        
+        await System.Cluster()
+            .GetJobCoordinatorGrain(assignment.JobId)
+            .MaskJobInit(request, CancellationToken.None);
+
+        return await Task.FromResult(assignment);
     }
     
     public override async Task<JobAssignment> DictionaryJobSubmission(HashcatDictionaryJobSpecs request)
     {
-        var job = new JobAssignment
+        var guid = Guid.NewGuid();
+        var signedJobId = JobIdSecurity.GenerateSignedId(guid);
+        var assignment = new JobAssignment
         {
-            JobId = Guid.NewGuid().ToString(),
-            ModeId = 1,
+            JobId = signedJobId,
+            ModeId = (long)AttackMode.Dictionary,
         };
-        return await Task.FromResult(job);
+        _unfinishedJobs[signedJobId] = assignment;
+
+        Console.WriteLine($"{_clusterIdentity.Identity}: received dictionary job submission, assigned job id {signedJobId}");
+        
+        await System.Cluster()
+            .GetJobCoordinatorGrain(assignment.JobId)
+            .DictionaryJobInit(request, CancellationToken.None);
+
+        return await Task.FromResult(assignment);
+    }
+
+    public override async Task CancelJob(JobId jobId)
+    {
+        if (_unfinishedJobs.Remove(jobId.Id))
+        {
+            await System.Cluster()
+                .GetJobCoordinatorGrain(jobId.Id)
+                .CancelJob(CancellationToken.None);
+
+            Console.WriteLine($"{_clusterIdentity.Identity}: cancelled job {jobId}");
+        }
+        else
+        {
+            Console.WriteLine($"{_clusterIdentity.Identity}: received cancel request with invalid job id {jobId}");
+        }
+
+        await Task.CompletedTask;
     }
 }
