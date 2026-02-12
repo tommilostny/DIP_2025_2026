@@ -7,7 +7,6 @@ public class NodeGuardianGrain : NodeGuardianGrainBase
     public NodeGuardianGrain(IContext context, ClusterIdentity clusterIdentity) : base(context)
     {
         _clusterIdentity = clusterIdentity;
-
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
     }
 

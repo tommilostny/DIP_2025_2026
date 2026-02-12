@@ -2,13 +2,26 @@ using DPCS.Coordinator.Enums;
 
 namespace DPCS.Coordinator.Grains;
 
-public class JobCoordinatorGrain : JobCoordinatorGrainBase
+public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 {
+    private abstract record WorkDetailsUnion;
+    private sealed record MaskWorkDetails(MaskWorkAssignment Assignment) : WorkDetailsUnion;
+    private sealed record DictionaryWorkDetails(DictionaryWorkAssignment Assignment) : WorkDetailsUnion;
+
+    private sealed class WorkChunk
+    {
+        public required ClusterIdentity AgentId { get; set; }
+
+        public WorkChunkState State { get; set; } = WorkChunkState.Pending;
+
+        public required WorkDetailsUnion WorkDetails { get; set; }
+    }
+
     private readonly ClusterIdentity _clusterIdentity;
 
     private ulong _globalCursor = 0;
 
-    private Dictionary<ClusterIdentity, WorkChunkState> _workChunks = [];
+    private readonly Dictionary<ClusterIdentity, WorkChunk> _workChunks = [];
 
     private AttackMode _attackMode = AttackMode.Invalid;
 

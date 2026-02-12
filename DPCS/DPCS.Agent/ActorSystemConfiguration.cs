@@ -1,4 +1,5 @@
 ﻿using DPCS.Agent.Grains;
+//using Proto.Cluster.Seed;
 
 namespace DPCS.Agent;
 
@@ -19,6 +20,7 @@ public static class ActorSystemConfiguration
                 .Setup(
                     clusterName: "DistributedPasswordCrackingSystem",
                     clusterProvider: new TestProvider(new TestProviderOptions(), new InMemAgent()),
+                    //clusterProvider: new SeedNodeProvider(new[] { "localhost:8090" }),
                     identityLookup: new PartitionIdentityLookup()
                 )
                 .WithClusterKind(

@@ -9,7 +9,7 @@ import "Messages.proto";
 
 service JobManagerGrain {
   // RPC for agents to discover if there are any jobs available to work on
-  rpc JobDiscovery (google.protobuf.Empty) returns (JobAssignment);
+  rpc JobDiscovery (AgentId) returns (JobAssignment);
 
   // RPCs called by web interface to submit new jobs and query for work
   rpc MaskJobSubmission (HashcatMaskJobSpecs) returns (JobAssignment);
@@ -17,6 +17,9 @@ service JobManagerGrain {
   
   // RPC for web interface to cancel a job
   rpc CancelJob (JobId) returns (google.protobuf.Empty);
+
+  // RPC for JobCoordinatorGrain to notify JobManagerGrain that a job has completed
+  rpc FinishAck (JobId) returns (google.protobuf.Empty);
 }
 
 service JobCoordinatorGrain {
@@ -49,9 +52,6 @@ service ResultCollectorGrain {
 /*==================== AGENT GRAINS =======================================================*/
 
 service NodeGuardianGrain {
-  /*
-  rpc StartMaskWork (MaskWorkAssignment) returns (WorkResult);
-  rpc StartDictionaryWork (DictionaryWorkAssignment) returns (WorkResult);
-  */
+  // RPC for cancelling ongoing work on this agent (e.g. if job is cancelled from web interface)
   rpc StopWork (google.protobuf.Empty) returns (google.protobuf.Empty);
 }

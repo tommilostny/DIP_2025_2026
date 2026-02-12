@@ -6,6 +6,14 @@ message JobId {
   string id = 1;
 }
 
+message AgentId {
+  string id = 1;
+}
+
+message AgentJoinAck {
+  bool job_available = 1;
+}
+
 // Job assignment message returned by JobManagerGrain in response to JobDiscovery RPC
 message JobAssignment {
   string job_id = 1;

@@ -1,4 +1,5 @@
 global using DPCS.Shared;
+global using JsonSerializer = System.Text.Json.JsonSerializer;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;
 global using Proto;

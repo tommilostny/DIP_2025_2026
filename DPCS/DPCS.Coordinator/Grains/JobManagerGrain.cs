@@ -1,10 +1,10 @@
+using System.Runtime.CompilerServices;
+
 namespace DPCS.Coordinator.Grains;
 
 public class JobManagerGrain : JobManagerGrainBase
 {
     private readonly ClusterIdentity _clusterIdentity;
-
-    private readonly Lock _globalCursorLock = new();
 
     private int _globalCursor = 0;
 
@@ -16,14 +16,16 @@ public class JobManagerGrain : JobManagerGrainBase
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
     }
 
-    public override async Task<JobAssignment> JobDiscovery()
+    public override async Task<JobAssignment> JobDiscovery(AgentId request)
     {
-        lock (_globalCursorLock)
-        {
-            return _unfinishedJobs.Count > 0
-                ? _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count)
-                : new JobAssignment { JobId = "", ModeId = -1 };
-        }
+        JobAssignment assignment;
+        assignment = _unfinishedJobs.Count > 0
+            ? _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count)
+            : new JobAssignment { ModeId = -1 };
+
+        Console.WriteLine($"{_clusterIdentity.Identity}: sending job assignment to agent {request.Id}: {JsonSerializer.Serialize(assignment)}");
+
+        return await Task.FromResult(assignment);
     }
 
     public override async Task<JobAssignment> MaskJobSubmission(HashcatMaskJobSpecs request)
@@ -39,7 +41,8 @@ public class JobManagerGrain : JobManagerGrainBase
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received mask job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(request)}");
         
-        await System.Cluster()
+        var cluster = System.Cluster();
+        await cluster
             .GetJobCoordinatorGrain(assignment.JobId)
             .MaskJobInit(request, CancellationToken.None);
 
@@ -82,5 +85,17 @@ public class JobManagerGrain : JobManagerGrainBase
         }
 
         await Task.CompletedTask;
+    }
+
+    public override async Task FinishAck(JobId jobId)
+    {
+        if (_unfinishedJobs.Remove(jobId.Id))
+        {
+            Console.WriteLine($"{_clusterIdentity.Identity}: job {jobId} finished");
+        }
+        else
+        {
+            Console.WriteLine($"{_clusterIdentity.Identity}: received finish ack with invalid job id {jobId}");
+        }
     }
 }
