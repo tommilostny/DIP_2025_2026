@@ -10,7 +10,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private sealed class WorkChunk
     {
-        public required ClusterIdentity AgentId { get; set; }
+        public required PID WorkerPid { get; set; }
 
         public WorkChunkState State { get; set; } = WorkChunkState.Pending;
 
@@ -21,7 +21,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private ulong _globalCursor = 0;
 
-    private readonly Dictionary<ClusterIdentity, WorkChunk> _workChunks = [];
+    private readonly Dictionary<PID, WorkChunk> _workChunks = [];
 
     private AttackMode _attackMode = AttackMode.Invalid;
 
@@ -45,11 +45,33 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override async Task<MaskWorkAssignment> MaskWorkRequest(WorkRequest request)
     {
+        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
+        // Track the worker
+        if (!_workChunks.ContainsKey(workerPid))
+        {
+            _workChunks[workerPid] = new WorkChunk 
+            { 
+                WorkerPid = workerPid,
+                WorkDetails = new MaskWorkDetails(new MaskWorkAssignment()) // Placeholder init
+            };
+        }
+
         return await Task.FromResult(new MaskWorkAssignment());
     }
 
     public override async Task<DictionaryWorkAssignment> DictionaryWorkRequest(WorkRequest request)
     {
+        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
+        // Track the worker
+        if (!_workChunks.ContainsKey(workerPid))
+        {
+            _workChunks[workerPid] = new WorkChunk 
+            { 
+                WorkerPid = workerPid,
+                WorkDetails = new DictionaryWorkDetails(new DictionaryWorkAssignment()) // Placeholder init
+            };
+        }
+
         return await Task.FromResult(new DictionaryWorkAssignment());
     }
 
@@ -87,7 +109,11 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         Console.WriteLine($"{_clusterIdentity.Identity}: received job cancellation request");
         _attackMode = AttackMode.Invalid;
 
-        // Send cancellation signal to all worker grains (not implemented in this snippet)
+        // Send cancellation signal to all active worker actors
+        foreach (var chunk in _workChunks.Values)
+        {
+            Context.Send(chunk.WorkerPid, new StopWork());
+        }
 
         _workChunks.Clear();
 

@@ -2,14 +2,14 @@ using System.Diagnostics;
 
 namespace DPCS.Agent.Hashcat;
 
-public class HashcatWrapper
+public class HashcatWrapper(string hashcatPath = "hashcat", int workloadProfile = 2)
 {
-    public static void StartHashcatProcess(string arguments)
+    public async Task StartHashcatProcessAsync(string arguments, CancellationToken cancellationToken = default)
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "hashcat", // Ensure hashcat is in the system PATH or provide full path
-            Arguments = arguments,
+            FileName = hashcatPath, // Ensure hashcat is in the system PATH or provide full path
+            Arguments = arguments + $" -w {workloadProfile}", // Append workload profile to arguments
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
@@ -37,6 +37,6 @@ public class HashcatWrapper
         process.BeginOutputReadLine();
         process.BeginErrorReadLine();
 
-        process.WaitForExit();
+        await process.WaitForExitAsync(cancellationToken);
     }
 }

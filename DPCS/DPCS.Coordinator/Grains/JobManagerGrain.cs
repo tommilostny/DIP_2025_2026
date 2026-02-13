@@ -23,7 +23,7 @@ public class JobManagerGrain : JobManagerGrainBase
             ? _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count)
             : new JobAssignment { ModeId = -1 };
 
-        Console.WriteLine($"{_clusterIdentity.Identity}: sending job assignment to agent {request.Id}: {JsonSerializer.Serialize(assignment)}");
+        Console.WriteLine($"{_clusterIdentity.Identity}: sending job assignment to agent {request.Address}/{request.Id}: {JsonSerializer.Serialize(assignment)}");
 
         return await Task.FromResult(assignment);
     }

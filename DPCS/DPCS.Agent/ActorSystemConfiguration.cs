@@ -1,5 +1,4 @@
-﻿using DPCS.Agent.Grains;
-//using Proto.Cluster.Seed;
+﻿//using Proto.Cluster.Seed;
 
 namespace DPCS.Agent;
 
@@ -23,6 +22,7 @@ public static class ActorSystemConfiguration
                     //clusterProvider: new SeedNodeProvider(new[] { "localhost:8090" }),
                     identityLookup: new PartitionIdentityLookup()
                 )
+                /*
                 .WithClusterKind(
                     new ClusterKind(
                         NodeGuardianGrainActor.Kind,
@@ -32,7 +32,7 @@ public static class ActorSystemConfiguration
                             )
                         )
                     )
-                );
+                )*/;
 
             return new ActorSystem(actorSystemConfig)
                 .WithServiceProvider(provider)

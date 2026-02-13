@@ -50,8 +50,9 @@ service ResultCollectorGrain {
 }
 
 /*==================== AGENT GRAINS =======================================================*/
-
+/*
 service NodeGuardianGrain {
   // RPC for cancelling ongoing work on this agent (e.g. if job is cancelled from web interface)
   rpc StopWork (google.protobuf.Empty) returns (google.protobuf.Empty);
 }
+*/

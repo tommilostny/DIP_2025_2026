@@ -7,11 +7,12 @@ message JobId {
 }
 
 message AgentId {
-  string id = 1;
+  string address = 1;
+  string id = 2;
 }
 
 message AgentJoinAck {
-  bool job_available = 1;
+   bool job_available = 1;
 }
 
 // Job assignment message returned by JobManagerGrain in response to JobDiscovery RPC
@@ -36,7 +37,7 @@ message HashcatDictionaryJobSpecs {
 
 // Message sent by agent to request more work
 message WorkRequest {
-  string agent_id = 1;
+  AgentId agent_id = 1;
   string job_id = 2;
   double current_hashrate = 3;
 }
@@ -73,7 +74,7 @@ message WorkResult {
 
 // Telemetry data sent by agent to coordinator, to mark it as alive and provide status
 message AgentTelemetry {
-  string agent_id = 1;
+  AgentId agent_id = 1;
   double current_hashrate = 2;
   double average_temperature = 3;
   double average_fan_speed = 4;

@@ -1,60 +1,26 @@
+using DPCS.Agent.Actors;
+using DPCS.Agent.Hashcat;
+
 namespace DPCS.Agent.Services;
 
-public class AgentService(ActorSystem clusterActorSystem) : BackgroundService
+public class AgentService(ActorSystem actorSystem, HashcatWrapper hashcatWrapper) : BackgroundService
 {
-    // Generate a unique identity for this specific agent node instance
-    private readonly AgentId _agentId = new() { Id = Guid.NewGuid().ToString() };
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        Console.WriteLine($"Agent {_agentId} started. Waiting for cluster...");
+        // Spawn the Worker Actor
+        // We use Dependency Injection to pass the Cluster and AgentId
+        var props = Props.FromProducer(() => new WorkerActor(actorSystem.Cluster(), hashcatWrapper));
+        var pid = actorSystem.Root.Spawn(props);
         
-        // Allow some time for the cluster to stabilize
-        await Task.Delay(2000, stoppingToken);
-
-        while (!stoppingToken.IsCancellationRequested)
+        Console.WriteLine($"Agent Service {pid} started.");
+        // Keep the service alive
+        try 
         {
-            try
-            {
-                // 1. Discovery: Ask the JobManager for a Job
-                var assignment = await clusterActorSystem
-                    .Cluster()
-                    .GetJobManagerGrain("root")
-                    .JobDiscovery(_agentId, stoppingToken);
-
-                if (assignment is null or { ModeId: (long)AttackMode.Invalid })
-                {
-                    // No job available, wait and retry
-                    await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-                    continue;
-                }
-
-                Console.WriteLine($"Received job assignment: {assignment.JobId} (Mode: {assignment.ModeId})");
-
-                // 2. Processing: Connect to the specific JobCoordinator and process work chunks
-                await ProcessJob(assignment, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in agent loop: {ex.Message}");
-                await Task.Delay(5000, stoppingToken);
-            }
+            await Task.Delay(Timeout.Infinite, stoppingToken);
         }
-    }
-
-    private async Task ProcessJob(JobAssignment assignment, CancellationToken ct)
-    {
-        // This method would contain the logic to loop through WorkChunks
-        // For example:
-        // var coordinator = clusterActorSystem.Cluster().GetJobCoordinatorGrain(assignment.JobId);
-        // while (!ct.IsCancellationRequested) {
-        //      var chunk = await coordinator.MaskWorkRequest(...);
-        //      if (chunk.IsFinished) break;
-        //      HashcatWrapper.StartHashcatProcess(...);
-        //      await coordinator.WorkResultSubmission(...);
-        // }
-        
-        // Placeholder delay to simulate work for now
-        await Task.Delay(10000, ct);
+        catch (OperationCanceledException)
+        {
+            await actorSystem.Root.StopAsync(pid);
+        }
     }
 }
