@@ -42,7 +42,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                 .JobDiscovery(new AgentId
                 {
                     Address = context.Self.Address,
-                    Id = context.Self.Id
+                    Id = context.Self.Id,
                 }, CancellationToken.None);
 
             if (assignment is null or { ModeId: (long)AttackMode.Invalid })

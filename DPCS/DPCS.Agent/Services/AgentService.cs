@@ -12,7 +12,6 @@ public class AgentService(ActorSystem actorSystem, HashcatWrapper hashcatWrapper
         var props = Props.FromProducer(() => new WorkerActor(actorSystem.Cluster(), hashcatWrapper));
         var pid = actorSystem.Root.Spawn(props);
         
-        Console.WriteLine($"Agent Service {pid} started.");
         // Keep the service alive
         try 
         {
@@ -20,6 +19,7 @@ public class AgentService(ActorSystem actorSystem, HashcatWrapper hashcatWrapper
         }
         catch (OperationCanceledException)
         {
+            Console.WriteLine("AgentService is stopping...");
             await actorSystem.Root.StopAsync(pid);
         }
     }

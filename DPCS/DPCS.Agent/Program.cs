@@ -48,14 +48,14 @@ if (workloadProfile < 1 || workloadProfile > 4)
 }
 
 // No need to start any actors in the worker nodes, all actors will be deployed using remoting.
-var host = new HostBuilder()
+var host = Host.CreateDefaultBuilder(args)
     .ConfigureServices((context, services) =>
     {
         services.AddSingleton(new HashcatWrapper(hashcatFileInfo.FullName, workloadProfile));
         services.AddActorSystem();
         services.AddHostedService<ActorSystemClusterHostedService>();
         services.AddHostedService<AgentService>();
-    }).Build();
+    })
+    .Build();
 
-await host.StartAsync();
-await host.WaitForShutdownAsync();
+await host.RunAsync();

@@ -2,17 +2,15 @@ syntax = "proto3";
 
 option csharp_namespace = "DPCS.Shared";
 
+// Signed Job ID
 message JobId {
   string id = 1;
 }
 
+// Agent node as identified by Proto.PID
 message AgentId {
   string address = 1;
   string id = 2;
-}
-
-message AgentJoinAck {
-   bool job_available = 1;
 }
 
 // Job assignment message returned by JobManagerGrain in response to JobDiscovery RPC
