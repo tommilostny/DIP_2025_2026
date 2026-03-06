@@ -5,6 +5,9 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+
+    <!-- This ensures the build uses the system-installed protoc on Linux -->
+  	<Protobuf_ProtocFullPath Condition="$([MSBuild]::IsOSPlatform('Linux'))">/usr/bin/protoc</Protobuf_ProtocFullPath>
   </PropertyGroup>
 
   <ItemGroup>

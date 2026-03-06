@@ -32,9 +32,53 @@ Measure throughput, scalability, task distribution latency, and fault tolerance.
 
 ## Tools
 
-### Proto.Actors
+### Proto.Actor
+
+On Linux, the Protobuf compiler may be necessary to install to be able to build the agent and coordinator projects. It can be installed with:
+
+```bash
+sudo apt update && sudo apt install -y protobuf-compiler
+```
 
 ### Hashcat
+
+On Linux install with:
+
+```bash
+sudo apt update && sudo apt install hashcat
+```
+
+Or download binaries here: [https://hashcat.net/hashcat/](https://hashcat.net/hashcat/), and move the executable to where it is include in the PATH environment variable or provide the path to the executable in the ``--hashcat-path``/``-p`` argument.
+
+### HashiCorp Consul
+
+Install on Linux dependency with:
+
+```bash
+wget -O - https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(grep -oP '(?<=UBUNTU_CODENAME=).*' /etc/os-release || lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install consul
+```
+
+Windows:
+
+```powershell
+winget install --id Hashicorp.Consul
+```
+
+Or more variants at [https://developer.hashicorp.com/consul/install](https://developer.hashicorp.com/consul/install)
+
+Then run server on the coordinator node:
+
+```bash
+consul agent -server -bootstrap -data-dir "/tmp/consul" -client '0.0.0.0' -bind '<SERVER_IP>'
+```
+
+And on the agent node:
+
+```bash
+consul agent -data-dir 'C:\Windows\Temp\ConsulAgentData' -join '<SERVER_IP>' -bind '<AGENT_IP>'
+```
 
 ---
 
