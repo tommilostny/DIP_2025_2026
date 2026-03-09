@@ -1,4 +1,4 @@
-﻿using DPCS.Coordinator.Grains;
+﻿﻿using DPCS.Coordinator.Grains;
 using Proto.Cluster.Consul;
 
 namespace DPCS.Coordinator;
@@ -33,6 +33,7 @@ public static class ActorSystemConfiguration
                     ),
                     identityLookup: new PartitionIdentityLookup()
                 )
+                .WithGossipRequestTimeout(TimeSpan.FromSeconds(10))
                 .WithClusterKinds([
                     new ClusterKind(
                         JobManagerGrainActor.Kind,

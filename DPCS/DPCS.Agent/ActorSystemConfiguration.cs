@@ -1,4 +1,4 @@
-﻿//using Proto.Cluster.Seed;
+﻿﻿//using Proto.Cluster.Seed;
 
 using Microsoft.Extensions.Configuration;
 using Proto.Cluster.Consul;
@@ -35,6 +35,7 @@ public static class ActorSystemConfiguration
                     ),
                     identityLookup: new PartitionIdentityLookup()
                 )
+                .WithGossipRequestTimeout(TimeSpan.FromSeconds(10))
                 /*
                 .WithClusterKind(
                     new ClusterKind(
