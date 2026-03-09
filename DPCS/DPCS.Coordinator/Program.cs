@@ -176,9 +176,9 @@ static System.Diagnostics.Process StartConsul(string consulPath, string hostIp)
     var startInfo = new ProcessStartInfo
     {
         FileName = consulPath,
-        Arguments = $"agent -dev -server -bootstrap -data-dir ./.consul -bind {hostIp} -client 0.0.0.0",
-        UseShellExecute = false,
-        CreateNoWindow = true
+        Arguments = $"agent -server -bootstrap -data-dir ./.consul -bind {hostIp} -client 0.0.0.0",
+        UseShellExecute = true,
+        WindowStyle = ProcessWindowStyle.Hidden
     };
     var process = System.Diagnostics.Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
     if (process.WaitForExit(500)) throw new Exception($"Consul exited with code {process.ExitCode}");

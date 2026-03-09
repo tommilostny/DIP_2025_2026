@@ -35,36 +35,6 @@ Option<int> portOption = new("--port", "-pt")
     Description = "Port for Proto.Actor (optional, defaults to 0 for dynamic)",
     DefaultValueFactory = _ => 0
 };
-Option<int> consulHttpPortOption = new("--consul-http-port", "-chp")
-{
-    Description = "Consul HTTP port (defaults to 8500)",
-    DefaultValueFactory = _ => 8500
-};
-Option<int> consulServerPortOption = new("--consul-server-port", "-csp")
-{
-    Description = "Consul Server RPC port (defaults to 8300)",
-    DefaultValueFactory = _ => 8300
-};
-Option<int> consulSerfLanPortOption = new("--consul-serf-lan-port", "-cslp")
-{
-    Description = "Consul Serf LAN port (defaults to 8301)",
-    DefaultValueFactory = _ => 8301
-};
-Option<int> consulSerfWanPortOption = new("--consul-serf-wan-port", "-cswp")
-{
-    Description = "Consul Serf WAN port (defaults to 8302)",
-    DefaultValueFactory = _ => 8302
-};
-Option<int> consulGrpcPortOption = new("--consul-grpc-port", "-cgp")
-{
-    Description = "Consul gRPC port (defaults to 8502)",
-    DefaultValueFactory = _ => 8502
-};
-Option<int> consulDnsPortOption = new("--consul-dns-port", "-cdp")
-{
-    Description = "Consul DNS port (defaults to 8600)",
-    DefaultValueFactory = _ => 8600
-};
 
 RootCommand rootCommand = new("Distributed Password Cracking System - Agent Node");
 rootCommand.Options.Add(hashcatPathOption);
@@ -73,12 +43,6 @@ rootCommand.Options.Add(consulPathOption);
 rootCommand.Options.Add(serverIpOption);
 rootCommand.Options.Add(hostOption);
 rootCommand.Options.Add(portOption);
-rootCommand.Options.Add(consulHttpPortOption);
-rootCommand.Options.Add(consulServerPortOption);
-rootCommand.Options.Add(consulSerfLanPortOption);
-rootCommand.Options.Add(consulSerfWanPortOption);
-rootCommand.Options.Add(consulGrpcPortOption);
-rootCommand.Options.Add(consulDnsPortOption);
 
 if (args.Contains("--help") || args.Contains("-h"))
 {
@@ -128,17 +92,11 @@ else
     Console.WriteLine($"Using Host IP: {hostIp}");
 }
 var port = parseResult.GetValue(portOption);
-var consulHttpPort = parseResult.GetValue(consulHttpPortOption);
-var consulServerPort = parseResult.GetValue(consulServerPortOption);
-var consulSerfLanPort = parseResult.GetValue(consulSerfLanPortOption);
-var consulSerfWanPort = parseResult.GetValue(consulSerfWanPortOption);
-var consulGrpcPort = parseResult.GetValue(consulGrpcPortOption);
-var consulDnsPort = parseResult.GetValue(consulDnsPortOption);
 
 System.Diagnostics.Process? consulProcess = null;
 try
 {
-    consulProcess = StartConsul(consulPath ?? "consul", hostIp, serverIp, consulHttpPort, consulServerPort, consulSerfLanPort, consulSerfWanPort, consulGrpcPort, consulDnsPort);
+    consulProcess = StartConsul(consulPath ?? "consul", hostIp, serverIp);
 }
 catch (Exception ex)
 {
@@ -154,7 +112,7 @@ try
         {
             var settings = new Dictionary<string, string?>
             {
-                { "ProtoActor:Consul", $"http://localhost:{consulHttpPort}" },
+                { "ProtoActor:Consul", $"http://localhost:8500" },
                 { "ProtoActor:Host", hostIp },
                 { "ProtoActor:Port", port.ToString() }
             };
@@ -190,14 +148,14 @@ static string GetLocalIpAddress()
         .FirstOrDefault() ?? "127.0.0.1";
 }
 
-static System.Diagnostics.Process StartConsul(string consulPath, string hostIp, string serverIp, int httpPort, int serverPort, int serfLanPort, int serfWanPort, int grpcPort, int dnsPort)
+static System.Diagnostics.Process StartConsul(string consulPath, string hostIp, string serverIp)
 {
     var startInfo = new ProcessStartInfo
     {
         FileName = consulPath,
-        Arguments = $"agent -dev -data-dir ./.consul -retry-join {serverIp} -bind {hostIp} -http-port {httpPort} -server-port {serverPort} -serf-lan-port {serfLanPort} -serf-wan-port {serfWanPort} -grpc-port {grpcPort} -dns-port {dnsPort}",
-        UseShellExecute = false,
-        CreateNoWindow = false
+        Arguments = $"agent -data-dir ./.consul -retry-join {serverIp} -bind {hostIp}",
+        UseShellExecute = true,
+        WindowStyle = ProcessWindowStyle.Hidden
     };
     var process = System.Diagnostics.Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
     if (process.WaitForExit(500)) throw new Exception($"Consul exited with code {process.ExitCode}");
