@@ -61,3 +61,5 @@ nunit-*.xml
 *.suo
 *.userosscache
 *.sln.docstates
+
+.consul
