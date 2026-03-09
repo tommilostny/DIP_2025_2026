@@ -1,4 +1,4 @@
-﻿﻿using DPCS.Agent;
+﻿﻿﻿﻿using DPCS.Agent;
 using DPCS.Agent.Hashcat;
 using DPCS.Agent.Services;
 using Microsoft.Extensions.Configuration;
@@ -35,6 +35,10 @@ Option<int> portOption = new("--port", "-pt")
     Description = "Port for Proto.Actor (optional, defaults to 0 for dynamic)",
     DefaultValueFactory = _ => 0
 };
+Option<bool> noConsulOption = new("--no-consul", "-nc")
+{
+    Description = "Do not start the local Consul agent automatically"
+};
 
 RootCommand rootCommand = new("Distributed Password Cracking System - Agent Node");
 rootCommand.Options.Add(hashcatPathOption);
@@ -43,6 +47,7 @@ rootCommand.Options.Add(consulPathOption);
 rootCommand.Options.Add(serverIpOption);
 rootCommand.Options.Add(hostOption);
 rootCommand.Options.Add(portOption);
+rootCommand.Options.Add(noConsulOption);
 
 if (args.Contains("--help") || args.Contains("-h"))
 {
@@ -76,7 +81,8 @@ if (workloadProfile < 1 || workloadProfile > 4)
 
 var consulPath = parseResult.GetValue(consulPathOption);
 var serverIp = parseResult.GetValue(serverIpOption);
-if (string.IsNullOrWhiteSpace(serverIp))
+var noConsul = parseResult.GetValue(noConsulOption);
+if (!noConsul && string.IsNullOrWhiteSpace(serverIp))
 {
     Console.Error.WriteLine("Error: Server IP is required. Please provide it using --server-ip/-s.");
     return;
@@ -94,14 +100,17 @@ else
 var port = parseResult.GetValue(portOption);
 
 System.Diagnostics.Process? consulProcess = null;
-try
+if (!noConsul)
 {
-    consulProcess = StartConsul(consulPath ?? "consul", hostIp, serverIp);
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"Error starting Consul: {ex.Message}");
-    return;
+    try
+    {
+        consulProcess = StartConsul(consulPath ?? "consul", hostIp, serverIp!);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Error starting Consul: {ex.Message}");
+        return;
+    }
 }
 
 try
