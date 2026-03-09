@@ -1,4 +1,4 @@
-﻿using DPCS.Agent;
+﻿﻿using DPCS.Agent;
 using DPCS.Agent.Hashcat;
 using DPCS.Agent.Services;
 using Microsoft.Extensions.Configuration;
@@ -7,10 +7,10 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
-Option<FileInfo> hashcatPathOption = new("--hashcat-path", "-p")
+Option<string> hashcatPathOption = new("--hashcat-path", "-p")
 {
     Description = "Path to the hashcat executable (optional, defaults to 'hashcat' in system PATH)",
-    DefaultValueFactory = _ => new FileInfo("hashcat")
+    DefaultValueFactory = _ => "hashcat"
 };
 Option<int> workloadProfileOption = new("--workload-profile", "-w")
 {
@@ -61,10 +61,10 @@ if (parseResult.Errors.Count > 0)
     return;
 }
 
-var hashcatFileInfo = parseResult.GetValue(hashcatPathOption);
-if (hashcatFileInfo is null or { Exists: false })
+var hashcatPath = parseResult.GetValue(hashcatPathOption);
+if (string.IsNullOrWhiteSpace(hashcatPath))
 {
-    Console.Error.WriteLine($"Error: Hashcat executable not found at path '{hashcatFileInfo?.FullName}'. Please provide a valid path using --hashcat-path.");
+    Console.Error.WriteLine("Error: Hashcat path cannot be empty. Please provide a valid path or ensure 'hashcat' is in the system PATH.");
     return;
 }
 var workloadProfile = parseResult.GetValue(workloadProfileOption);
@@ -112,7 +112,7 @@ try
         {
             var settings = new Dictionary<string, string?>
             {
-                { "ProtoActor:Consul", $"http://localhost:8500" },
+                { "ProtoActor:Consul", "http://localhost:8500" },
                 { "ProtoActor:Host", hostIp },
                 { "ProtoActor:Port", port.ToString() }
             };
@@ -120,7 +120,7 @@ try
         })
         .ConfigureServices((context, services) =>
         {
-            services.AddSingleton(new HashcatWrapper(hashcatFileInfo.FullName, workloadProfile));
+            services.AddSingleton(new HashcatWrapper(hashcatPath, workloadProfile));
             services.AddActorSystem();
             services.AddHostedService<ActorSystemClusterHostedService>();
             services.AddHostedService<AgentService>();
@@ -154,8 +154,8 @@ static System.Diagnostics.Process StartConsul(string consulPath, string hostIp, 
     {
         FileName = consulPath,
         Arguments = $"agent -data-dir ./.consul -retry-join {serverIp} -bind {hostIp}",
-        UseShellExecute = true,
-        WindowStyle = ProcessWindowStyle.Hidden
+        UseShellExecute = false,
+        CreateNoWindow = true
     };
     var process = System.Diagnostics.Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
     if (process.WaitForExit(500)) throw new Exception($"Consul exited with code {process.ExitCode}");
