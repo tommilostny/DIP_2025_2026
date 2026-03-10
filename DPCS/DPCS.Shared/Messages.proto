@@ -16,7 +16,8 @@ message AgentId {
 // Job assignment message returned by JobManagerGrain in response to JobDiscovery RPC
 message JobAssignment {
   string job_id = 1;
-  int64 mode_id = 2;
+  int32 mode_id = 2;
+  int32 hash_type = 3;
 }
 
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
