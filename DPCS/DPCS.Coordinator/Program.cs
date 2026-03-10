@@ -181,7 +181,7 @@ static System.Diagnostics.Process StartConsul(string consulPath, string hostIp)
         CreateNoWindow = true
     };
     var process = System.Diagnostics.Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
-    if (process.WaitForExit(500)) throw new Exception($"Consul exited with code {process.ExitCode}");
+    if (process.WaitForExit(1500)) throw new Exception($"Consul exited with code {process.ExitCode}");
     Console.WriteLine("Consul started.");
     return process;
 }

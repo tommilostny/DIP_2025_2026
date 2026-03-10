@@ -63,3 +63,4 @@ nunit-*.xml
 *.sln.docstates
 
 .consul
+.hashcat

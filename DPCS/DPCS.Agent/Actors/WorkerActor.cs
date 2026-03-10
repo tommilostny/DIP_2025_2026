@@ -19,7 +19,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         };
     }
 
-    private Task OnStarted(IContext context)
+    private static Task OnStarted(IContext context)
     {
         Console.WriteLine($"WorkerActor {context.Self} started.");
         context.Send(context.Self, new StartLoop());
@@ -45,7 +45,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                     Id = context.Self.Id,
                 }, CancellationToken.None);
 
-            if (assignment is null or { ModeId: (long)AttackMode.Invalid })
+            if (assignment is null or { ModeId: (int)AttackMode.Invalid })
             {
                 // No job, retry later
                 await Task.Delay(5000);
@@ -72,10 +72,11 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         if (_currentJob == null) return;
         try
         {
-            var coordinator = cluster.GetJobCoordinatorGrain(_currentJob.JobId);
+            // Run or retrieve cached benchmark.
+            var hashrate = await hashcatWrapper.GetBenchmarkHashrateAsync(_currentJob.HashType);
 
-            // Could be MaskWorkAssignment or DictionaryWorkAssignment depending on job type
-            object? chunk = null;
+            // Get the coordinator grain from the cluster and request the next chunk of work.
+            var coordinator = cluster.GetJobCoordinatorGrain(_currentJob.JobId);
             var workRequest = new WorkRequest
             {
                 AgentId = new AgentId
@@ -84,60 +85,56 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                     Id = context.Self.Id
                 },
                 JobId = _currentJob.JobId,
-                CurrentHashrate = 123, // Placeholder, you can track actual hashrate in a real implementation
+                CurrentHashrate = hashrate,
             };
-
-            switch ((AttackMode)_currentJob.ModeId)
-            {
-                case AttackMode.Mask:
-                    chunk = await coordinator.MaskWorkRequest(workRequest, CancellationToken.None);
-                    break;
-                case AttackMode.Dictionary:
-                    chunk = await coordinator.DictionaryWorkRequest(workRequest, CancellationToken.None);
-                    break;
-                default:
-                    Console.WriteLine($"Unknown attack mode: {_currentJob.ModeId}");
-                    _currentJob = null;
-                    context.Send(context.Self, new StartLoop());
-                    return;
-            }
 
             // Process the chunk WITHOUT blocking the actor
             _currentWorkCts = new CancellationTokenSource();
             // ReenterAfter allows the actor to process other messages (like StopWork) 
             // while this task runs. When the task finishes, the continuation is executed.
 
-            switch (chunk)
+            switch (_currentJob.ModeId)
             {
-                case MaskWorkAssignment maskChunk:
+                case (int)AttackMode.Mask:
+                    var maskChunk = await coordinator.MaskWorkRequest(workRequest, CancellationToken.None);
+                    if (maskChunk is null)
+                    {
+                        Console.WriteLine("No mask chunk received, retrying...");
+                        context.Send(context.Self, new ChunkProcessed());
+                        return;
+                    }
                     Console.WriteLine($"Received mask chunk: {maskChunk.Meta.RequestId}");
                     context.ReenterAfter(
                         RunHashcatMaskAttack(maskChunk, _currentWorkCts.Token), 
-                        _ => 
-                        {
+                        _ => {
                             // When finished, loop back
                             context.Send(context.Self, new ChunkProcessed());
                             return Task.CompletedTask;
                         }
                     );
                     break;
-                
-                case DictionaryWorkAssignment dictChunk:
+            
+                case (int)AttackMode.Dictionary:
+                    var dictChunk = await coordinator.DictionaryWorkRequest(workRequest, CancellationToken.None);
+                    if (dictChunk is null)
+                    {
+                        Console.WriteLine("No dictionary chunk received, retrying...");
+                        context.Send(context.Self, new ChunkProcessed());
+                        return;
+                    }
                     Console.WriteLine($"Received dictionary chunk: {dictChunk.Meta.RequestId}");
                     context.ReenterAfter(
                         RunHashcatDictionaryAttack(dictChunk, _currentWorkCts.Token), 
-                        _ => 
-                        {
+                        _ => {
                             // When finished, loop back
                             context.Send(context.Self, new ChunkProcessed());
                             return Task.CompletedTask;
                         }
                     );
                     break;
-                
+            
                 default:
-                    // Check if job is done or cancelled (assuming empty assignment means done)
-                    Console.WriteLine("Job finished or no more chunks.");
+                    Console.WriteLine($"Unknown attack mode: {_currentJob.ModeId}");
                     _currentJob = null;
                     context.Send(context.Self, new StartLoop());
                     return;

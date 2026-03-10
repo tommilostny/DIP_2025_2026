@@ -1,8 +1,6 @@
-using System.Runtime.CompilerServices;
-
 namespace DPCS.Coordinator.Grains;
 
-public class JobManagerGrain : JobManagerGrainBase
+public sealed class JobManagerGrain : JobManagerGrainBase
 {
     private readonly ClusterIdentity _clusterIdentity;
 
@@ -21,7 +19,7 @@ public class JobManagerGrain : JobManagerGrainBase
         JobAssignment assignment;
         assignment = _unfinishedJobs.Count > 0
             ? _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count)
-            : new JobAssignment { ModeId = (long)AttackMode.Invalid };
+            : new JobAssignment { ModeId = (int)AttackMode.Invalid };
 
         Console.WriteLine($"{_clusterIdentity.Identity}: sending job assignment to agent {request.Address}/{request.Id}: {JsonSerializer.Serialize(assignment)}");
 
@@ -35,7 +33,7 @@ public class JobManagerGrain : JobManagerGrainBase
         var assignment = new JobAssignment
         {
             JobId = signedJobId,
-            ModeId = (long)AttackMode.Mask,
+            ModeId = (int)AttackMode.Mask,
         };
         _unfinishedJobs[signedJobId] = assignment;
 
@@ -56,7 +54,7 @@ public class JobManagerGrain : JobManagerGrainBase
         var assignment = new JobAssignment
         {
             JobId = signedJobId,
-            ModeId = (long)AttackMode.Dictionary,
+            ModeId = (int)AttackMode.Dictionary,
         };
         _unfinishedJobs[signedJobId] = assignment;
 

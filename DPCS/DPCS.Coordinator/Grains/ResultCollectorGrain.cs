@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Grains;
 
-public class ResultCollectorGrain : ResultCollectorGrainBase
+public sealed class ResultCollectorGrain : ResultCollectorGrainBase
 {
     private readonly ClusterIdentity _clusterIdentity;
 
