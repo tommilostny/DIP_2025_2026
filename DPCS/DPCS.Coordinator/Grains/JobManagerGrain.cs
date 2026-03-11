@@ -38,7 +38,7 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         _unfinishedJobs[signedJobId] = assignment;
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received mask job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(request)}");
-        
+
         var cluster = System.Cluster();
         await cluster
             .GetJobCoordinatorGrain(assignment.JobId)
@@ -59,7 +59,7 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         _unfinishedJobs[signedJobId] = assignment;
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received dictionary job submission, assigned job id {signedJobId}");
-        
+
         await System.Cluster()
             .GetJobCoordinatorGrain(assignment.JobId)
             .DictionaryJobInit(request, CancellationToken.None);

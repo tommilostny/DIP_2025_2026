@@ -1,10 +1,11 @@
-global using DPCS.Coordinator.Security;
+global using DPCS.Coordinator.Helpers;
+global using DPCS.Coordinator.Models;
 global using DPCS.Shared;
+global using DPCS.Shared.Helpers;
 global using JsonSerializer = System.Text.Json.JsonSerializer;
 global using Proto;
 global using Proto.Cluster;
 global using Proto.Cluster.Partition;
-global using Proto.Cluster.Testing;
 global using Proto.DependencyInjection;
 global using Proto.Remote;
 global using Proto.Remote.GrpcNet;

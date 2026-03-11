@@ -90,7 +90,7 @@ if (!noConsul && string.IsNullOrWhiteSpace(serverIp))
 var hostIp = parseResult.GetValue(hostOption);
 if (string.IsNullOrWhiteSpace(hostIp))
 {
-    hostIp = GetLocalIpAddress();
+    hostIp = ConsulHelper.GetLocalIpAddress();
     Console.WriteLine($"Auto-detected Host IP: {hostIp}");
 }
 else
@@ -104,7 +104,7 @@ if (!noConsul)
 {
     try
     {
-        consulProcess = StartConsul(consulPath ?? "consul", hostIp, serverIp!);
+        consulProcess = ConsulHelper.StartConsulAgent(consulPath ?? "consul", hostIp, serverIp!);
     }
     catch (Exception ex)
     {
@@ -145,29 +145,4 @@ finally
         Console.WriteLine("Stopping Consul...");
         consulProcess.Kill();
     }
-}
-
-static string GetLocalIpAddress()
-{
-    return NetworkInterface.GetAllNetworkInterfaces()
-        .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-        .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-        .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
-        .Select(a => a.Address.ToString())
-        .FirstOrDefault() ?? "127.0.0.1";
-}
-
-static System.Diagnostics.Process StartConsul(string consulPath, string hostIp, string serverIp)
-{
-    var startInfo = new ProcessStartInfo
-    {
-        FileName = consulPath,
-        Arguments = $"agent -data-dir ./.consul -retry-join {serverIp} -bind {hostIp}",
-        UseShellExecute = false,
-        CreateNoWindow = true
-    };
-    var process = System.Diagnostics.Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
-    if (process.WaitForExit(1500)) throw new Exception($"Consul exited with code {process.ExitCode}");
-    Console.WriteLine("Consul started.");
-    return process;
 }

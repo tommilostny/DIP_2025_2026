@@ -1,21 +1,18 @@
 using DPCS.Coordinator;
 using System.CommandLine;
-using System.Diagnostics;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 
 Option<string> consulPathOption = new("--consul-path", "-c")
 {
-    Description = "Path to the consul executable (optional, defaults to 'consul' in system PATH)",
+    Description = "Path to the Consul executable (optional, defaults to 'consul' in system PATH)",
     DefaultValueFactory = _ => "consul"
 };
 Option<string?> hostOption = new("--host", "-ip")
 {
-    Description = "Host IP address for Proto.Actor (optional, auto-detected if not provided)"
+    Description = "Host IP address for Consul server (optional, auto-detected if not provided)"
 };
 Option<int> portOption = new("--port", "-pt")
 {
-    Description = "Port for Proto.Actor (optional)",
+    Description = "Port for Consul server (optional)",
     DefaultValueFactory = _ => 8000
 };
 
@@ -45,7 +42,7 @@ var consulPath = parseResult.GetValue(consulPathOption);
 var hostIp = parseResult.GetValue(hostOption);
 if (string.IsNullOrWhiteSpace(hostIp))
 {
-    hostIp = GetLocalIpAddress();
+    hostIp = ConsulHelper.GetLocalIpAddress();
     Console.WriteLine($"Auto-detected Host IP: {hostIp}");
 }
 else
@@ -57,7 +54,7 @@ var port = parseResult.GetValue(portOption);
 System.Diagnostics.Process? consulProcess = null;
 try
 {
-    consulProcess = StartConsul(consulPath ?? "consul", hostIp);
+    consulProcess = ConsulHelper.StartConsulServer(consulPath ?? "consul", hostIp);
 }
 catch (Exception ex)
 {
@@ -71,7 +68,7 @@ try
 
     var settings = new Dictionary<string, string?>
     {
-        { "ProtoActor:Consul", "http://localhost:8500" },
+        { "ProtoActor:Consul", ConsulHelper.ConsulAddress },
         { "ProtoActor:Host", hostIp },
         { "ProtoActor:Port", port.ToString() }
     };
@@ -106,21 +103,37 @@ try
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     Proto.Log.SetLoggerFactory(loggerFactory);
 
-    app.MapPost("/submit-job/mask", async (HashcatMaskJobSpecs request, ActorSystem actorSystem) =>
+    app.MapPost("/submit-job/mask", async (MaskJobSpecsModel model, ActorSystem actorSystem) =>
     {
+        var request = new HashcatMaskJobSpecs
+        {
+            Hashes = { model.Hashes },
+            Mask = model.Mask,
+            MinLength = model.MinLength,
+            MaxLength = model.MaxLength,
+            HashType = model.HashType
+        };
         var jobManager = actorSystem.Cluster().GetJobManagerGrain("root");
         var job = await jobManager.MaskJobSubmission(request, CancellationToken.None);
 
         return Results.Ok(job);
-    });
+    })
+    .AddEndpointFilter(ModelValidationHelper.ValidationFilter);
 
-    app.MapPost("/submit-job/dictionary", async (HashcatDictionaryJobSpecs request, ActorSystem actorSystem) =>
+    app.MapPost("/submit-job/dictionary", async (DictionaryJobSpecsModel model, ActorSystem actorSystem) =>
     {
+        var request = new HashcatDictionaryJobSpecs
+        {
+            Hashes = { model.Hashes },
+            Wordlists = { model.Wordlists },
+            HashType = model.HashType
+        };
         var jobManager = actorSystem.Cluster().GetJobManagerGrain("root");
         var job = await jobManager.DictionaryJobSubmission(request, CancellationToken.None);
 
         return Results.Ok(job);
-    });
+    })
+    .AddEndpointFilter(ModelValidationHelper.ValidationFilter);
 
     app.MapGet("/job-status/{jobId}", async (string jobId, ActorSystem actorSystem) =>
     {
@@ -159,29 +172,4 @@ finally
         Console.WriteLine("Stopping Consul...");
         consulProcess.Kill();
     }
-}
-
-static string GetLocalIpAddress()
-{
-    return NetworkInterface.GetAllNetworkInterfaces()
-        .Where(n => n.OperationalStatus == OperationalStatus.Up && n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
-        .SelectMany(n => n.GetIPProperties().UnicastAddresses)
-        .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
-        .Select(a => a.Address.ToString())
-        .FirstOrDefault() ?? "127.0.0.1";
-}
-
-static System.Diagnostics.Process StartConsul(string consulPath, string hostIp)
-{
-    var startInfo = new ProcessStartInfo
-    {
-        FileName = consulPath,
-        Arguments = $"agent -server -bootstrap -data-dir ./.consul -bind {hostIp} -client 0.0.0.0",
-        UseShellExecute = false,
-        CreateNoWindow = true
-    };
-    var process = System.Diagnostics.Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
-    if (process.WaitForExit(1500)) throw new Exception($"Consul exited with code {process.ExitCode}");
-    Console.WriteLine("Consul started.");
-    return process;
 }

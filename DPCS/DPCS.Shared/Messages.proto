@@ -26,12 +26,14 @@ message HashcatMaskJobSpecs {
   string mask = 3;
   int32 min_length = 4;
   int32 max_length = 5;
+  int32 hash_type = 6;
 }
 
 // Parameters for submitting a Hashcat dictionary attack job by user in the web interface
 message HashcatDictionaryJobSpecs {
   repeated string hashes = 2;
   repeated string wordlists = 3;
+  int32 hash_type = 4;
 }
 
 // Message sent by agent to request more work

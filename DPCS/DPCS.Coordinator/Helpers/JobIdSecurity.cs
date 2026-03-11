@@ -1,11 +1,16 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DPCS.Coordinator.Security;
+namespace DPCS.Coordinator.Helpers;
 
+/// <summary>
+/// Utility class for generating and validating signed job IDs to prevent tampering.
+/// Each job ID is a combination of a GUID and a truncated HMAC signature, encoded in a URL-safe Base64 format.
+/// TODO: The secret key used for HMAC should be securely stored and managed in a production environment,
+/// such as in environment variables or a secrets manager.
+/// </summary>
 public static class JobIdSecurity
 {
-    // In a production environment, load this from configuration/secrets
     private static readonly byte[] SecretKey = Encoding.UTF8.GetBytes("super-secret-signing-key-change-me");
 
     public static string GenerateSignedId(Guid id)
