@@ -40,14 +40,14 @@ message HashcatDictionaryJobSpecs {
 message WorkRequest {
   AgentId agent_id = 1;
   string job_id = 2;
-  double current_hashrate = 3;
+  uint64 current_hashrate = 3;
 }
 
 // Shared metadata for tracking and idempotency
 message WorkMetadata {
   string job_id = 1;
   string request_id = 2; // Unique ID for deduplication
-  repeated string extra_args = 3; // e.g. "--optimized-kernel"
+  string extra_args = 3; // e.g. "--optimized-kernel"
 }
 
 // Message for Attack Mode 3 (Stateless) - JobCoordinator provides mask and keyspace info

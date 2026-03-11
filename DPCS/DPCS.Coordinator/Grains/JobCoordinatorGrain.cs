@@ -1,29 +1,15 @@
-using DPCS.Coordinator.Enums;
+using DPCS.Coordinator.Strategies;
 
 namespace DPCS.Coordinator.Grains;
 
 public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 {
-    private abstract record WorkDetailsUnion;
-    private sealed record MaskWorkDetails(MaskWorkAssignment Assignment) : WorkDetailsUnion;
-    private sealed record DictionaryWorkDetails(DictionaryWorkAssignment Assignment) : WorkDetailsUnion;
-
-    private sealed class WorkChunk
-    {
-        public required PID WorkerPid { get; set; }
-
-        public WorkChunkState State { get; set; } = WorkChunkState.Pending;
-
-        public required WorkDetailsUnion WorkDetails { get; set; }
-    }
-
     private readonly ClusterIdentity _clusterIdentity;
 
-    private ulong _globalCursor = 0;
+    // Maps a Worker PID to the RequestId of the chunk they are currently processing.
+    private readonly Dictionary<PID, string> _activeWorkers = [];
 
-    private readonly Dictionary<PID, WorkChunk> _workChunks = [];
-
-    private AttackMode _attackMode = AttackMode.Invalid;
+    private IJobStrategy? _jobStrategy;
 
     public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity) : base(context)
     {
@@ -33,50 +19,60 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override Task MaskJobInit(HashcatMaskJobSpecs request)
     {
-        _attackMode = AttackMode.Mask;
+        _jobStrategy = new MaskJobStrategy(request);
         return Task.CompletedTask;
     }
 
     public override Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
     {
-        _attackMode = AttackMode.Dictionary;
+        _jobStrategy = new DictionaryJobStrategy(request);
         return Task.CompletedTask;
     }
 
     public override async Task<MaskWorkAssignment> MaskWorkRequest(WorkRequest request)
     {
-        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        // Track the worker
-        if (!_workChunks.ContainsKey(workerPid))
+        if (_jobStrategy is not MaskJobStrategy)
         {
-            _workChunks[workerPid] = new WorkChunk 
-            { 
-                WorkerPid = workerPid,
-                WorkDetails = new MaskWorkDetails(new MaskWorkAssignment()) // Placeholder init
-            };
+            return new MaskWorkAssignment(); // Or handle error
         }
 
-        return await Task.FromResult(new MaskWorkAssignment());
+        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
+        var nextChunk = _jobStrategy.NextMaskChunk(_clusterIdentity.Identity, request.CurrentHashrate);
+
+        if (nextChunk == null) return new MaskWorkAssignment(); // Job finished
+
+        // Track the worker
+        _activeWorkers[workerPid] = nextChunk.Meta.RequestId;
+
+        return await Task.FromResult(nextChunk);
     }
 
     public override async Task<DictionaryWorkAssignment> DictionaryWorkRequest(WorkRequest request)
     {
-        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        // Track the worker
-        if (!_workChunks.ContainsKey(workerPid))
+        if (_jobStrategy is not DictionaryJobStrategy)
         {
-            _workChunks[workerPid] = new WorkChunk 
-            { 
-                WorkerPid = workerPid,
-                WorkDetails = new DictionaryWorkDetails(new DictionaryWorkAssignment()) // Placeholder init
-            };
+            return new DictionaryWorkAssignment(); // Or handle error
         }
 
-        return await Task.FromResult(new DictionaryWorkAssignment());
+        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
+        var nextChunk = _jobStrategy.NextDictionaryChunk(_clusterIdentity.Identity, request.CurrentHashrate);
+
+        if (nextChunk == null) return new DictionaryWorkAssignment();
+
+        // Track the worker
+        _activeWorkers[workerPid] = nextChunk.Meta.RequestId;
+
+        return await Task.FromResult(nextChunk);
     }
 
     public override /*async*/ Task WorkResultSubmission(WorkResult request)
     {
+        if (Context.Sender != null && _activeWorkers.Remove(Context.Sender, out var requestId))
+        {
+            // Notify strategy that this specific chunk is done.
+            // (If the result indicates the password was found, we would handle that here too)
+            _jobStrategy?.CompleteChunk(requestId);
+        }
         return Task.CompletedTask;
     }
 
@@ -87,18 +83,17 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override async Task<JobStatus> GetJobStatus()
     {
-        if (_attackMode == AttackMode.Invalid)
+        if (_jobStrategy is null)
         {
             Context.Stop(Context.Self);
             return new JobStatus { Status = "NotFound" };
         }
 
-        // Placeholder implementation, returning dummy job status
         var jobStatus = new JobStatus
         {
             JobId = _clusterIdentity.Identity,
             Status = "In Progress",
-            ProgressPercentage = 42.0
+            ProgressPercentage = _jobStrategy.GetProgress()
         };
         return await Task.FromResult(jobStatus);
     }
@@ -107,15 +102,16 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     {
         // Placeholder implementation for job cancellation
         Console.WriteLine($"{_clusterIdentity.Identity}: received job cancellation request");
-        _attackMode = AttackMode.Invalid;
+        _jobStrategy = null;
 
         // Send cancellation signal to all active worker actors
-        foreach (var chunk in _workChunks.Values)
+        foreach (var worker in _activeWorkers.Keys)
         {
-            Context.Send(chunk.WorkerPid, new StopWork());
+            Context.Send(worker, new StopWork());
+            // We don't need to FailChunk here because the job is being cancelled entirely.
         }
 
-        _workChunks.Clear();
+        _activeWorkers.Clear();
 
         Context.Stop(Context.Self);
         await Task.CompletedTask;

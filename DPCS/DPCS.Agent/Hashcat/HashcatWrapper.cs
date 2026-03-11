@@ -41,7 +41,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         await process.WaitForExitAsync(cancellationToken);
     }
 
-    public async Task<long> GetBenchmarkHashrateAsync(int hashType, CancellationToken cancellationToken = default)
+    public async Task<ulong> GetBenchmarkHashrateAsync(int hashType, CancellationToken cancellationToken = default)
     {
         var cacheDir = ".hashcat";
         var cacheFile = Path.Combine(cacheDir, $"{hashType}.txt");
@@ -90,7 +90,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         // Field 4 (0-indexed) is speed in H/s
         return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Split(':'))
-            .Where(parts => parts.Length > 4 && long.TryParse(parts[4], out _))
-            .Sum(parts => long.Parse(parts[4]));
+            .Where(parts => parts.Length > 4 && ulong.TryParse(parts[4], out _))
+            .Aggregate(0UL, (sum, parts) => sum + ulong.Parse(parts[4]));
     }
 }
