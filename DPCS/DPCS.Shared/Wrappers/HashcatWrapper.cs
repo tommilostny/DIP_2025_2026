@@ -109,8 +109,8 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
     public async Task<ulong> GetMaskKeyspaceSizeAsync(string mask, int incMinLen, int incMaxLen, CancellationToken cancellationToken = default)
     {
         var arguments = IsIncrementMode(incMinLen, incMaxLen)
-            ? $"--keyspace --increment --increment-min={incMinLen} --increment-max={incMaxLen} {mask}"
-            : $"--keyspace {mask}";
+            ? $"-a {(int)AttackMode.Mask} --keyspace --increment --increment-min={incMinLen} --increment-max={incMaxLen} {mask}"
+            : $"-a {(int)AttackMode.Mask} --keyspace {mask}";
 
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
@@ -120,14 +120,14 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         {
             return keyspaceSize;
         }
-        throw new Exception("Failed to parse keyspace size from Hashcat output.");
+        throw new Exception($"Failed to parse keyspace size from Hashcat output.\n\nOutput was:\n{output}\n\nThe command: {hashcatPath} {arguments}\n\n");
     }
 
     public async Task<ulong> GetMaskCandidateCountAsync(string mask, int incMinLen, int incMaxLen, CancellationToken cancellationToken = default)
     {
         var arguments = IsIncrementMode(incMinLen, incMaxLen)
-            ? $"--total-candidates --increment --increment-min={incMinLen} --increment-max={incMaxLen} {mask}"
-            : $"--total-candidates {mask}";
+            ? $"-a {(int)AttackMode.Mask} --total-candidates --increment --increment-min={incMinLen} --increment-max={incMaxLen} {mask}"
+            : $"-a {(int)AttackMode.Mask} --total-candidates {mask}";
 
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
@@ -151,6 +151,17 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
             UseShellExecute = false,
             CreateNoWindow = true
         };
+
+        if (hashcatPath != "hashcat")
+        {
+            // Hashcat requires the working directory to be set to its installation folder
+            // to correctly locate dependencies like ./OpenCL/ and configuration files.
+            var workingDirectory = Path.GetDirectoryName(hashcatPath);
+            if (!string.IsNullOrEmpty(workingDirectory))
+            {
+                startInfo.WorkingDirectory = workingDirectory;
+            }
+        }
 
         using var process = new Process { StartInfo = startInfo };
         var outputBuilder = captureOutput ? new StringBuilder() : null;
