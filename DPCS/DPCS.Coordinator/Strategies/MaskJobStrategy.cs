@@ -56,12 +56,9 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
         var requestId = Guid.NewGuid().ToString();
         var assignment = new MaskWorkAssignment
         {
-            Meta = new WorkMetadata
-            {
-                JobId = jobId,
-                RequestId = requestId,
-                //ExtraArgs?
-            },
+            JobId = jobId,
+            RequestId = requestId,
+            ExtraArgs = string.Empty, // Placeholder for any extra args
             Mask = specs.Mask,
             KeyspaceStart = start,
             KeyspaceLength = length,

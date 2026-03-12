@@ -34,6 +34,8 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         {
             JobId = signedJobId,
             ModeId = (int)AttackMode.Mask,
+            HashType = request.HashType,
+            Hashes = { request.Hashes },
         };
         _unfinishedJobs[signedJobId] = assignment;
 
@@ -55,6 +57,8 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         {
             JobId = signedJobId,
             ModeId = (int)AttackMode.Dictionary,
+            HashType = request.HashType,
+            Hashes = { request.Hashes },
         };
         _unfinishedJobs[signedJobId] = assignment;
 

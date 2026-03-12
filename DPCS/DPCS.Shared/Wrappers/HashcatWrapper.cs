@@ -10,9 +10,61 @@ namespace DPCS.Shared.Wrappers;
 /// <param name="workloadProfile">The workload profile to use. Defaults to 2 (/4).</param>
 public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadProfile = 2)
 {
-    public async Task StartHashcatProcessAsync(string arguments, CancellationToken cancellationToken = default)
+    public async Task<List<RecoveredPassword>> RunHashcatMaskAttackAsync(MaskWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
     {
-        await ExecuteHashcatInternalAsync(arguments + $" -w {workloadProfile}", captureOutput: false, cancellationToken);
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Mask} ");
+        argumentsBuilder.Append($"-m {hashType} ");
+        argumentsBuilder.Append(chunk.ExtraArgs);
+        argumentsBuilder.Append($" --skip {chunk.KeyspaceStart} ");
+        argumentsBuilder.Append($"--limit {chunk.KeyspaceLength} ");
+        argumentsBuilder.Append($"\"{hashFilePath}\" ");
+        argumentsBuilder.Append($"\"{chunk.Mask}\"");
+        
+        return await RunHashcatAttackAsync(argumentsBuilder, ct);
+    }
+
+    public async Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    {
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Dictionary} ");
+        argumentsBuilder.Append($"-m {hashType} ");
+        argumentsBuilder.Append(chunk.ExtraArgs);
+        argumentsBuilder.Append($" \"{hashFilePath}\" ");
+        argumentsBuilder.Append($"\"{chunk.DictionaryChunkUrl}\""); // Assuming this will be a local path to the downloaded wordlist chunk
+
+        return await RunHashcatAttackAsync(argumentsBuilder, ct);
+    }
+
+    private async Task<List<RecoveredPassword>> RunHashcatAttackAsync(StringBuilder arguments, CancellationToken cancellationToken = default)
+    {
+        arguments.Append($" -w {workloadProfile}");
+        arguments.Append(" --machine-readable"); // Ensure output is in a consistent, parseable format
+        arguments.Append(" --show"); // Show cracked passwords after attack completes (even if cached by hashcat)
+        var output = await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: true, cancellationToken);
+    
+        if (string.IsNullOrWhiteSpace(output)) return [];
+
+        // Hashcat's machine-readable output for found passwords is in the format:
+        // HASH:PLAIN_TEXT
+        var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var recovered = new List<RecoveredPassword>(lines.Length);
+
+        foreach (var line in lines)
+        {
+            var parts = line.Split(':', 2);
+            if (parts.Length == 2)
+            {
+                var recoveredPassword = new RecoveredPassword
+                {
+                    Hash = parts[0],
+                    Plaintext = parts[1]
+                };
+                recovered.Add(recoveredPassword);
+                Console.WriteLine($"!!! Recovered password: '{recoveredPassword.Plaintext}' for hash '{recoveredPassword.Hash}'");
+            }
+        }
+        return recovered;
     }
 
     public async Task<ulong> GetBenchmarkHashrateAsync(int hashType, CancellationToken cancellationToken = default)

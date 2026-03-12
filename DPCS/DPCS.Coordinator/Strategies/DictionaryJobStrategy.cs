@@ -35,12 +35,9 @@ public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs, HashcatWrapp
 
         var assignment = new DictionaryWorkAssignment
         {
-            Meta = new WorkMetadata
-            {
-                JobId = jobId,
-                RequestId = requestId,
-                //ExtraArgs?
-            },
+            JobId = jobId,
+            RequestId = requestId,
+            ExtraArgs = string.Empty, // Placeholder for any extra args
             DictionaryChunkUrl = "http://example.com/dictionary_chunk", // Placeholder URL
             DictionaryChunkChecksum = "abc123", // Placeholder checksum
             //RuleFileContent = specs.Rules, // Assuming rules are provided as content

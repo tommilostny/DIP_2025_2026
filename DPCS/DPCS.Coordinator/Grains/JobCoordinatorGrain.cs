@@ -45,7 +45,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         if (nextChunk == null) return new MaskWorkAssignment(); // Job finished
 
         // Track the worker
-        _activeWorkers[workerPid] = nextChunk.Meta.RequestId;
+        _activeWorkers[workerPid] = nextChunk.RequestId;
 
         return await Task.FromResult(nextChunk);
     }
@@ -63,7 +63,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         if (nextChunk == null) return new DictionaryWorkAssignment();
 
         // Track the worker
-        _activeWorkers[workerPid] = nextChunk.Meta.RequestId;
+        _activeWorkers[workerPid] = nextChunk.RequestId;
 
         return await Task.FromResult(nextChunk);
     }
@@ -73,8 +73,19 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         if (Context.Sender != null && _activeWorkers.Remove(Context.Sender, out var requestId))
         {
             // Notify strategy that this specific chunk is done.
-            // (If the result indicates the password was found, we would handle that here too)
             _jobStrategy?.CompleteChunk(requestId);
+
+            // If the result indicates the password was found, we handle that here.
+            if (request.Success && request.RecoveredPasswords.Count > 0)
+            {
+                Console.WriteLine($"{_clusterIdentity.Identity}: Received {request.RecoveredPasswords.Count} recovered passwords from an agent.");
+                foreach (var recovered in request.RecoveredPasswords)
+                {
+                    Console.WriteLine($"  - Hash: {recovered.Hash}, Plaintext: {recovered.Plaintext}");
+                }
+                // In a real implementation, you would forward these results to a dedicated
+                // ResultCollectorGrain or another service for aggregation and storage.
+            }
         }
         return Task.CompletedTask;
     }
