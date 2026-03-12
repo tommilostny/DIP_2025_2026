@@ -2,12 +2,12 @@ using System.Diagnostics;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
-namespace DPCS.Shared.Helpers;
+namespace DPCS.Shared.Wrappers;
 
 /// <summary>
 /// Helper class for managing Consul-related functionality, such as starting a Consul server and retrieving the local IP address.
 /// </summary>
-public static class ConsulHelper
+public static class ConsulWrapper
 {
     public const string ConsulAddress = "http://localhost:8500";
 

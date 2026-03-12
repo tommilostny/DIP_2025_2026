@@ -8,8 +8,8 @@ namespace DPCS.Coordinator.Strategies;
 public interface IJobStrategy
 {
     AttackMode Mode { get; }
-    MaskWorkAssignment? NextMaskChunk(string jobId, ulong hashRate);
-    DictionaryWorkAssignment? NextDictionaryChunk(string jobId, ulong hashRate);
+    Task<MaskWorkAssignment?> NextMaskChunkAsync(string jobId, ulong hashRate);
+    Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(string jobId, ulong hashRate);
     void CompleteChunk(string requestId);
     void FailChunk(string requestId);
     double GetProgress();

@@ -1,5 +1,4 @@
 using DPCS.Agent.Actors;
-using DPCS.Agent.Hashcat;
 
 namespace DPCS.Agent.Services;
 

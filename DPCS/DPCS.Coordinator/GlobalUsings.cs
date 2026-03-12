@@ -1,7 +1,7 @@
 global using DPCS.Coordinator.Helpers;
 global using DPCS.Coordinator.Models;
 global using DPCS.Shared;
-global using DPCS.Shared.Helpers;
+global using DPCS.Shared.Wrappers;
 global using JsonSerializer = System.Text.Json.JsonSerializer;
 global using Proto;
 global using Proto.Cluster;

@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs) : IJobStrategy
+public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
 {
     private int _currentWordlistIndex = 0;
     private long _currentFileOffset = 0;
@@ -10,9 +10,9 @@ public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs) : IJobStrate
 
     public AttackMode Mode => AttackMode.Dictionary;
 
-    public MaskWorkAssignment? NextMaskChunk(string jobId, ulong hashRate) => null;
+    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(string jobId, ulong hashRate) => null;
 
-    public DictionaryWorkAssignment? NextDictionaryChunk(string jobId, ulong hashRate)
+    public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(string jobId, ulong hashRate)
     {
         // Logic to calculate next dictionary chunk
         if (_currentWordlistIndex >= specs.Wordlists.Count && _retryQueue.Count == 0) return null;

@@ -47,7 +47,7 @@ public static class ActorSystemConfiguration
                         JobCoordinatorGrainActor.Kind,
                         Props.FromProducer(() =>
                             new JobCoordinatorGrainActor(
-                                (context, clusterIdentity) => new JobCoordinatorGrain(context, clusterIdentity)
+                                (context, clusterIdentity) => new JobCoordinatorGrain(context, clusterIdentity, provider.GetRequiredService<HashcatWrapper>())
                             )
                         )
                     ),

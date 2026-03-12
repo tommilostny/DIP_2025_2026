@@ -1,5 +1,3 @@
-using DPCS.Agent.Hashcat;
-
 namespace DPCS.Agent.Actors;
 
 public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) : IActor

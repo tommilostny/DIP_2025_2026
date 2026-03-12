@@ -11,21 +11,24 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private IJobStrategy? _jobStrategy;
 
-    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity) : base(context)
+    private readonly HashcatWrapper _hashcatWrapper;
+
+    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper) : base(context)
     {
         _clusterIdentity = clusterIdentity;
+        _hashcatWrapper = hashcatWrapper;
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
     }
 
     public override Task MaskJobInit(HashcatMaskJobSpecs request)
     {
-        _jobStrategy = new MaskJobStrategy(request);
+        _jobStrategy = new MaskJobStrategy(request, _hashcatWrapper);
         return Task.CompletedTask;
     }
 
     public override Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
     {
-        _jobStrategy = new DictionaryJobStrategy(request);
+        _jobStrategy = new DictionaryJobStrategy(request, _hashcatWrapper);
         return Task.CompletedTask;
     }
 
@@ -37,7 +40,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        var nextChunk = _jobStrategy.NextMaskChunk(_clusterIdentity.Identity, request.CurrentHashrate);
+        var nextChunk = await _jobStrategy.NextMaskChunkAsync(_clusterIdentity.Identity, request.CurrentHashrate);
 
         if (nextChunk == null) return new MaskWorkAssignment(); // Job finished
 
@@ -55,7 +58,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        var nextChunk = _jobStrategy.NextDictionaryChunk(_clusterIdentity.Identity, request.CurrentHashrate);
+        var nextChunk = await _jobStrategy.NextDictionaryChunkAsync(_clusterIdentity.Identity, request.CurrentHashrate);
 
         if (nextChunk == null) return new DictionaryWorkAssignment();
 

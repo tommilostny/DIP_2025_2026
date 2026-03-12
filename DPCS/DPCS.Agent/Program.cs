@@ -1,11 +1,7 @@
 ﻿﻿using DPCS.Agent;
-using DPCS.Agent.Hashcat;
 using DPCS.Agent.Services;
 using Microsoft.Extensions.Configuration;
 using System.CommandLine;
-using System.Diagnostics;
-using System.Net.NetworkInformation;
-using System.Net.Sockets;
 
 Option<string> hashcatPathOption = new("--hashcat-path", "-p")
 {
@@ -90,7 +86,7 @@ if (!noConsul && string.IsNullOrWhiteSpace(serverIp))
 var hostIp = parseResult.GetValue(hostOption);
 if (string.IsNullOrWhiteSpace(hostIp))
 {
-    hostIp = ConsulHelper.GetLocalIpAddress();
+    hostIp = ConsulWrapper.GetLocalIpAddress();
     Console.WriteLine($"Auto-detected Host IP: {hostIp}");
 }
 else
@@ -104,7 +100,7 @@ if (!noConsul)
 {
     try
     {
-        consulProcess = ConsulHelper.StartConsulAgent(consulPath ?? "consul", hostIp, serverIp!);
+        consulProcess = ConsulWrapper.StartConsulAgent(consulPath ?? "consul", hostIp, serverIp!);
     }
     catch (Exception ex)
     {

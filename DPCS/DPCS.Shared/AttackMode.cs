@@ -3,6 +3,6 @@ namespace DPCS.Shared;
 public enum AttackMode
 {
     Invalid = -1,
-    Mask = 0,
-    Dictionary = 1,
+    Dictionary = 0,
+    Mask = 3,
 }

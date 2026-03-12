@@ -1,6 +1,11 @@
 using DPCS.Coordinator;
 using System.CommandLine;
 
+Option<string> hashcatPathOption = new("--hashcat-path", "-p")
+{
+    Description = "Path to the hashcat executable (optional, defaults to 'hashcat' in system PATH)",
+    DefaultValueFactory = _ => "hashcat"
+};
 Option<string> consulPathOption = new("--consul-path", "-c")
 {
     Description = "Path to the Consul executable (optional, defaults to 'consul' in system PATH)",
@@ -17,6 +22,7 @@ Option<int> portOption = new("--port", "-pt")
 };
 
 RootCommand rootCommand = new("Distributed Password Cracking System - Coordinator Node");
+rootCommand.Options.Add(hashcatPathOption);
 rootCommand.Options.Add(consulPathOption);
 rootCommand.Options.Add(hostOption);
 rootCommand.Options.Add(portOption);
@@ -38,11 +44,18 @@ if (parseResult.Errors.Count > 0)
     return;
 }
 
+var hashcatPath = parseResult.GetValue(hashcatPathOption);
+if (string.IsNullOrWhiteSpace(hashcatPath))
+{
+    Console.Error.WriteLine("Error: Hashcat path cannot be empty. Please provide a valid path or ensure 'hashcat' is in the system PATH.");
+    return;
+}
+
 var consulPath = parseResult.GetValue(consulPathOption);
 var hostIp = parseResult.GetValue(hostOption);
 if (string.IsNullOrWhiteSpace(hostIp))
 {
-    hostIp = ConsulHelper.GetLocalIpAddress();
+    hostIp = ConsulWrapper.GetLocalIpAddress();
     Console.WriteLine($"Auto-detected Host IP: {hostIp}");
 }
 else
@@ -54,7 +67,7 @@ var port = parseResult.GetValue(portOption);
 System.Diagnostics.Process? consulProcess = null;
 try
 {
-    consulProcess = ConsulHelper.StartConsulServer(consulPath ?? "consul", hostIp);
+    consulProcess = ConsulWrapper.StartConsulServer(consulPath ?? "consul", hostIp);
 }
 catch (Exception ex)
 {
@@ -68,7 +81,7 @@ try
 
     var settings = new Dictionary<string, string?>
     {
-        { "ProtoActor:Consul", ConsulHelper.ConsulAddress },
+        { "ProtoActor:Consul", ConsulWrapper.ConsulAddress },
         { "ProtoActor:Host", hostIp },
         { "ProtoActor:Port", port.ToString() }
     };
@@ -78,6 +91,7 @@ try
     // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
     builder.Services.AddOpenApi();
 
+    builder.Services.AddSingleton(new HashcatWrapper(hashcatPath));
     builder.Services.AddActorSystem();
 
     builder.Services.AddHostedService<ActorSystemClusterHostedService>();

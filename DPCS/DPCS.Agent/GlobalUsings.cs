@@ -1,5 +1,5 @@
 global using DPCS.Shared;
-global using DPCS.Shared.Helpers;
+global using DPCS.Shared.Wrappers;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Hosting;
 global using Proto;
