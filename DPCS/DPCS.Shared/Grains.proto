@@ -46,7 +46,7 @@ service JobCoordinatorGrain {
 
 service ResultCollectorGrain {
   // RPC for JobCoordinatorGrain to store results submitted by agents
-  rpc StoreResult (WorkResult) returns (google.protobuf.Empty);
+  rpc StoreResult (JobResult) returns (google.protobuf.Empty);
 }
 
 /*==================== AGENT GRAINS =======================================================*/

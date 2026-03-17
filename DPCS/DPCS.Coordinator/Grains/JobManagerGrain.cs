@@ -16,14 +16,15 @@ public sealed class JobManagerGrain : JobManagerGrainBase
 
     public override async Task<JobAssignment> JobDiscovery(AgentId request)
     {
-        JobAssignment assignment;
-        assignment = _unfinishedJobs.Count > 0
-            ? _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count)
-            : new JobAssignment { ModeId = (int)AttackMode.Invalid };
-
-        Console.WriteLine($"{_clusterIdentity.Identity}: sending job assignment to agent {request.Address}/{request.Id}: {JsonSerializer.Serialize(assignment)}");
-
-        return await Task.FromResult(assignment);
+        switch (_unfinishedJobs)
+        {
+            case { Count: 0 }:
+                return new JobAssignment { ModeId = (int)AttackMode.Invalid };
+            default:
+                var assignment = _unfinishedJobs.Values.ElementAt(_globalCursor++ % _unfinishedJobs.Count);
+                Console.WriteLine($"{_clusterIdentity.Identity}: assigning job {assignment.JobId} to agent {request.Address}/{request.Id}");
+                return await Task.FromResult(assignment);
+        }
     }
 
     public override async Task<JobAssignment> MaskJobSubmission(HashcatMaskJobSpecs request)

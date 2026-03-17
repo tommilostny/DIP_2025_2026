@@ -1,4 +1,5 @@
 using DPCS.Coordinator;
+using Microsoft.EntityFrameworkCore;
 using System.CommandLine;
 
 Option<string> hashcatPathOption = new("--hashcat-path", "-p")
@@ -20,12 +21,18 @@ Option<int> portOption = new("--port", "-pt")
     Description = "Port for Consul server (optional)",
     DefaultValueFactory = _ => 8000
 };
+Option<int> chunkTimeOption = new("--chunk-time", "-ct")
+{
+    Description = "Target time in seconds for each work chunk assigned to agents (optional)",
+    DefaultValueFactory = _ => 60
+};
 
 RootCommand rootCommand = new("Distributed Password Cracking System - Coordinator Node");
 rootCommand.Options.Add(hashcatPathOption);
 rootCommand.Options.Add(consulPathOption);
 rootCommand.Options.Add(hostOption);
 rootCommand.Options.Add(portOption);
+rootCommand.Options.Add(chunkTimeOption);
 
 if (args.Contains("--help") || args.Contains("-h"))
 {
@@ -63,6 +70,7 @@ else
     Console.WriteLine($"Using Host IP: {hostIp}");
 }
 var port = parseResult.GetValue(portOption);
+var chunkTime = parseResult.GetValue(chunkTimeOption);
 
 System.Diagnostics.Process? consulProcess = null;
 try
@@ -83,9 +91,14 @@ try
     {
         { "ProtoActor:Consul", ConsulWrapper.ConsulAddress },
         { "ProtoActor:Host", hostIp },
-        { "ProtoActor:Port", port.ToString() }
+        { "ProtoActor:Port", port.ToString() },
+        { "DPCS:ChunkTimeSeconds", chunkTime.ToString() }
     };
     builder.Configuration.AddInMemoryCollection(settings);
+
+    builder.Services.AddDbContextFactory<DpcsDbContext>(options =>
+        options.UseSqlite("Data Source=dpcs_coordinator.db")
+    );
 
     // Add services to the container.
     // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -100,6 +113,14 @@ try
     builder.Services.AddSwaggerGen();
 
     var app = builder.Build();
+
+    // Ensure the database and its schema are created before the app starts handling requests/messages.
+    using (var scope = app.Services.CreateScope())
+    {
+        var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DpcsDbContext>>();
+        using var dbContext = dbContextFactory.CreateDbContext();
+        dbContext.Database.EnsureCreated();
+    }
 
     // Configure the HTTP request pipeline.
     if (app.Environment.IsDevelopment())

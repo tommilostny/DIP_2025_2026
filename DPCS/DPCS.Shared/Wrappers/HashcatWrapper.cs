@@ -136,11 +136,18 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
 
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
-        // Hashcat outputs the keyspace size in the last line of the output
-        var lastLine = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-        if (lastLine != null && ulong.TryParse(lastLine, out var keyspaceSize))
+        if (output.Contains("Integer overflow detected", StringComparison.OrdinalIgnoreCase))
         {
-            return keyspaceSize;
+            throw new InvalidOperationException("Integer overflow detected in keyspace of mask. The mask is too large.");
+        }
+
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = lines.Length - 1; i >= 0; i--)
+        {
+            if (ulong.TryParse(lines[i].Trim(), out var keyspaceSize))
+            {
+                return keyspaceSize;
+            }
         }
         throw new Exception($"Failed to parse keyspace size from Hashcat output.\n\nOutput was:\n{output}\n\nThe command: {hashcatPath} {arguments}\n\n");
     }
@@ -153,11 +160,18 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
 
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
-        // Hashcat outputs the total candidates in the last line of the output
-        var lastLine = output.Split('\n', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-        if (lastLine != null && ulong.TryParse(lastLine, out var candidateCount))
+        if (output.Contains("Integer overflow detected", StringComparison.OrdinalIgnoreCase))
         {
-            return candidateCount;
+            throw new InvalidOperationException("Integer overflow detected in keyspace of mask. The mask is too large.");
+        }
+
+        var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        for (int i = lines.Length - 1; i >= 0; i--)
+        {
+            if (ulong.TryParse(lines[i].Trim(), out var candidateCount))
+            {
+                return candidateCount;
+            }
         }
         throw new Exception("Failed to parse total candidates from Hashcat output.");
     }
@@ -187,6 +201,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
 
         using var process = new Process { StartInfo = startInfo };
         var outputBuilder = captureOutput ? new StringBuilder() : null;
+        var outputLock = new object();
 
         if (captureOutput)
         {
@@ -194,7 +209,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
-                    outputBuilder?.AppendLine(e.Data);
+                    lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
                 }
             };
 
@@ -202,6 +217,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
             {
                 if (!string.IsNullOrEmpty(e.Data))
                 {
+                    lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
                     Console.WriteLine($"[Hashcat Error] {e.Data}");
                 }
             };

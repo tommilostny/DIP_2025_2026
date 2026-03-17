@@ -11,24 +11,31 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private IJobStrategy? _jobStrategy;
 
+    private DateTime _jobStartTime;
+
     private readonly HashcatWrapper _hashcatWrapper;
 
-    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper) : base(context)
+    private readonly ulong _chunkAttackSeconds;
+
+    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : base(context)
     {
         _clusterIdentity = clusterIdentity;
         _hashcatWrapper = hashcatWrapper;
+        _chunkAttackSeconds = chunkAttackSeconds;
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
     }
 
     public override Task MaskJobInit(HashcatMaskJobSpecs request)
     {
-        _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper);
+        _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _chunkAttackSeconds);
+        _jobStartTime = DateTime.UtcNow;
         return Task.CompletedTask;
     }
 
     public override Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
     {
-        _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper);
+        _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _chunkAttackSeconds);
+        _jobStartTime = DateTime.UtcNow;
         return Task.CompletedTask;
     }
 
@@ -40,8 +47,19 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        var nextChunk = await _jobStrategy.NextMaskChunkAsync(request.CurrentHashrate);
-
+        MaskWorkAssignment? nextChunk;
+        try
+        {
+            nextChunk = await _jobStrategy.NextMaskChunkAsync(request.CurrentHashrate);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"{_clusterIdentity.Identity}: Failed to generate next mask chunk. Cancelling job. Error: {ex.Message}");
+            var manager = System.Cluster().GetJobManagerGrain("root");
+            await manager.FinishAck(new JobId { Id = request.JobId }, CancellationToken.None);
+            await CancelJob();
+            return new MaskWorkAssignment();
+        }
         if (nextChunk is null)
         {
             // Job is complete, notify JobManagerGrain to stop advertising this job and mark it as finished.
@@ -64,7 +82,19 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        var nextChunk = await _jobStrategy.NextDictionaryChunkAsync(request.CurrentHashrate);
+        DictionaryWorkAssignment? nextChunk;
+        try
+        {
+            nextChunk = await _jobStrategy.NextDictionaryChunkAsync(request.CurrentHashrate);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"{_clusterIdentity.Identity}: Failed to generate next dictionary chunk. Cancelling job. Error: {ex.Message}");
+            var manager = System.Cluster().GetJobManagerGrain("root");
+            await manager.FinishAck(new JobId { Id = request.JobId }, CancellationToken.None);
+            await CancelJob();
+            return new DictionaryWorkAssignment();
+        }
 
         if (nextChunk is null)
         {
@@ -101,8 +131,25 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
                     Console.WriteLine($"  - Hash: {recovered.Hash}, Plaintext: {recovered.Plaintext}");
                 }
                 Console.ResetColor();
-                // In a real implementation, you would forward these results to a dedicated
-                // ResultCollectorGrain or another service for aggregation and storage.
+
+                var now = DateTime.UtcNow;
+                var jobResult = new JobResult
+                {
+                    JobId = _clusterIdentity.Identity,
+                    RecoveredPasswords = { request.RecoveredPasswords },
+                    AttackMode = _jobStrategy switch
+                    {
+                        MaskJobStrategy => (int)AttackMode.Mask,
+                        DictionaryJobStrategy => (int)AttackMode.Dictionary,
+                        _ => (int)AttackMode.Invalid
+                    },
+                    CrackedAt = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(now),
+                    TimeTaken = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(now - _jobStartTime)
+                };
+
+                await Context.Cluster()
+                    .GetResultCollectorGrain("root")
+                    .StoreResult(jobResult, CancellationToken.None);
             }
 
             var progress = _jobStrategy?.GetProgress() ?? 0;

@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
+public class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpecs specs, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : IJobStrategy
 {
     private int _currentWordlistIndex = 0;
     private long _currentFileOffset = 0;

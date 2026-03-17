@@ -1,5 +1,6 @@
 ﻿﻿using DPCS.Coordinator.Grains;
 using Proto.Cluster.Consul;
+using Microsoft.EntityFrameworkCore;
 
 namespace DPCS.Coordinator;
 
@@ -17,6 +18,7 @@ public static class ActorSystemConfiguration
             var consulAddress = config["ProtoActor:Consul"] ?? throw new InvalidOperationException("Consul address must be provided in configuration under 'ProtoActor:Consul'");
             var host = _EmptyStringToNull(config["ProtoActor:Host"]) ?? "127.0.0.1";
             var port = _TryParseInt(config["ProtoActor:Port"]) ?? 0;
+            var chunkTimeSeconds = _TryParseInt(config["DPCS:ChunkTimeSeconds"]) ?? 60;
 
             Console.WriteLine($"Configuring ActorSystem with Consul at {consulAddress}, host {host}, port {port}");
 
@@ -47,10 +49,20 @@ public static class ActorSystemConfiguration
                         JobCoordinatorGrainActor.Kind,
                         Props.FromProducer(() =>
                             new JobCoordinatorGrainActor(
-                                (context, clusterIdentity) => new JobCoordinatorGrain(context, clusterIdentity, provider.GetRequiredService<HashcatWrapper>())
+                                (context, clusterIdentity) =>
+                                    new JobCoordinatorGrain(context, clusterIdentity, provider.GetRequiredService<HashcatWrapper>(), (ulong)chunkTimeSeconds)
                             )
                         )
                     ),
+                    new ClusterKind(
+                        ResultCollectorGrainActor.Kind,
+                        Props.FromProducer(() =>
+                            new ResultCollectorGrainActor(
+                                (context, clusterIdentity) =>
+                                    new ResultCollectorGrain(context, clusterIdentity, provider.GetRequiredService<IDbContextFactory<DpcsDbContext>>())
+                            )
+                        )
+                    )
                 ]);
 
             return new ActorSystem(actorSystemConfig)

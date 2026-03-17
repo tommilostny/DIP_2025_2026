@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
+public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : IJobStrategy
 {
     private ulong _currentOffset = 0;
     private ulong? _totalKeyspace;
@@ -8,8 +8,6 @@ public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWra
 
     private readonly Dictionary<string, (ulong Start, ulong Length)> _activeChunks = [];
     private readonly Queue<(ulong Start, ulong Length)> _retryQueue = [];
-
-    private const ulong ChunkAttackSeconds = 10; // Aim for 10 second chunks, can be adjusted
 
     public AttackMode Mode => AttackMode.Mask;
 
@@ -46,7 +44,7 @@ public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWra
                 amplification = Math.Max(1UL, _totalCandidates.Value / _totalKeyspace.Value);
             }
 
-            ulong adjustedLength = hashRate * ChunkAttackSeconds / amplification;
+            ulong adjustedLength = hashRate * chunkAttackSeconds / amplification;
             length = Math.Max(adjustedLength, 1000); 
             
             // Clamp length so we don't exceed the total keyspace

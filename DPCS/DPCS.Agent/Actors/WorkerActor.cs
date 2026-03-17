@@ -120,7 +120,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                         context.Send(context.Self, new StartLoop());
                         return;
                     }
-                    Console.WriteLine($"Received mask chunk: {maskChunk.RequestId}");
+                    Console.WriteLine($"Received mask chunk: {maskChunk.RequestId} ({maskChunk.KeyspaceStart} - {maskChunk.KeyspaceStart + maskChunk.KeyspaceLength})");
 
                     context.ReenterAfter(
                         hashcatWrapper.RunHashcatMaskAttackAsync(maskChunk, _currentJob.HashType, hashFilePath, _currentWorkCts.Token), 

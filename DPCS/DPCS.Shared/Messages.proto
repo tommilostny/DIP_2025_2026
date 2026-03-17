@@ -2,6 +2,9 @@ syntax = "proto3";
 
 option csharp_namespace = "DPCS.Shared";
 
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
 // Signed Job ID
 message JobId {
   string id = 1;
@@ -69,13 +72,23 @@ message DictionaryWorkAssignment {
 message RecoveredPassword {
   string hash = 1;
   string plaintext = 2;
+  int32 hash_type = 3;
 }
 
-// Message sent by agent to submit work result
+// Message sent by agent to submit work chunk result
 message WorkResult {
   AgentId agent_id = 1;
   bool success = 2;
   repeated RecoveredPassword recovered_passwords = 3; // Optional
+}
+
+// Message for final job results
+message JobResult {
+  string job_id = 1;
+  repeated RecoveredPassword recovered_passwords = 2;
+  google.protobuf.Timestamp cracked_at = 3;
+  google.protobuf.Duration time_taken = 4;
+  int32 attack_mode = 5; // e.g. "Mask Attack", "Dictionary Attack"
 }
 
 // Telemetry data sent by agent to coordinator, to mark it as alive and provide status
