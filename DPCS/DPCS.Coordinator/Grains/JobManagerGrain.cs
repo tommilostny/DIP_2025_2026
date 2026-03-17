@@ -95,9 +95,5 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         {
             Console.WriteLine($"{_clusterIdentity.Identity}: job {jobId} finished");
         }
-        else
-        {
-            Console.WriteLine($"{_clusterIdentity.Identity}: received finish ack with invalid job id {jobId}");
-        }
     }
 }

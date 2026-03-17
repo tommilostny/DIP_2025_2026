@@ -22,13 +22,13 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override Task MaskJobInit(HashcatMaskJobSpecs request)
     {
-        _jobStrategy = new MaskJobStrategy(request, _hashcatWrapper);
+        _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper);
         return Task.CompletedTask;
     }
 
     public override Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
     {
-        _jobStrategy = new DictionaryJobStrategy(request, _hashcatWrapper);
+        _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper);
         return Task.CompletedTask;
     }
 
@@ -40,9 +40,15 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        var nextChunk = await _jobStrategy.NextMaskChunkAsync(_clusterIdentity.Identity, request.CurrentHashrate);
+        var nextChunk = await _jobStrategy.NextMaskChunkAsync(request.CurrentHashrate);
 
-        if (nextChunk == null) return new MaskWorkAssignment(); // Job finished
+        if (nextChunk is null)
+        {
+            // Job is complete, notify JobManagerGrain to stop advertising this job and mark it as finished.
+            var manager = System.Cluster().GetJobManagerGrain("root");
+            await manager.FinishAck(new JobId { Id = request.JobId }, CancellationToken.None);
+            return new MaskWorkAssignment();
+        }
 
         // Track the worker
         _activeWorkers[workerPid] = nextChunk.RequestId;
@@ -58,9 +64,15 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        var nextChunk = await _jobStrategy.NextDictionaryChunkAsync(_clusterIdentity.Identity, request.CurrentHashrate);
+        var nextChunk = await _jobStrategy.NextDictionaryChunkAsync(request.CurrentHashrate);
 
-        if (nextChunk == null) return new DictionaryWorkAssignment();
+        if (nextChunk is null)
+        {
+            // Job is complete, notify JobManagerGrain to stop advertising this job and mark it as finished.
+            var manager = System.Cluster().GetJobManagerGrain("root");
+            await manager.FinishAck(new JobId { Id = _clusterIdentity.Identity }, CancellationToken.None);
+            return new DictionaryWorkAssignment();
+        }
 
         // Track the worker
         _activeWorkers[workerPid] = nextChunk.RequestId;
@@ -68,26 +80,41 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         return await Task.FromResult(nextChunk);
     }
 
-    public override /*async*/ Task WorkResultSubmission(WorkResult request)
+    public override async Task WorkResultSubmission(WorkResult request)
     {
-        if (Context.Sender != null && _activeWorkers.Remove(Context.Sender, out var requestId))
+        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
+        if (_activeWorkers.Remove(workerPid, out var requestId))
         {
-            // Notify strategy that this specific chunk is done.
+            // Mark the chunk as complete in the strategy.
             _jobStrategy?.CompleteChunk(requestId);
 
             // If the result indicates the password was found, we handle that here.
             if (request.Success && request.RecoveredPasswords.Count > 0)
             {
+                _jobStrategy?.HandleRecoveredPasswords(request.RecoveredPasswords);
+
+                Console.BackgroundColor = ConsoleColor.Green;
+                Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine($"{_clusterIdentity.Identity}: Received {request.RecoveredPasswords.Count} recovered passwords from an agent.");
                 foreach (var recovered in request.RecoveredPasswords)
                 {
                     Console.WriteLine($"  - Hash: {recovered.Hash}, Plaintext: {recovered.Plaintext}");
                 }
+                Console.ResetColor();
                 // In a real implementation, you would forward these results to a dedicated
                 // ResultCollectorGrain or another service for aggregation and storage.
             }
+
+            var progress = _jobStrategy?.GetProgress() ?? 0;
+            Console.WriteLine($"{_clusterIdentity.Identity}: updated progress for job: {progress}%");
+            if (progress >= 100)
+            {
+                // Notify the JobManagerGrain that the job is complete
+                var cluster = System.Cluster();
+                var manager = cluster.GetJobManagerGrain("root");
+                await manager.FinishAck(new JobId { Id = _clusterIdentity.Identity }, CancellationToken.None);
+            }
         }
-        return Task.CompletedTask;
     }
 
     public override /*async*/ Task Heartbeat(AgentTelemetry request)
@@ -103,11 +130,12 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             return new JobStatus { Status = "NotFound" };
         }
 
+        var progress = _jobStrategy.GetProgress();
         var jobStatus = new JobStatus
         {
             JobId = _clusterIdentity.Identity,
-            Status = "In Progress",
-            ProgressPercentage = _jobStrategy.GetProgress()
+            Status = progress < 100 ? "In Progress" : "Completed",
+            ProgressPercentage = progress
         };
         return await Task.FromResult(jobStatus);
     }

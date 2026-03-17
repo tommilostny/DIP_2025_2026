@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
+public class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
 {
     private int _currentWordlistIndex = 0;
     private long _currentFileOffset = 0;
@@ -10,9 +10,9 @@ public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs, HashcatWrapp
 
     public AttackMode Mode => AttackMode.Dictionary;
 
-    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(string jobId, ulong hashRate) => null;
+    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate) => null;
 
-    public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(string jobId, ulong hashRate)
+    public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate)
     {
         // Logic to calculate next dictionary chunk
         if (_currentWordlistIndex >= specs.Wordlists.Count && _retryQueue.Count == 0) return null;
@@ -61,4 +61,9 @@ public class DictionaryJobStrategy(HashcatDictionaryJobSpecs specs, HashcatWrapp
     }
 
     public double GetProgress() => 0.0;
+
+    public void HandleRecoveredPasswords(IEnumerable<RecoveredPassword> recoveredPasswords)
+    {
+        throw new NotImplementedException();
+    }
 }

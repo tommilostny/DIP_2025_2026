@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
+public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWrapper hashcatWrapper) : IJobStrategy
 {
     private ulong _currentOffset = 0;
     private ulong? _totalKeyspace;
@@ -13,13 +13,14 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
 
     public AttackMode Mode => AttackMode.Mask;
 
-    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(string jobId, ulong hashRate)
+    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate)
     {
         ulong start, length;
         
         if (_retryQueue.Count > 0)
         {
             (start, length) = _retryQueue.Dequeue();
+            Console.WriteLine($"{jobId}: Reassigning failed chunk - Start: {start}, Length: {length}");
         }
         else
         {
@@ -30,6 +31,7 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
             // Check if job is complete
             if (_currentOffset >= _totalKeyspace.Value)
             {
+                Console.WriteLine($"{jobId}: Job complete. Total Keyspace: {_totalKeyspace}, Total Candidates: {_totalCandidates}");
                 return null;
             }
 
@@ -40,7 +42,8 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
             ulong amplification = 1;
             if (_totalCandidates.HasValue && _totalKeyspace.Value > 0)
             {
-                amplification = _totalCandidates.Value / _totalKeyspace.Value;
+                // Ensure amplification is at least 1 to prevent DivideByZeroException
+                amplification = Math.Max(1UL, _totalCandidates.Value / _totalKeyspace.Value);
             }
 
             ulong adjustedLength = hashRate * ChunkAttackSeconds / amplification;
@@ -51,6 +54,8 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
             if (length > remaining) length = remaining;
 
             _currentOffset += length;
+
+            Console.WriteLine($"{jobId}: Assigning chunk - Start: {start}, Length: {length}, Hashrate: {hashRate}, Amplification: {amplification}, TotalKeyspace: {_totalKeyspace}, TotalCandidates: {_totalCandidates}, CurrentOffset: {_currentOffset}");
         }
 
         var requestId = Guid.NewGuid().ToString();
@@ -68,10 +73,11 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
         return assignment;
     }
 
-    public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(string jobId, ulong hashRate) => null;
+    public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate) => null;
 
     public void CompleteChunk(string requestId)
     {
+        Console.WriteLine($"Chunk completed: RequestId: {requestId}");
         _activeChunks.Remove(requestId);
     }
 
@@ -87,5 +93,19 @@ public class MaskJobStrategy(HashcatMaskJobSpecs specs, HashcatWrapper hashcatWr
     {
         if (!_totalKeyspace.HasValue || _totalKeyspace == 0) return 0.0;
         return (double)_currentOffset / _totalKeyspace.Value * 100.0;
+    }
+
+    public void HandleRecoveredPasswords(IEnumerable<RecoveredPassword> recoveredPasswords)
+    {
+        foreach (var pwd in recoveredPasswords)
+        {
+            specs.Hashes.Remove(pwd.Hash);
+        }
+        if (specs.Hashes.Count == 0)
+        {
+            // All hashes have been cracked, we can consider the job complete.
+            Console.WriteLine($"All hashes have been cracked for job {jobId}. Marking job as complete.");
+            _currentOffset = _totalKeyspace ?? 0; // Force completion
+        }
     }
 }

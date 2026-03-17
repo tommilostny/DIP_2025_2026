@@ -81,7 +81,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private async Task RequestNextChunk(IContext context)
     {
-        if (_currentJob == null) return;
+        if (_currentJob is null) return;
         try
         {
             // Run or retrieve cached benchmark.
@@ -128,7 +128,11 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                             // Report completion to the coordinator so it can track progress
                             var workResult = new WorkResult
                             {
-                                JobId = _currentJob.JobId,
+                                AgentId = new AgentId
+                                {
+                                    Address = context.Self.Address,
+                                    Id = context.Self.Id
+                                },
                                 Success = !task.IsFaulted && task.Result.Count > 0,
                                 RecoveredPasswords = { task.IsFaulted ? [] : task.Result }
                             };
@@ -136,6 +140,10 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                             if (task.IsFaulted)
                             {
                                 Console.Error.WriteLine($"Hashcat task failed: {task.Exception?.GetBaseException().Message}");
+                            }
+                            if (workResult.RecoveredPasswords.Count > 0)
+                            {
+                                await UpdateHashFileAsync(_currentJob.JobId, workResult.RecoveredPasswords);
                             }
                             // When finished (successfully or not), request the next chunk
                             context.Send(context.Self, new ChunkProcessed());
@@ -161,7 +169,11 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                             // Report completion to the coordinator so it can track progress
                             var workResult = new WorkResult
                             {
-                                JobId = _currentJob.JobId,
+                                AgentId = new AgentId
+                                {
+                                    Address = context.Self.Address,
+                                    Id = context.Self.Id
+                                },
                                 Success = !task.IsFaulted && task.Result.Count > 0,
                                 RecoveredPasswords = { task.IsFaulted ? [] : task.Result }
                             };
@@ -169,6 +181,10 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                             if (task.IsFaulted)
                             {
                                 Console.Error.WriteLine($"Hashcat task failed: {task.Exception?.GetBaseException().Message}");
+                            }
+                            if (workResult.RecoveredPasswords.Count > 0)
+                            {
+                                await UpdateHashFileAsync(_currentJob.JobId, workResult.RecoveredPasswords);
                             }
                             // When finished (successfully or not), request the next chunk
                             context.Send(context.Self, new ChunkProcessed());
@@ -208,7 +224,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private void CleanupJobData(string? jobId)
     {
-        if (jobId == null || !_jobHashFilePaths.Remove(jobId, out var path))
+        if (jobId is null || !_jobHashFilePaths.Remove(jobId, out var path))
         {
             return;
         }
@@ -223,6 +239,33 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         catch (Exception ex)
         {
             Console.WriteLine($"Error cleaning up hash file {path}: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateHashFileAsync(string jobId, IEnumerable<RecoveredPassword> recoveredPasswords)
+    {
+        if (!_jobHashFilePaths.TryGetValue(jobId, out var path))
+        {
+            Console.WriteLine($"No hash file found for job {jobId} when trying to update.");
+            return;
+        }
+        try
+        {
+            if (_currentJob is null || _currentJob.JobId != jobId)
+            {
+                Console.WriteLine($"Current job mismatch when trying to update hash file for job {jobId}.");
+                return;
+            }
+            foreach (var pwd in recoveredPasswords)
+            {
+                _currentJob.Hashes.Remove(pwd.Hash);
+            }
+            await File.WriteAllLinesAsync(path, _currentJob.Hashes);
+            Console.WriteLine($"Updated hash file for job {jobId} with {_currentJob.Hashes.Count} remaining hashes.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating hash file {path}: {ex.Message}");
         }
     }
 }

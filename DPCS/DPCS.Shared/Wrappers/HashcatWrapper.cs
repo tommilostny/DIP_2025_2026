@@ -38,16 +38,19 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
 
     private async Task<List<RecoveredPassword>> RunHashcatAttackAsync(StringBuilder arguments, CancellationToken cancellationToken = default)
     {
-        arguments.Append($" -w {workloadProfile}");
-        arguments.Append(" --machine-readable"); // Ensure output is in a consistent, parseable format
-        arguments.Append(" --show"); // Show cracked passwords after attack completes (even if cached by hashcat)
-        var output = await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: true, cancellationToken);
-    
-        if (string.IsNullOrWhiteSpace(output)) return [];
+        var outFilePath = Path.Combine(Path.GetTempPath(), $"dpcs_cracked_{Guid.NewGuid():N}.txt");
 
-        // Hashcat's machine-readable output for found passwords is in the format:
-        // HASH:PLAIN_TEXT
-        var lines = output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        arguments.Append($" -w {workloadProfile}");
+        arguments.Append(" --quiet"); // Suppress non-essential output for cleaner logs
+        arguments.Append(" --potfile-disable"); // Do not skip work using cached potfiles
+        arguments.Append($" --outfile=\"{outFilePath}\""); // Safely write cracked passwords to a temp file
+
+        // Using captureOutput: false streams the live hashcat progress to the agent's console
+        await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: false, cancellationToken);
+
+        if (!File.Exists(outFilePath)) return [];
+
+        var lines = await File.ReadAllLinesAsync(outFilePath, cancellationToken);
         var recovered = new List<RecoveredPassword>(lines.Length);
 
         foreach (var line in lines)
@@ -61,9 +64,22 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
                     Plaintext = parts[1]
                 };
                 recovered.Add(recoveredPassword);
+                Console.BackgroundColor = ConsoleColor.Green;
+                Console.ForegroundColor = ConsoleColor.Black;
                 Console.WriteLine($"!!! Recovered password: '{recoveredPassword.Plaintext}' for hash '{recoveredPassword.Hash}'");
+                Console.ResetColor();
             }
         }
+
+        try
+        {
+            File.Delete(outFilePath);
+        }
+        catch
+        {
+            // Ignore file deletion errors
+        }
+
         return recovered;
     }
 
@@ -93,12 +109,18 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         }
 
         // Parse machine readable output to sum up speed from all devices
-        // Format example: 1741637135:0:1:0:9942800000:160.13:64:1024:1024:8
-        // Field 4 (0-indexed) is speed in H/s
-        return output.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+        // Old format example: 1741637135:0:1:0:9942800000:160.13:64:1024:1024:8 (Hashrate at index 4)
+        // Hashcat 7.x example: 1:0:210:405:14.79:301380616 (Hashrate at index 5)
+        return output.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .Select(line => line.Split(':'))
-            .Where(parts => parts.Length > 4 && ulong.TryParse(parts[4], out _))
-            .Aggregate(0UL, (sum, parts) => sum + ulong.Parse(parts[4]));
+            .Select(parts => {
+                // Handle Hashcat 7.x format (6 parts, speed is last)
+                if (parts.Length == 6 && ulong.TryParse(parts[5], out var speedNew)) return speedNew;
+                // Handle older Hashcat formats (usually 10 parts, speed is at index 4)
+                if (parts.Length > 6 && ulong.TryParse(parts[4], out var speedOld)) return speedOld;
+                return 0UL;
+            })
+            .Aggregate(0UL, (sum, speed) => sum + speed);
     }
 
     public static bool IsIncrementMode(int incMinLen, int incMaxLen)
@@ -146,8 +168,8 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         {
             FileName = hashcatPath,
             Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
+            RedirectStandardOutput = captureOutput,
+            RedirectStandardError = captureOutput,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -166,28 +188,45 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         using var process = new Process { StartInfo = startInfo };
         var outputBuilder = captureOutput ? new StringBuilder() : null;
 
-        process.OutputDataReceived += (sender, e) =>
+        if (captureOutput)
         {
-            if (!string.IsNullOrEmpty(e.Data))
+            process.OutputDataReceived += (sender, e) =>
             {
-                if (captureOutput) outputBuilder?.AppendLine(e.Data);
-                else Console.WriteLine($"[Hashcat Output] {e.Data}");
-            }
-        };
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    outputBuilder?.AppendLine(e.Data);
+                }
+            };
 
-        process.ErrorDataReceived += (sender, e) =>
-        {
-            if (!string.IsNullOrEmpty(e.Data))
+            process.ErrorDataReceived += (sender, e) =>
             {
-                Console.WriteLine($"[Hashcat Error] {e.Data}");
-            }
-        };
+                if (!string.IsNullOrEmpty(e.Data))
+                {
+                    Console.WriteLine($"[Hashcat Error] {e.Data}");
+                }
+            };
+        }
 
         process.Start();
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
 
-        await process.WaitForExitAsync(cancellationToken);
+        if (captureOutput)
+        {
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+        }
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                // Ensure the process is forcefully terminated if cancelled or stuck
+                try { process.Kill(true); } catch { /* Ignore race conditions if it just exited */ }
+            }
+        }
 
         return outputBuilder?.ToString() ?? string.Empty;
     }
