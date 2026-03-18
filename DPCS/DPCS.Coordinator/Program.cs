@@ -46,6 +46,7 @@ rootCommand.Options.Add(serverIpOption);
 rootCommand.Options.Add(hostOption);
 rootCommand.Options.Add(portOption);
 rootCommand.Options.Add(chunkTimeOption);
+rootCommand.Options.Add(noConsulOption);
 
 if (args.Contains("--help") || args.Contains("-h"))
 {

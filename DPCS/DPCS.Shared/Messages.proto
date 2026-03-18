@@ -104,4 +104,10 @@ message JobStatus {
   string job_id = 1;
   string status = 2; // e.g. "In Progress", "Completed", "Cancelled"
   double progress_percentage = 3; // e.g. 75.5 for 75.5% completed
+  repeated string agent_ids = 4;
+  uint64 chunk_attack_seconds = 5;
+}
+
+message JobsCollection {
+  repeated JobAssignment jobs = 1;
 }

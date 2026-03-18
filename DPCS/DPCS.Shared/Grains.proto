@@ -20,6 +20,8 @@ service JobManagerGrain {
 
   // RPC for JobCoordinatorGrain to notify JobManagerGrain that a job has completed
   rpc FinishAck (JobId) returns (google.protobuf.Empty);
+
+  rpc ListJobs (google.protobuf.Empty) returns (JobsCollection);
 }
 
 service JobCoordinatorGrain {

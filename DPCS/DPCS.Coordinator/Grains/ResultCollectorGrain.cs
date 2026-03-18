@@ -13,7 +13,7 @@ public sealed class ResultCollectorGrain : ResultCollectorGrainBase
         _clusterIdentity = clusterIdentity;
         _dbContextFactory = dbContextFactory;
 
-        Console.WriteLine($"{_clusterIdentity.Identity}: created");
+        Console.WriteLine($"{_clusterIdentity.Identity}: results collector grain created");
     }
 
     public override async Task StoreResult(JobResult result)

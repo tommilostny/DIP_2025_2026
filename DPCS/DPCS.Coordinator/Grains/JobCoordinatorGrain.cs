@@ -148,7 +148,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
                 };
 
                 await Context.Cluster()
-                    .GetResultCollectorGrain("root")
+                    .GetResultCollectorGrain(_clusterIdentity.Identity)
                     .StoreResult(jobResult, CancellationToken.None);
             }
 
@@ -173,8 +173,14 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     {
         if (_jobStrategy is null)
         {
+            Console.WriteLine($"{_clusterIdentity.Identity}: Reporting status of cancelled or invalid job...");
             Context.Stop(Context.Self);
-            return new JobStatus { Status = "NotFound" };
+            return new JobStatus
+            {
+                Status = "Cancelled",
+                ProgressPercentage = 100,
+                ChunkAttackSeconds = _chunkAttackSeconds,
+            };
         }
 
         var progress = _jobStrategy.GetProgress();
@@ -182,7 +188,9 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         {
             JobId = _clusterIdentity.Identity,
             Status = progress < 100 ? "In Progress" : "Completed",
-            ProgressPercentage = progress
+            ProgressPercentage = progress,
+            AgentIds = { _activeWorkers.Keys.Select(pid => pid.ToString()) },
+            ChunkAttackSeconds = _chunkAttackSeconds,
         };
         return await Task.FromResult(jobStatus);
     }

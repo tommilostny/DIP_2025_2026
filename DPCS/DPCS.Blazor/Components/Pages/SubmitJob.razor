@@ -1,0 +1,192 @@
+@page "/submit-job"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
+@using DPCS.Blazor.Models
+@inject ActorSystem ActorSystem
+@inject NavigationManager NavigationManager
+
+<PageTitle>Submit Job</PageTitle>
+
+<h1>Submit New Job</h1>
+
+<div class="row">
+    <div class="col-md-6">
+        <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" FormName="SubmitJobForm">
+            <DataAnnotationsValidator />
+            
+            <div class="mb-3">
+                <label class="form-label">Attack Mode</label>
+                <InputSelect @bind-Value="Model!.AttackMode" class="form-select">
+                    <option value="@AttackMode.Mask">Mask Attack</option>
+                    <option value="@AttackMode.Dictionary">Dictionary Attack</option>
+                </InputSelect>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Hashes (one per line)</label>
+                <InputTextArea @bind-Value="Model.Hashes" class="form-control" rows="4" />
+                <ValidationMessage For="() => Model.Hashes" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Hash Type (e.g. 0 for MD5)</label>
+                <InputNumber @bind-Value="Model.HashType" class="form-control" />
+                <ValidationMessage For="() => Model.HashType" />
+            </div>
+
+            @if (Model.AttackMode == AttackMode.Mask)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Mask Attack Settings</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Mask</label>
+                            <InputText @bind-Value="Model.Mask" class="form-control" placeholder="?u?l?d?s?a" />
+                            <ValidationMessage For="() => Model.Mask" />
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Min Length</label>
+                                <InputNumber @bind-Value="Model.MinLength" class="form-control" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Max Length</label>
+                                <InputNumber @bind-Value="Model.MaxLength" class="form-control" />
+                            </div>
+                        </div>
+                        <div class="form-text text-muted">Leave Min/Max Length as -1 to disable increment mode.</div>
+                    </div>
+                </div>
+            }
+            else if (Model.AttackMode == AttackMode.Dictionary)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Dictionary Attack Settings</div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Wordlists (one path per line)</label>
+                            <InputTextArea @bind-Value="Model.Wordlists" class="form-control" rows="3" />
+                            <ValidationMessage For="() => Model.Wordlists" />
+                        </div>
+                    </div>
+                </div>
+            }
+
+            <ValidationSummary class="text-danger" />
+
+            <button type="submit" class="btn btn-primary" disabled="@_isSubmitting">Submit Job</button>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromForm]
+    public SubmitJobViewModel? Model { get; set; }
+
+    private bool _isSubmitting;
+
+    protected override void OnInitialized()
+    {
+        Model ??= new();
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (Model is null) return;
+
+        _isSubmitting = true;
+        try
+        {
+            var hashes = Model.Hashes?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            var jobManager = ActorSystem.Cluster().GetJobManagerGrain("root");
+
+            if (Model.AttackMode == AttackMode.Mask)
+            {
+                var specModel = new MaskJobSpecsModel
+                {
+                    Hashes = hashes,
+                    Mask = Model.Mask ?? "",
+                    MinLength = Model.MinLength,
+                    MaxLength = Model.MaxLength,
+                    HashType = Model.HashType
+                };
+
+                var request = new HashcatMaskJobSpecs
+                {
+                    Mask = specModel.Mask,
+                    MinLength = specModel.MinLength,
+                    MaxLength = specModel.MaxLength,
+                    HashType = specModel.HashType
+                };
+                request.Hashes.AddRange(specModel.Hashes);
+                
+                await jobManager.MaskJobSubmission(request, CancellationToken.None);
+            }
+            else if (Model.AttackMode == AttackMode.Dictionary)
+            {
+                var wordlists = Model.Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                var specModel = new DictionaryJobSpecsModel
+                {
+                    Hashes = hashes,
+                    Wordlists = wordlists,
+                    HashType = Model.HashType
+                };
+
+                var request = new HashcatDictionaryJobSpecs
+                {
+                    HashType = specModel.HashType
+                };
+                request.Hashes.AddRange(specModel.Hashes);
+                request.Wordlists.AddRange(specModel.Wordlists);
+                
+                await jobManager.DictionaryJobSubmission(request, CancellationToken.None);
+            }
+
+            NavigationManager.NavigateTo("/");
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+
+    public class SubmitJobViewModel : IValidatableObject
+    {
+        public AttackMode AttackMode { get; set; } = AttackMode.Mask;
+
+        [Required(ErrorMessage = "At least one hash must be provided.")]
+        public string Hashes { get; set; } = "";
+
+        [Required]
+        public int HashType { get; set; } = 0;
+
+        public string? Mask { get; set; } = "";
+        public int MinLength { get; set; } = -1;
+        public int MaxLength { get; set; } = -1;
+
+        public string? Wordlists { get; set; } = "";
+
+        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        {
+            var hashesList = Hashes?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            if (hashesList.Length == 0)
+            {
+                yield return new ValidationResult("At least one hash must be provided.", new[] { nameof(Hashes) });
+            }
+
+            if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Mask))
+            {
+                yield return new ValidationResult("A mask must be provided.", new[] { nameof(Mask) });
+            }
+
+            if (AttackMode == AttackMode.Dictionary)
+            {
+                var wordlistsList = Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                if (wordlistsList.Length == 0)
+                {
+                    yield return new ValidationResult("At least one wordlist must be provided.", new[] { nameof(Wordlists) });
+                }
+            }
+        }
+    }
+}

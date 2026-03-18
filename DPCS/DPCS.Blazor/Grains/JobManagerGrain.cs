@@ -40,6 +40,7 @@ public sealed class JobManagerGrain : JobManagerGrainBase
             HashType = request.HashType,
             Hashes = { request.Hashes },
         };
+
         _unfinishedJobs[signedJobId] = assignment;
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received mask job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(request)}");
@@ -98,5 +99,13 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         {
             Console.WriteLine($"{_clusterIdentity.Identity}: job {jobId} finished");
         }
+    }
+
+    public override async Task<JobsCollection> ListJobs()
+    {
+        return await Task.FromResult(new JobsCollection
+        {
+           Jobs = { _unfinishedJobs.Values }
+        });
     }
 }

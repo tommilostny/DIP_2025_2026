@@ -1,0 +1,96 @@
+@implements IDisposable
+
+<div class="card">
+    <div class="card-header">
+        Job ID:<br />@Job.JobId
+    </div>
+    <div class="card-body">
+        <h5 class="card-title">Job Details</h5>
+        <p>
+            <strong>Status:</strong> @(_jobStatus?.Status ?? "Loading...")
+            <br />
+            <strong>Chunk Attack seconds:</strong> @(_jobStatus?.ChunkAttackSeconds ?? 0)
+            <br />
+            <strong>Progress:</strong> @(_jobStatus?.ProgressPercentage.ToString("F2") ?? "0.00")%
+        </p>
+        @if (_jobStatus?.ProgressPercentage < 100)
+        {
+            <button class="btn btn-danger btn-sm mt-2" @onclick="CancelJob">Cancel Job</button>
+        }
+    </div>
+    <div class="card-footer">
+        <h5 class="card-title mb-0" style="cursor: pointer;" @onclick="ToggleAgents">
+            Active agents (@(_jobStatus?.AgentIds.Count ?? 0))
+            @if (_jobStatus is { AgentIds: { Count: > 0 } })
+            {
+                <span class="float-end">@(_isAgentsExpanded ? "▼" : "▶")</span>
+            }
+        </h5>
+        @if (_isAgentsExpanded && _jobStatus is { AgentIds: { Count: > 0 } })
+        {
+            <ul class="mt-2 mb-0">
+                @foreach (var agentId in _jobStatus.AgentIds)
+                {
+                    <li>@agentId</li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public JobAssignment Job { get; set; } = default!;
+
+    [Parameter]
+    public ActorSystem ActorSystem { get; set; } = default!;
+
+    private JobStatus? _jobStatus;
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isAgentsExpanded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadJobStatus();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+                while (await timer.WaitForNextTickAsync(_cts.Token))
+                {
+                    await InvokeAsync(LoadJobStatus);
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private async Task LoadJobStatus()
+    {
+        var jobCoordinator = ActorSystem.Cluster().GetJobCoordinatorGrain(Job.JobId);
+        _jobStatus = await jobCoordinator.GetJobStatus(CancellationToken.None);
+    }
+
+    private async Task CancelJob()
+    {
+        var jobManager = ActorSystem.Cluster().GetJobManagerGrain("root");
+        await jobManager.CancelJob(new JobId { Id = Job.JobId }, CancellationToken.None);
+    
+        await _cts.CancelAsync();
+        await LoadJobStatus();
+    }
+
+    private void ToggleAgents()
+    {
+        _isAgentsExpanded = !_isAgentsExpanded;
+    }
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

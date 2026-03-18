@@ -18,7 +18,7 @@ public static class ConsulWrapper
             .SelectMany(n => n.GetIPProperties().UnicastAddresses)
             .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
             .Select(a => a.Address.ToString())
-            .FirstOrDefault() ?? "127.0.0.1";
+            .LastOrDefault() ?? "127.0.0.1";
     }
 
     public static Process StartConsulServer(string consulPath, string hostIp)
@@ -38,10 +38,41 @@ public static class ConsulWrapper
             FileName = consulPath,
             Arguments = arguments,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
         };
-        var process = Process.Start(startInfo) ?? throw new Exception("Failed to start Consul process.");
-        if (process.WaitForExit(1500)) throw new Exception($"Consul exited with code {process.ExitCode}");
+        
+        var process = new Process { StartInfo = startInfo };
+        var outputBuilder = new System.Text.StringBuilder();
+        var outputLock = new object();
+        var captureOutput = true;
+
+        process.OutputDataReceived += (sender, e) =>
+        {
+            if (!captureOutput || string.IsNullOrEmpty(e.Data)) return;
+            lock (outputLock) { outputBuilder.AppendLine(e.Data); }
+        };
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (!captureOutput || string.IsNullOrEmpty(e.Data)) return;
+            lock (outputLock) { outputBuilder.AppendLine(e.Data); }
+        };
+
+        if (!process.Start()) throw new Exception("Failed to start Consul process.");
+
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
+
+        if (process.WaitForExit(1500))
+        {
+            process.WaitForExit(); // Wait for output streams to finish reading
+            throw new Exception($"Consul exited with code {process.ExitCode}. Output:\n{outputBuilder}");
+        }
+
+        captureOutput = false;
+        outputBuilder.Clear();
+
         Console.WriteLine("Consul started.");
         return process;
     }
