@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace DPCS.Coordinator.Helpers;
+namespace DPCS.Blazor.Models;
 
 /// <summary>
 /// Helper class containing an endpoint filter for validating incoming API request models using DataAnnotations.

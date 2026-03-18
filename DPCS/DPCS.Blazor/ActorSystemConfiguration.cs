@@ -1,7 +1,7 @@
-﻿﻿using Microsoft.Extensions.Configuration;
+﻿﻿using DPCS.Blazor.Grains;
 using Proto.Cluster.Consul;
 
-namespace DPCS.Agent;
+namespace DPCS.Blazor;
 
 public static class ActorSystemConfiguration
 {
@@ -33,12 +33,23 @@ public static class ActorSystemConfiguration
                     ),
                     identityLookup: new PartitionIdentityLookup()
                 )
-                .WithGossipRequestTimeout(TimeSpan.FromSeconds(10));
+                .WithGossipRequestTimeout(TimeSpan.FromSeconds(10))
+                .WithClusterKinds([
+                    new ClusterKind(
+                        JobManagerGrainActor.Kind,
+                        Props.FromProducer(() =>
+                            new JobManagerGrainActor(
+                                (context, clusterIdentity) => new JobManagerGrain(context, clusterIdentity)
+                            )
+                        )
+                    ),
+                ]);
 
             return new ActorSystem(actorSystemConfig)
                 .WithServiceProvider(provider)
                 .WithRemote(remoteConfig)
                 .WithCluster(clusterConfig);
+
 
             int? _TryParseInt(string? intAsString) =>
                 string.IsNullOrEmpty(intAsString)

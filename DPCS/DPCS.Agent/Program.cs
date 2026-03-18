@@ -117,7 +117,7 @@ try
         {
             var settings = new Dictionary<string, string?>
             {
-                { "ProtoActor:Consul", "http://localhost:8500" },
+                { "ProtoActor:Consul", ConsulWrapper.ConsulAddress },
                 { "ProtoActor:Host", hostIp },
                 { "ProtoActor:Port", port.ToString() }
             };

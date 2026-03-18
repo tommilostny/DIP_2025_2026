@@ -1,4 +1,6 @@
-namespace DPCS.Coordinator.Grains;
+using DPCS.Blazor.Security;
+
+namespace DPCS.Blazor.Grains;
 
 public sealed class JobManagerGrain : JobManagerGrainBase
 {

@@ -1,6 +1,8 @@
 ﻿﻿using DPCS.Coordinator.Grains;
 using Proto.Cluster.Consul;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DPCS.Coordinator;
 
@@ -37,14 +39,6 @@ public static class ActorSystemConfiguration
                 )
                 .WithGossipRequestTimeout(TimeSpan.FromSeconds(10))
                 .WithClusterKinds([
-                    new ClusterKind(
-                        JobManagerGrainActor.Kind,
-                        Props.FromProducer(() =>
-                            new JobManagerGrainActor(
-                                (context, clusterIdentity) => new JobManagerGrain(context, clusterIdentity)
-                            )
-                        )
-                    ),
                     new ClusterKind(
                         JobCoordinatorGrainActor.Kind,
                         Props.FromProducer(() =>

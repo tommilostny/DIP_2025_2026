@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace DPCS.Coordinator.Helpers;
+namespace DPCS.Blazor.Security;
 
 /// <summary>
 /// Utility class for generating and validating signed job IDs to prevent tampering.

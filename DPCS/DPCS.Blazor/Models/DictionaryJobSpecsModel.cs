@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace DPCS.Coordinator.Models;
+namespace DPCS.Blazor.Models;
 
 /// <summary>
 /// Model representing the specifications for a dictionary attack job submission via the API.

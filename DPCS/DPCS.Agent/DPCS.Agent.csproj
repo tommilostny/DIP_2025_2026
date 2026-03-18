@@ -18,12 +18,11 @@
     <PackageReference Include="Proto.Actor" Version="1.8.0" />
     <PackageReference Include="Proto.Cluster" Version="1.8.0" />
     <PackageReference Include="Proto.Cluster.CodeGen" Version="1.8.0" />
-    <PackageReference Include="Proto.Cluster.TestProvider" Version="1.8.0" />
+    <PackageReference Include="Proto.Cluster.Consul" Version="1.8.0" />
     <PackageReference Include="Proto.OpenTelemetry" Version="1.8.0" />
     <PackageReference Include="Proto.Remote" Version="1.8.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
     <PackageReference Include="System.CommandLine" Version="2.0.5" />
-    <PackageReference Include="Proto.Cluster.Consul" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
