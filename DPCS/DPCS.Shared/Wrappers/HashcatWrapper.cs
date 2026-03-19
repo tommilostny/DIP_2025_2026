@@ -15,8 +15,23 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Mask} ");
         argumentsBuilder.Append($"-m {hashType} ");
-        argumentsBuilder.Append(chunk.ExtraArgs);
-        argumentsBuilder.Append($" --skip {chunk.KeyspaceStart} ");
+        if (!string.IsNullOrEmpty(chunk.CustomCharset1))
+        {
+            argumentsBuilder.Append($"-1 \"{chunk.CustomCharset1}\" ");
+        }
+        if (!string.IsNullOrEmpty(chunk.CustomCharset2))
+        {
+            argumentsBuilder.Append($"-2 \"{chunk.CustomCharset2}\" ");
+        }
+        if (!string.IsNullOrEmpty(chunk.CustomCharset3))
+        {
+            argumentsBuilder.Append($"-3 \"{chunk.CustomCharset3}\" ");
+        }
+        if (!string.IsNullOrEmpty(chunk.CustomCharset4))
+        {
+            argumentsBuilder.Append($"-4 \"{chunk.CustomCharset4}\" ");
+        }
+        argumentsBuilder.Append($"--skip {chunk.KeyspaceStart} ");
         argumentsBuilder.Append($"--limit {chunk.KeyspaceLength} ");
         argumentsBuilder.Append($"\"{hashFilePath}\" ");
         argumentsBuilder.Append($"\"{chunk.Mask}\"");
@@ -41,6 +56,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         var outFilePath = Path.Combine(Path.GetTempPath(), $"dpcs_cracked_{Guid.NewGuid():N}.txt");
 
         arguments.Append($" -w {workloadProfile}");
+        arguments.Append(" -O");
         arguments.Append(" --quiet"); // Suppress non-essential output for cleaner logs
         arguments.Append(" --potfile-disable"); // Do not skip work using cached potfiles
         arguments.Append($" --outfile=\"{outFilePath}\""); // Safely write cracked passwords to a temp file
@@ -128,11 +144,23 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         return incMinLen > 0 && incMaxLen > 0 && incMinLen <= incMaxLen;
     }
 
-    public async Task<ulong> GetMaskKeyspaceSizeAsync(string mask, int incMinLen, int incMaxLen, CancellationToken cancellationToken = default)
+    public async Task<ulong> GetMaskKeyspaceSizeAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
     {
-        var arguments = IsIncrementMode(incMinLen, incMaxLen)
-            ? $"-a {(int)AttackMode.Mask} --keyspace --increment --increment-min={incMinLen} --increment-max={incMaxLen} {mask}"
-            : $"-a {(int)AttackMode.Mask} --keyspace {mask}";
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Mask} --keyspace ");
+        if (IsIncrementMode(incMinLen, incMaxLen))
+        {
+            argumentsBuilder.Append($"--increment --increment-min={incMinLen} --increment-max={incMaxLen} ");
+        }
+
+        if (!string.IsNullOrEmpty(customCharset1)) argumentsBuilder.Append($"-1 \"{customCharset1}\" ");
+        if (!string.IsNullOrEmpty(customCharset2)) argumentsBuilder.Append($"-2 \"{customCharset2}\" ");
+        if (!string.IsNullOrEmpty(customCharset3)) argumentsBuilder.Append($"-3 \"{customCharset3}\" ");
+        if (!string.IsNullOrEmpty(customCharset4)) argumentsBuilder.Append($"-4 \"{customCharset4}\" ");
+        
+        argumentsBuilder.Append($"\"{mask}\"");
+
+        var arguments = argumentsBuilder.ToString();
 
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
@@ -152,11 +180,23 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         throw new Exception($"Failed to parse keyspace size from Hashcat output.\n\nOutput was:\n{output}\n\nThe command: {hashcatPath} {arguments}\n\n");
     }
 
-    public async Task<ulong> GetMaskCandidateCountAsync(string mask, int incMinLen, int incMaxLen, CancellationToken cancellationToken = default)
+    public async Task<ulong> GetMaskCandidateCountAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
     {
-        var arguments = IsIncrementMode(incMinLen, incMaxLen)
-            ? $"-a {(int)AttackMode.Mask} --total-candidates --increment --increment-min={incMinLen} --increment-max={incMaxLen} {mask}"
-            : $"-a {(int)AttackMode.Mask} --total-candidates {mask}";
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Mask} --total-candidates ");
+        if (IsIncrementMode(incMinLen, incMaxLen))
+        {
+            argumentsBuilder.Append($"--increment --increment-min={incMinLen} --increment-max={incMaxLen} ");
+        }
+
+        if (!string.IsNullOrEmpty(customCharset1)) argumentsBuilder.Append($"-1 \"{customCharset1}\" ");
+        if (!string.IsNullOrEmpty(customCharset2)) argumentsBuilder.Append($"-2 \"{customCharset2}\" ");
+        if (!string.IsNullOrEmpty(customCharset3)) argumentsBuilder.Append($"-3 \"{customCharset3}\" ");
+        if (!string.IsNullOrEmpty(customCharset4)) argumentsBuilder.Append($"-4 \"{customCharset4}\" ");
+        
+        argumentsBuilder.Append($"\"{mask}\"");
+
+        var arguments = argumentsBuilder.ToString();
 
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
@@ -178,6 +218,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
 
     private async Task<string> ExecuteHashcatInternalAsync(string arguments, bool captureOutput, CancellationToken cancellationToken)
     {
+        Console.WriteLine($"{hashcatPath} {arguments}");
         var startInfo = new ProcessStartInfo
         {
             FileName = hashcatPath,

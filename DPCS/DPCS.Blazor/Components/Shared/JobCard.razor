@@ -7,13 +7,65 @@
     <div class="card-body">
         <h5 class="card-title">Job Details</h5>
         <p>
-            <strong>Status:</strong> @(_jobStatus?.Status ?? "Loading...")
+            <strong>Attack mode:</strong> @Job.ModeId (@(Job.ModeId == (int)AttackMode.Mask ? "Mask" : "Dictionary"))
             <br />
+            @if (Job.ModeId == (int)AttackMode.Mask && _maskJobSpecs is not null)
+            {
+                <strong>Mask: </strong> @_maskJobSpecs.Mask
+                <br />
+                @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset1))
+                {
+                    <strong>Charset 1 (?1): </strong> @_maskJobSpecs.CustomCharset1<br />
+                }
+                @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset2))
+                {
+                    <strong>Charset 2 (?2): </strong> @_maskJobSpecs.CustomCharset2<br />
+                }
+                @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset3))
+                {
+                    <strong>Charset 3 (?3): </strong> @_maskJobSpecs.CustomCharset3<br />
+                }
+                @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset4))
+                {
+                    <strong>Charset 4 (?4): </strong> @_maskJobSpecs.CustomCharset4<br />
+                }
+            }
+            else if (Job.ModeId == (int)AttackMode.Dictionary && _dictionaryJobSpecs is not null)
+            {
+                <strong>Wordlists:</strong>
+                <ul class="mb-0">
+                    @foreach (var wordlist in _dictionaryJobSpecs.Wordlists)
+                    {
+                        <li>@wordlist</li>
+                    }
+                </ul>
+            }
+            <strong>Hash type:</strong> @Job.HashType (@HashTypeMap.GetHashTypeName(Job.HashType))
+            <br />
+            <strong style="cursor: pointer;" @onclick="ToggleHashes">
+                Hashes (@(Job.Hashes?.Count ?? 0))
+                <span class="float-end">@(_isHashesExpanded ? "▼" : "▶")</span>
+            </strong>
+            @if (_isHashesExpanded && Job is { Hashes: { Count: > 0 } })
+            {
+                <ul class="mb-0">
+                    @foreach (var hash in Job.Hashes)
+                    {
+                        <li>@hash</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <br />
+            }
             <strong>Chunk Attack seconds:</strong> @(_jobStatus?.ChunkAttackSeconds ?? 0)
+            <br />
+            <strong>Status:</strong> @(_jobStatus?.Status ?? "Loading...")
             <br />
             <strong>Progress:</strong> @(_jobStatus?.ProgressPercentage.ToString("F2") ?? "0.00")%
         </p>
-        @if (_jobStatus?.ProgressPercentage < 100)
+        @if (_jobStatus is { ProgressPercentage: < 100 })
         {
             <button class="btn btn-danger btn-sm mt-2" @onclick="CancelJob">Cancel Job</button>
         }
@@ -35,6 +87,23 @@
                 }
             </ul>
         }
+        <hr />
+        <h5 class="card-title mb-0" style="cursor: pointer;" @onclick="ToggleRecoveredPasswords">
+            Recovered passwords (@(_jobStatus?.RecoveredPasswords.Count ?? 0))
+            @if (_jobStatus is { RecoveredPasswords: { Count: > 0 } })
+            {
+                <span class="float-end">@(_isRecoveredPasswordsExpanded ? "▼" : "▶")</span>
+            }
+        </h5>
+        @if (_isRecoveredPasswordsExpanded && _jobStatus is { RecoveredPasswords: { Count: > 0 } })
+        {
+            <ul class="mt-2 mb-0">
+                @foreach (var rec in _jobStatus.RecoveredPasswords)
+                {
+                    <li>@rec.Hash: <strong>@rec.Plaintext</strong></li>
+                }
+            </ul>
+        }
     </div>
 </div>
 
@@ -46,12 +115,17 @@
     public ActorSystem ActorSystem { get; set; } = default!;
 
     private JobStatus? _jobStatus;
+    private HashcatMaskJobSpecs? _maskJobSpecs;
+    private HashcatDictionaryJobSpecs? _dictionaryJobSpecs;
     private readonly CancellationTokenSource _cts = new();
     private bool _isAgentsExpanded;
+    private bool _isRecoveredPasswordsExpanded;
+    private bool _isHashesExpanded;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadJobStatus();
+        await LoadJobSpecs();
 
         _ = Task.Run(async () =>
         {
@@ -74,6 +148,22 @@
         _jobStatus = await jobCoordinator.GetJobStatus(CancellationToken.None);
     }
 
+    private async Task LoadJobSpecs()
+    {
+        var jobCoordinator = ActorSystem.Cluster().GetJobCoordinatorGrain(Job.JobId);
+        switch (Job)
+        {
+            case { ModeId: (int)AttackMode.Mask }:
+                _maskJobSpecs = await jobCoordinator.GetMaskJobSpecs(CancellationToken.None);
+                break;
+            case { ModeId: (int)AttackMode.Dictionary }:
+                _dictionaryJobSpecs = await jobCoordinator.GetDictionaryJobSpecs(CancellationToken.None);
+                break;
+            default:
+                break;
+        }
+    }
+
     private async Task CancelJob()
     {
         var jobManager = ActorSystem.Cluster().GetJobManagerGrain("root");
@@ -86,6 +176,16 @@
     private void ToggleAgents()
     {
         _isAgentsExpanded = !_isAgentsExpanded;
+    }
+
+    private void ToggleRecoveredPasswords()
+    {
+        _isRecoveredPasswordsExpanded = !_isRecoveredPasswordsExpanded;
+    }
+
+    private void ToggleHashes()
+    {
+        _isHashesExpanded = !_isHashesExpanded;
     }
 
     public void Dispose()

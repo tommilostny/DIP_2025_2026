@@ -31,6 +31,10 @@ message HashcatMaskJobSpecs {
   int32 min_length = 3;
   int32 max_length = 4;
   int32 hash_type = 5;
+  string custom_charset1 = 6;
+  string custom_charset2 = 7;
+  string custom_charset3 = 8;
+  string custom_charset4 = 9;
 }
 
 // Parameters for submitting a Hashcat dictionary attack job by user in the web interface
@@ -38,6 +42,7 @@ message HashcatDictionaryJobSpecs {
   repeated string hashes = 1;
   repeated string wordlists = 2;
   int32 hash_type = 3;
+  repeated string rule_files = 4;
 }
 
 // Message sent by agent to request more work
@@ -51,11 +56,14 @@ message WorkRequest {
 message MaskWorkAssignment {
   string job_id = 1;
   string request_id = 2; // Unique ID for deduplication
-  string extra_args = 3; // e.g. "--optimized-kernel"
   
-  string mask = 4;
-  uint64 keyspace_start = 5;
-  uint64 keyspace_length = 6;
+  string mask = 3;
+  uint64 keyspace_start = 4;
+  uint64 keyspace_length = 5;
+  string custom_charset1 = 6;
+  string custom_charset2 = 7;
+  string custom_charset3 = 8;
+  string custom_charset4 = 9;
 }
 
 // Message for Attack Mode 0 (Stateful) - JobCoordinator provides dictionary chunk info
@@ -104,8 +112,9 @@ message JobStatus {
   string job_id = 1;
   string status = 2; // e.g. "In Progress", "Completed", "Cancelled"
   double progress_percentage = 3; // e.g. 75.5 for 75.5% completed
-  repeated string agent_ids = 4;
-  uint64 chunk_attack_seconds = 5;
+  uint64 chunk_attack_seconds = 4;
+  repeated string agent_ids = 5;
+  repeated RecoveredPassword recovered_passwords = 6;
 }
 
 message JobsCollection {

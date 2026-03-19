@@ -17,6 +17,8 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private readonly ulong _chunkAttackSeconds;
 
+    private readonly HashSet<RecoveredPassword> _recoveredPasswords = [];
+
     public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : base(context)
     {
         _clusterIdentity = clusterIdentity;
@@ -129,6 +131,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
                 foreach (var recovered in request.RecoveredPasswords)
                 {
                     Console.WriteLine($"  - Hash: {recovered.Hash}, Plaintext: {recovered.Plaintext}");
+                    _recoveredPasswords.Add(recovered);
                 }
                 Console.ResetColor();
 
@@ -180,6 +183,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
                 Status = "Cancelled",
                 ProgressPercentage = 100,
                 ChunkAttackSeconds = _chunkAttackSeconds,
+                RecoveredPasswords = { _recoveredPasswords },
             };
         }
 
@@ -191,6 +195,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             ProgressPercentage = progress,
             AgentIds = { _activeWorkers.Keys.Select(pid => pid.ToString()) },
             ChunkAttackSeconds = _chunkAttackSeconds,
+            RecoveredPasswords = { _recoveredPasswords },
         };
         return await Task.FromResult(jobStatus);
     }
@@ -212,5 +217,23 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
         Context.Stop(Context.Self);
         await Task.CompletedTask;
+    }
+
+    public override async Task<HashcatMaskJobSpecs> GetMaskJobSpecs()
+    {
+        if (_jobStrategy is MaskJobStrategy maskJobStrategy)
+        {
+            return await Task.FromResult(maskJobStrategy.Specs);
+        }
+        return new HashcatMaskJobSpecs();
+    }
+
+    public override async Task<HashcatDictionaryJobSpecs> GetDictionaryJobSpecs()
+    {
+        if (_jobStrategy is DictionaryJobStrategy dictionaryJobStrategy)
+        {
+            return await Task.FromResult(dictionaryJobStrategy.Specs);
+        }
+        return new HashcatDictionaryJobSpecs();
     }
 }

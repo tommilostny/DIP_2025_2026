@@ -10,6 +10,8 @@ public class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpecs specs
 
     public AttackMode Mode => AttackMode.Dictionary;
 
+    public HashcatDictionaryJobSpecs Specs => specs;
+
     public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate) => null;
 
     public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate)

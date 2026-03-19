@@ -11,6 +11,8 @@ public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWra
 
     public AttackMode Mode => AttackMode.Mask;
 
+    public HashcatMaskJobSpecs Specs => specs;
+
     public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate)
     {
         ulong start, length;
@@ -23,8 +25,8 @@ public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWra
         else
         {
             // Ensure keyspace and total candidates count are calculated
-            _totalKeyspace ??= await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs.Mask, specs.MinLength, specs.MaxLength);
-            _totalCandidates ??= await hashcatWrapper.GetMaskCandidateCountAsync(specs.Mask, specs.MinLength, specs.MaxLength);
+            _totalKeyspace ??= await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs.Mask, specs.MinLength, specs.MaxLength, specs.CustomCharset1, specs.CustomCharset2, specs.CustomCharset3, specs.CustomCharset4);
+            _totalCandidates ??= await hashcatWrapper.GetMaskCandidateCountAsync(specs.Mask, specs.MinLength, specs.MaxLength, specs.CustomCharset1, specs.CustomCharset2, specs.CustomCharset3, specs.CustomCharset4);
 
             // Check if job is complete
             if (_currentOffset >= _totalKeyspace.Value)
@@ -61,10 +63,13 @@ public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWra
         {
             JobId = jobId,
             RequestId = requestId,
-            ExtraArgs = string.Empty, // Placeholder for any extra args
             Mask = specs.Mask,
             KeyspaceStart = start,
             KeyspaceLength = length,
+            CustomCharset1 = specs.CustomCharset1,
+            CustomCharset2 = specs.CustomCharset2,
+            CustomCharset3 = specs.CustomCharset3,
+            CustomCharset4 = specs.CustomCharset4,
         };
         
         _activeChunks[requestId] = (start, length);

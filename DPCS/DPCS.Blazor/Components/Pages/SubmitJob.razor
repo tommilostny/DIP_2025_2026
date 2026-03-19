@@ -1,7 +1,5 @@
 @page "/submit-job"
 @rendermode InteractiveServer
-@using System.ComponentModel.DataAnnotations
-@using DPCS.Blazor.Models
 @inject ActorSystem ActorSystem
 @inject NavigationManager NavigationManager
 
@@ -29,9 +27,16 @@
             </div>
 
             <div class="mb-3">
-                <label class="form-label">Hash Type (e.g. 0 for MD5)</label>
-                <InputNumber @bind-Value="Model.HashType" class="form-control" />
+                <label class="form-label">Hash Type</label>
+                <InputText @bind-Value="Model.HashType" class="form-control" list="hashTypeList" placeholder="Search by name or type ID... (e.g. 0)" />
+                <datalist id="hashTypeList">
+                    @foreach (var hashType in HashTypeMap.Map)
+                    {
+                        <option value="@hashType.Key">@hashType.Value</option>
+                    }
+                </datalist>
                 <ValidationMessage For="() => Model.HashType" />
+                <div class="form-text text-muted">Select from the list or type the Hashcat mode number manually.</div>
             </div>
 
             @if (Model.AttackMode == AttackMode.Mask)
@@ -40,7 +45,12 @@
                     <div class="card-header">Mask Attack Settings</div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">Mask</label>
+                            <label class="form-label">
+                                Mask
+                                <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-decoration-none" @onclick="() => _showMaskHelp = true" title="Show Mask Help">
+                                    &#x24D8;
+                                </button>
+                            </label>
                             <InputText @bind-Value="Model.Mask" class="form-control" placeholder="?u?l?d?s?a" />
                             <ValidationMessage For="() => Model.Mask" />
                         </div>
@@ -55,8 +65,74 @@
                             </div>
                         </div>
                         <div class="form-text text-muted">Leave Min/Max Length as -1 to disable increment mode.</div>
+                        
+                        <hr />
+                        <h6>Custom Character Sets</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Charset 1 (?1)</label>
+                                <InputText @bind-Value="Model.CustomCharset1" class="form-control" placeholder="e.g. ?l?d" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Charset 2 (?2)</label>
+                                <InputText @bind-Value="Model.CustomCharset2" class="form-control" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Charset 3 (?3)</label>
+                                <InputText @bind-Value="Model.CustomCharset3" class="form-control" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Charset 4 (?4)</label>
+                                <InputText @bind-Value="Model.CustomCharset4" class="form-control" />
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                @if (_showMaskHelp)
+                {
+                    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick="() => _showMaskHelp = false">
+                        <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Hashcat Built-in Charsets</h5>
+                                    <button type="button" class="btn-close" @onclick="() => _showMaskHelp = false"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <table class="table table-bordered table-sm mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>Placeholder</th>
+                                                <th>Characters</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr><td><code>?l</code></td><td>abcdefghijklmnopqrstuvwxyz</td></tr>
+                                            <tr><td><code>?u</code></td><td>ABCDEFGHIJKLMNOPQRSTUVWXYZ</td></tr>
+                                            <tr><td><code>?d</code></td><td>0123456789</td></tr>
+                                            <tr><td><code>?h</code></td><td>0123456789abcdef</td></tr>
+                                            <tr><td><code>?H</code></td><td>0123456789ABCDEF</td></tr>
+                                            <tr><td><code>?s</code></td><td>«space»!"#$%&amp;'()*+,-./:;&lt;=&gt;?@@[\]^_`{|}~</td></tr>
+                                            <tr><td><code>?a</code></td><td>?l?u?d?s</td></tr>
+                                            <tr><td><code>?b</code></td><td>0x00 - 0xff</td></tr>
+                                        </tbody>
+                                    </table>
+                                    
+                                    <h6 class="mt-3">Custom Charsets</h6>
+                                    <p class="mb-0 small">
+                                        You can define up to 4 custom character sets using the fields provided. Reference them in your mask using <code>?1</code>, <code>?2</code>, <code>?3</code>, and <code>?4</code>.
+                                        <br/><strong>Example:</strong> If Charset 1 is <code>?l?d</code>, a mask of <code>?1?1?1</code> will test all 3-character combinations of lowercase letters and digits.
+                                    </p>
+                                </div>
+                                <div class="modal-footer" style="justify-content: flex-start;">
+                                    <p class="mb-0 small">
+                                        More info about mask attack submission: <a href="https://hashcat.net/wiki/doku.php?id=mask_attack" target="_blank">https://hashcat.net/wiki/doku.php?id=mask_attack</a>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
             }
             else if (Model.AttackMode == AttackMode.Dictionary)
             {
@@ -74,7 +150,7 @@
 
             <ValidationSummary class="text-danger" />
 
-            <button type="submit" class="btn btn-primary" disabled="@_isSubmitting">Submit Job</button>
+            <button type="submit" class="btn btn-primary mb-5" disabled="@_isSubmitting">Submit Job</button>
         </EditForm>
     </div>
 </div>
@@ -84,6 +160,7 @@
     public SubmitJobViewModel? Model { get; set; }
 
     private bool _isSubmitting;
+    private bool _showMaskHelp;
 
     protected override void OnInitialized()
     {
@@ -102,43 +179,30 @@
 
             if (Model.AttackMode == AttackMode.Mask)
             {
-                var specModel = new MaskJobSpecsModel
-                {
-                    Hashes = hashes,
-                    Mask = Model.Mask ?? "",
-                    MinLength = Model.MinLength,
-                    MaxLength = Model.MaxLength,
-                    HashType = Model.HashType
-                };
-
                 var request = new HashcatMaskJobSpecs
                 {
-                    Mask = specModel.Mask,
-                    MinLength = specModel.MinLength,
-                    MaxLength = specModel.MaxLength,
-                    HashType = specModel.HashType
+                    Hashes = { hashes },
+                    Mask = Model.Mask,
+                    MinLength = Model.MinLength,
+                    MaxLength = Model.MaxLength,
+                    HashType = int.Parse(Model.HashType),
+                    CustomCharset1 = Model.CustomCharset1 ?? "",
+                    CustomCharset2 = Model.CustomCharset2 ?? "",
+                    CustomCharset3 = Model.CustomCharset3 ?? "",
+                    CustomCharset4 = Model.CustomCharset4 ?? ""
                 };
-                request.Hashes.AddRange(specModel.Hashes);
-                
                 await jobManager.MaskJobSubmission(request, CancellationToken.None);
             }
             else if (Model.AttackMode == AttackMode.Dictionary)
             {
                 var wordlists = Model.Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-                var specModel = new DictionaryJobSpecsModel
-                {
-                    Hashes = hashes,
-                    Wordlists = wordlists,
-                    HashType = Model.HashType
-                };
 
                 var request = new HashcatDictionaryJobSpecs
                 {
-                    HashType = specModel.HashType
+                    Hashes = { hashes },
+                    Wordlists = { wordlists },
+                    HashType = int.Parse(Model.HashType),
                 };
-                request.Hashes.AddRange(specModel.Hashes);
-                request.Wordlists.AddRange(specModel.Wordlists);
-                
                 await jobManager.DictionaryJobSubmission(request, CancellationToken.None);
             }
 
@@ -147,46 +211,6 @@
         finally
         {
             _isSubmitting = false;
-        }
-    }
-
-    public class SubmitJobViewModel : IValidatableObject
-    {
-        public AttackMode AttackMode { get; set; } = AttackMode.Mask;
-
-        [Required(ErrorMessage = "At least one hash must be provided.")]
-        public string Hashes { get; set; } = "";
-
-        [Required]
-        public int HashType { get; set; } = 0;
-
-        public string? Mask { get; set; } = "";
-        public int MinLength { get; set; } = -1;
-        public int MaxLength { get; set; } = -1;
-
-        public string? Wordlists { get; set; } = "";
-
-        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
-        {
-            var hashesList = Hashes?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-            if (hashesList.Length == 0)
-            {
-                yield return new ValidationResult("At least one hash must be provided.", new[] { nameof(Hashes) });
-            }
-
-            if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Mask))
-            {
-                yield return new ValidationResult("A mask must be provided.", new[] { nameof(Mask) });
-            }
-
-            if (AttackMode == AttackMode.Dictionary)
-            {
-                var wordlistsList = Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-                if (wordlistsList.Length == 0)
-                {
-                    yield return new ValidationResult("At least one wordlist must be provided.", new[] { nameof(Wordlists) });
-                }
-            }
         }
     }
 }
