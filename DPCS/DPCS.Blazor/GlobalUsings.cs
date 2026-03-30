@@ -1,5 +1,5 @@
 global using DPCS.Blazor;
-global using DPCS.Blazor.Models;
+global using DPCS.Blazor.Services;
 global using DPCS.Shared;
 global using DPCS.Shared.Wrappers;
 global using JsonSerializer = System.Text.Json.JsonSerializer;

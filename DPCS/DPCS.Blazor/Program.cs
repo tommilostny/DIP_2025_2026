@@ -81,6 +81,8 @@ try
     builder.Services.AddActorSystem();
     builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 
+    builder.Services.AddSingleton<WordlistService>();
+
     var app = builder.Build();
 
     // Configure the HTTP request pipeline.

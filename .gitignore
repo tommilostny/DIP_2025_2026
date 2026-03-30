@@ -68,3 +68,5 @@ nunit-*.xml
 *.db-shm
 *.db-wal
 *.txt
+
+wordlists/

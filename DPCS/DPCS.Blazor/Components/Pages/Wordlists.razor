@@ -1,0 +1,94 @@
+@page "/wordlists"
+@inject WordlistService WordlistService
+
+<PageTitle>Wordlists</PageTitle>
+
+<h1>Wordlists</h1>
+
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">Upload New Wordlist</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Select Wordlist File (.txt)</label>
+                    <InputFile OnChange="LoadFiles" class="form-control" accept=".txt" />
+                </div>
+                
+                @if (_isUploading)
+                {
+                    <div class="d-flex align-items-center text-primary mt-3">
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Uploading and building binary index... Please do not close this page.</span>
+                    </div>
+                }
+                @if (!string.IsNullOrEmpty(_uploadMessage))
+                {
+                    <div class="alert alert-info mt-3 mb-0">@_uploadMessage</div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Available Wordlists</div>
+            <ul class="list-group list-group-flush">
+                @foreach (var wordlist in _availableWordlists)
+                {
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        @wordlist
+                        <span class="badge bg-success rounded-pill">Indexed</span>
+                    </li>
+                }
+                @if (_availableWordlists.Count == 0)
+                {
+                    <li class="list-group-item text-muted">No wordlists available.</li>
+                }
+            </ul>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool _isUploading;
+    private string? _uploadMessage;
+    private List<string> _availableWordlists = new();
+
+    protected override void OnInitialized() => RefreshWordlists();
+
+    private void RefreshWordlists() => _availableWordlists = WordlistService.GetAvailableWordlists().ToList();
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        _isUploading = true;
+        _uploadMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            // Allow up to 50 GB file uploads (adjust as needed)
+            var maxAllowedSize = 50L * 1024 * 1024 * 1024;
+
+            // OpenReadStream streams the file to the server in small chunks safely over SignalR
+            using var stream = file.OpenReadStream(maxAllowedSize);
+            
+            await WordlistService.UploadWordlistAsync(file.Name, stream);
+
+            _uploadMessage = $"Successfully uploaded and indexed '{file.Name}'.";
+            RefreshWordlists();
+        }
+        catch (Exception ex)
+        {
+            _uploadMessage = $"Error uploading file: {ex.Message}";
+        }
+        finally
+        {
+            _isUploading = false;
+            StateHasChanged();
+        }
+    }
+}

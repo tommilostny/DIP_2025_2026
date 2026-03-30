@@ -3,46 +3,46 @@ using System.ComponentModel.DataAnnotations;
 namespace DPCS.Blazor.Models;
 
 public class SubmitJobViewModel : IValidatableObject
+{
+    public AttackMode AttackMode { get; set; } = AttackMode.Mask;
+
+    [Required(ErrorMessage = "At least one hash must be provided.")]
+    public string Hashes { get; set; } = "";
+
+    [Required]
+    public string HashType { get; set; } = "0";
+
+    public string? Mask { get; set; } = "";
+    public int MinLength { get; set; } = -1;
+    public int MaxLength { get; set; } = -1;
+    public string? CustomCharset1 { get; set; } = "";
+    public string? CustomCharset2 { get; set; } = "";
+    public string? CustomCharset3 { get; set; } = "";
+    public string? CustomCharset4 { get; set; } = "";
+
+
+    public string? Wordlists { get; set; } = "";
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        public AttackMode AttackMode { get; set; } = AttackMode.Mask;
-
-        [Required(ErrorMessage = "At least one hash must be provided.")]
-        public string Hashes { get; set; } = "";
-
-        [Required]
-        public string HashType { get; set; } = "0";
-
-        public string? Mask { get; set; } = "";
-        public int MinLength { get; set; } = -1;
-        public int MaxLength { get; set; } = -1;
-        public string? CustomCharset1 { get; set; } = "";
-        public string? CustomCharset2 { get; set; } = "";
-        public string? CustomCharset3 { get; set; } = "";
-        public string? CustomCharset4 { get; set; } = "";
-
-
-        public string? Wordlists { get; set; } = "";
-
-        public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+        var hashesList = Hashes?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+        if (hashesList.Length == 0)
         {
-            var hashesList = Hashes?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-            if (hashesList.Length == 0)
-            {
-                yield return new ValidationResult("At least one hash must be provided.", new[] { nameof(Hashes) });
-            }
+            yield return new ValidationResult("At least one hash must be provided.", [nameof(Hashes)]);
+        }
 
-            if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Mask))
-            {
-                yield return new ValidationResult("A mask must be provided.", new[] { nameof(Mask) });
-            }
+        if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Mask))
+        {
+            yield return new ValidationResult("A mask must be provided.", [nameof(Mask)]);
+        }
 
-            if (AttackMode == AttackMode.Dictionary)
+        if (AttackMode == AttackMode.Dictionary)
+        {
+            var wordlistsList = Wordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            if (wordlistsList.Length == 0)
             {
-                var wordlistsList = Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-                if (wordlistsList.Length == 0)
-                {
-                    yield return new ValidationResult("At least one wordlist must be provided.", new[] { nameof(Wordlists) });
-                }
+                yield return new ValidationResult("At least one wordlist must be provided.", [nameof(Wordlists)]);
             }
         }
     }
+}

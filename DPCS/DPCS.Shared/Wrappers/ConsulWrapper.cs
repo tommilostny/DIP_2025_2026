@@ -33,6 +33,7 @@ public static class ConsulWrapper
 
     private static Process StartConsul(string consulPath, string arguments)
     {
+        Console.WriteLine($"Starting Consul with command: {consulPath} {arguments}");
         var startInfo = new ProcessStartInfo
         {
             FileName = consulPath,
