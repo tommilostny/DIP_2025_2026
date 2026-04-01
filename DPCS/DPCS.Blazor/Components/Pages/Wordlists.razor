@@ -1,5 +1,6 @@
 @page "/wordlists"
 @inject WordlistService WordlistService
+@rendermode InteractiveServer
 
 <PageTitle>Wordlists</PageTitle>
 
@@ -38,7 +39,10 @@
                 {
                     <li class="list-group-item d-flex justify-content-between align-items-center">
                         @wordlist
-                        <span class="badge bg-success rounded-pill">Indexed</span>
+                        <div>
+                            <span class="badge bg-success rounded-pill me-2">Indexed</span>
+                            <button class="btn btn-sm btn-outline-danger border-0" @onclick="() => DeleteWordlist(wordlist)" title="Delete wordlist">🗑️</button>
+                        </div>
                     </li>
                 }
                 @if (_availableWordlists.Count == 0)
@@ -53,7 +57,10 @@
 @code {
     private bool _isUploading;
     private string? _uploadMessage;
-    private List<string> _availableWordlists = new();
+    private List<string> _availableWordlists = [];
+
+    // Allow up to 50 GB file uploads (adjust as needed)
+    private const long MaxAllowedSize = 50L * 1024 * 1024 * 1024;
 
     protected override void OnInitialized() => RefreshWordlists();
 
@@ -70,12 +77,9 @@
 
         try
         {
-            // Allow up to 50 GB file uploads (adjust as needed)
-            var maxAllowedSize = 50L * 1024 * 1024 * 1024;
-
             // OpenReadStream streams the file to the server in small chunks safely over SignalR
-            using var stream = file.OpenReadStream(maxAllowedSize);
-            
+            using var stream = file.OpenReadStream(MaxAllowedSize);
+
             await WordlistService.UploadWordlistAsync(file.Name, stream);
 
             _uploadMessage = $"Successfully uploaded and indexed '{file.Name}'.";
@@ -88,6 +92,21 @@
         finally
         {
             _isUploading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void DeleteWordlist(string fileName)
+    {
+        try
+        {
+            WordlistService.DeleteWordlist(fileName);
+            _uploadMessage = $"Successfully deleted '{fileName}'.";
+            RefreshWordlists();
+        }
+        catch (Exception ex)
+        {
+            _uploadMessage = $"Error deleting wordlist: {ex.Message}";
             StateHasChanged();
         }
     }

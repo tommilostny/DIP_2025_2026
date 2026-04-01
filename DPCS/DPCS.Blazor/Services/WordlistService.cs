@@ -6,22 +6,6 @@ public class WordlistService
 {
     private readonly string _storagePath;
 
-    // Track byte offset every 10,000 lines - ballancing the index file size with the granularity of chunking the wordlist.
-    /*
-    Example: massive wordlist with 1 billion lines (roughly 10 GB of text).
-             Because our binary index writes one long (8 bytes) per interval:
-        
-        Interval = 100,000: The index has 10,000 entries. File size = ~80 KB.
-        (Minimum chunk size: 100,000 lines)
-        Interval = 10,000: The index has 100,000 entries. File size = ~800 KB.
-        (Minimum chunk size: 10,000 lines)
-        Interval = 1,000: The index has 1,000,000 entries. File size = ~8 MB.
-        (Minimum chunk size: 1,000 lines)
-        Interval = 1: The index has 1,000,000,000 entries. File size = 8 GB.
-        (This completely defeats the purpose of the index).
-    */
-    public const int IndexInterval = 10000;
-
     private const int BufferSize = 81920; // 80 kB, a common buffer size for file I/O.
 
     public WordlistService(IConfiguration configuration)
@@ -63,7 +47,7 @@ public class WordlistService
 
                 for (int i = 0; i < bytesRead; i++)
                 {
-                    if (buffer[i] == '\n' && ++lineCount % IndexInterval == 0)
+                    if (buffer[i] == '\n' && ++lineCount % Constants.IndexInterval == 0)
                     {
                         // Record the byte offset immediately following the newline character
                         indexWriter.Write(currentOffset + i + 1);
@@ -83,5 +67,21 @@ public class WordlistService
         if (!Directory.Exists(_storagePath)) return [];
         // Return only .txt files, ignoring the binary .idx files
         return Directory.GetFiles(_storagePath, "*.txt").Select(Path.GetFileName)!;
+    }
+
+    public void DeleteWordlist(string fileName)
+    {
+        var safeFileName = Path.GetFileName(fileName);
+        var filePath = Path.Combine(_storagePath, safeFileName);
+        var indexPath = Path.Combine(_storagePath, $"{safeFileName}.idx");
+
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+        if (File.Exists(indexPath))
+        {
+            File.Delete(indexPath);
+        }
     }
 }

@@ -20,7 +20,8 @@ public static class ActorSystemConfiguration
             var consulAddress = config["ProtoActor:Consul"] ?? throw new InvalidOperationException("Consul address must be provided in configuration under 'ProtoActor:Consul'");
             var host = _EmptyStringToNull(config["ProtoActor:Host"]) ?? "127.0.0.1";
             var port = _TryParseInt(config["ProtoActor:Port"]) ?? 0;
-            var chunkTimeSeconds = _TryParseInt(config["DPCS:ChunkTimeSeconds"]) ?? 60;
+            var chunkTimeSeconds = (ulong)(_TryParseInt(config["DPCS:ChunkTimeSeconds"]) ?? 60);
+            var serverBaseUrl = config["DPCS:ServerBaseUrl"] ?? "http://localhost:5065";
 
             Console.WriteLine($"Configuring ActorSystem with Consul at {consulAddress}, host {host}, port {port}");
 
@@ -30,7 +31,7 @@ public static class ActorSystemConfiguration
 
             var clusterConfig = ClusterConfig
                 .Setup(
-                    clusterName: "DistributedPasswordCrackingSystem",
+                    clusterName: Constants.ClusterName,
                     clusterProvider: new ConsulProvider(
                         new ConsulProviderConfig(), 
                         clientConfiguration: c => c.Address = new Uri(consulAddress)
@@ -44,7 +45,13 @@ public static class ActorSystemConfiguration
                         Props.FromProducer(() =>
                             new JobCoordinatorGrainActor(
                                 (context, clusterIdentity) =>
-                                    new JobCoordinatorGrain(context, clusterIdentity, provider.GetRequiredService<HashcatWrapper>(), (ulong)chunkTimeSeconds)
+                                    new JobCoordinatorGrain(
+                                        context,
+                                        clusterIdentity,
+                                        provider.GetRequiredService<HashcatWrapper>(),
+                                        chunkTimeSeconds,
+                                        serverBaseUrl
+                                    )
                             )
                         )
                     ),
@@ -53,7 +60,11 @@ public static class ActorSystemConfiguration
                         Props.FromProducer(() =>
                             new ResultCollectorGrainActor(
                                 (context, clusterIdentity) =>
-                                    new ResultCollectorGrain(context, clusterIdentity, provider.GetRequiredService<IDbContextFactory<DpcsDbContext>>())
+                                    new ResultCollectorGrain(
+                                        context,
+                                        clusterIdentity,
+                                        provider.GetRequiredService<IDbContextFactory<DpcsDbContext>>()
+                                    )
                             )
                         )
                     )

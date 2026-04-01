@@ -26,7 +26,7 @@ public static class ActorSystemConfiguration
 
             var clusterConfig = ClusterConfig
                 .Setup(
-                    clusterName: "DistributedPasswordCrackingSystem",
+                    clusterName: Constants.ClusterName,
                     clusterProvider: new ConsulProvider(
                         new ConsulProviderConfig(), 
                         clientConfiguration: c => c.Address = new Uri(consulAddress)

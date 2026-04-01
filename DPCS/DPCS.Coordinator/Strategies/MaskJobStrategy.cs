@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : IJobStrategy
+public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : IJobStrategy
 {
     private ulong _currentOffset = 0;
     private ulong? _totalKeyspace;

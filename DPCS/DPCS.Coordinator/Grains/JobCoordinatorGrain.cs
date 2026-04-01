@@ -16,14 +16,16 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     private readonly HashcatWrapper _hashcatWrapper;
 
     private readonly ulong _chunkAttackSeconds;
+    private readonly string _serverBaseUrl;
 
     private readonly HashSet<RecoveredPassword> _recoveredPasswords = [];
 
-    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : base(context)
+    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds, string serverBaseUrl) : base(context)
     {
         _clusterIdentity = clusterIdentity;
         _hashcatWrapper = hashcatWrapper;
         _chunkAttackSeconds = chunkAttackSeconds;
+        _serverBaseUrl = serverBaseUrl;
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
     }
 
@@ -36,7 +38,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
     {
-        _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _chunkAttackSeconds);
+        _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _chunkAttackSeconds, _serverBaseUrl);
         _jobStartTime = DateTime.UtcNow;
         return Task.CompletedTask;
     }

@@ -18,7 +18,7 @@ Option<string> consulPathOption = new("--consul-path", "-c")
 };
 Option<string?> serverIpOption = new("--server-ip", "-s")
 {
-    Description = "IP address of the DPCS Coordinator server."
+    Description = "IP address of the DPCS Blazor Manager server."
 }; 
 Option<string?> hostOption = new("--host", "-ip")
 {
@@ -117,7 +117,8 @@ try
                 { "ProtoActor:Consul", ConsulWrapper.ConsulAddress },
                 { "ProtoActor:Host", hostIp },
                 { "ProtoActor:Port", port.ToString() },
-                { "DPCS:ChunkTimeSeconds", chunkTime.ToString() }
+                { "DPCS:ChunkTimeSeconds", chunkTime.ToString() },
+                { "DPCS:ServerBaseUrl", serverIp != null ? $"http://{serverIp}:5065" : null }
             };
             config.AddInMemoryCollection(settings);
         })
