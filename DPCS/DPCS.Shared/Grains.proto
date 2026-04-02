@@ -53,11 +53,3 @@ service ResultCollectorGrain {
   // RPC for JobCoordinatorGrain to store results submitted by agents
   rpc StoreResult (JobResult) returns (google.protobuf.Empty);
 }
-
-/*==================== AGENT GRAINS =======================================================*/
-/*
-service NodeGuardianGrain {
-  // RPC for cancelling ongoing work on this agent (e.g. if job is cancelled from web interface)
-  rpc StopWork (google.protobuf.Empty) returns (google.protobuf.Empty);
-}
-*/

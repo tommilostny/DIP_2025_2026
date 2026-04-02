@@ -118,7 +118,11 @@ try
                 { "ProtoActor:Host", hostIp },
                 { "ProtoActor:Port", port.ToString() },
                 { "DPCS:ChunkTimeSeconds", chunkTime.ToString() },
-                { "DPCS:ServerBaseUrl", serverIp != null ? $"http://{serverIp}:5065" : null }
+                { "DPCS:ServerBaseUrl", serverIp switch {
+                        null or "" => null,
+                        _ => $"http://{serverIp}:5065"
+                    }
+                }
             };
             config.AddInMemoryCollection(settings);
         })
@@ -149,7 +153,7 @@ try
 }
 finally
 {
-    if (consulProcess != null && !consulProcess.HasExited)
+    if (consulProcess is { HasExited: false })
     {
         Console.WriteLine("Stopping Consul...");
         consulProcess.Kill();

@@ -23,10 +23,12 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
 
     public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate)
     {
-        if (_currentWordlistIndex >= specs.Wordlists.Count && _retryQueue.Count == 0) return null;
+        if (_currentWordlistIndex >= specs.Wordlists.Count && _retryQueue.Count == 0)
+        {
+            return null;
+        }
 
         ChunkState nextChunk;
-
         if (_retryQueue.Count > 0)
         {
             nextChunk = _retryQueue.Dequeue();
@@ -81,9 +83,9 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         };
 
         _activeChunks[requestId] = nextChunk;
-        
+
         Console.WriteLine($"{jobId}: Assigning dictionary chunk - Wordlist: {specs.Wordlists[nextChunk.WordlistIndex]}, Bytes: {nextChunk.StartByte} to {(nextChunk.EndByte == -1 ? "EOF" : nextChunk.EndByte)}");
-        
+
         return assignment;
     }
 
@@ -100,19 +102,19 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         }
     }
 
-    public double GetProgress()
+    public float GetProgress()
     {
-        if (specs.Wordlists.Count == 0) return 0.0;
-        
+        if (specs.Wordlists.Count == 0) return 0.0f;
+
         // Calculate progress across all wordlists
-        double baseProgress = (double)_currentWordlistIndex / specs.Wordlists.Count * 100.0;
-        
-        if (_currentWordlistIndexData != null && _currentWordlistIndexData.Length > 0)
+        var baseProgress = (float)_currentWordlistIndex / specs.Wordlists.Count * 100.0f;
+
+        if (_currentWordlistIndexData is { Length: > 0 })
         {
-            double currentWordlistProgress = (double)_currentIntervalIndex / _currentWordlistIndexData.Length * (100.0 / specs.Wordlists.Count);
+            var currentWordlistProgress = (float)_currentIntervalIndex / _currentWordlistIndexData.Length * (100.0f / specs.Wordlists.Count);
             return baseProgress + currentWordlistProgress;
         }
-        
+
         return baseProgress;
     }
 
@@ -130,7 +132,7 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         var idxUrl = $"{serverBaseUrl}/wordlists/{wordlistName}.idx";
 
         var bytes = await HttpClient.GetByteArrayAsync(idxUrl);
-        
+
         // Reinterpret the downloaded bytes as longs and copy directly into an array
         _currentWordlistIndexData = MemoryMarshal.Cast<byte, long>(bytes).ToArray();
     }

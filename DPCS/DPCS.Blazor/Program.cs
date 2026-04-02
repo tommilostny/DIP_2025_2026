@@ -108,7 +108,7 @@ try
 }
 finally
 {
-    if (consulProcess != null && !consulProcess.HasExited)
+    if (consulProcess is { HasExited: false })
     {
         Console.WriteLine("Stopping Consul...");
         consulProcess.Kill();

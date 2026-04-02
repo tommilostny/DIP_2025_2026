@@ -72,18 +72,30 @@
     </div>
     <div class="card-footer">
         <h5 class="card-title mb-0" style="cursor: pointer;" @onclick="ToggleAgents">
-            Active agents (@(_jobStatus?.AgentIds.Count ?? 0))
-            @if (_jobStatus is { AgentIds: { Count: > 0 } })
+            Active agents (@(_jobStatus?.Agents.Count ?? 0))
+            @if (_jobStatus is { Agents: { Count: > 0 } })
             {
                 <span class="float-end">@(_isAgentsExpanded ? "▼" : "▶")</span>
             }
         </h5>
-        @if (_isAgentsExpanded && _jobStatus is { AgentIds: { Count: > 0 } })
+        @if (_isAgentsExpanded && _jobStatus is { Agents: { Count: > 0 } })
         {
             <ul class="mt-2 mb-0">
-                @foreach (var agentId in _jobStatus.AgentIds)
+                @foreach (var agentTelemetry in _jobStatus.Agents)
                 {
-                    <li>@agentId</li>
+                    <li>
+                        @agentTelemetry.AgentId
+                        @if (!float.IsNaN(agentTelemetry.RejectRate))
+                        {
+                            <ul>
+                                <li>Current hashrate: @agentTelemetry.CurrentHashrate H/s</li>
+                                <li>Temperature: @agentTelemetry.Temperature °C</li>
+                                <li>Fan speed: @agentTelemetry.FanSpeed %</li>
+                                <li>GPU utilization: @agentTelemetry.GpuUtilization %</li>
+                                <li>Reject rate: @(agentTelemetry.RejectRate * 100) %</li>
+                            </ul>
+                        }
+                    </li>
                 }
             </ul>
         }

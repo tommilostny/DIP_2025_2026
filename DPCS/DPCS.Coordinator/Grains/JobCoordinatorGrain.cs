@@ -7,7 +7,9 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     private readonly ClusterIdentity _clusterIdentity;
 
     // Maps a Worker PID to the RequestId of the chunk they are currently processing.
-    private readonly Dictionary<PID, string> _activeWorkers = [];
+    private readonly Lock _workersLock = new();
+    private readonly Dictionary<PID, (string RequestId, DateTime LastSeen)> _activeWorkers = [];
+    private readonly Timer? _timeoutTimer;
 
     private IJobStrategy? _jobStrategy;
 
@@ -19,6 +21,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     private readonly string _serverBaseUrl;
 
     private readonly HashSet<RecoveredPassword> _recoveredPasswords = [];
+    private readonly Dictionary<PID, AgentTelemetry> _agentTelemetries = [];
 
     public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds, string serverBaseUrl) : base(context)
     {
@@ -26,7 +29,28 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         _hashcatWrapper = hashcatWrapper;
         _chunkAttackSeconds = chunkAttackSeconds;
         _serverBaseUrl = serverBaseUrl;
+        
+        // Setup the scanner to look for dead agents every 30 seconds
+        _timeoutTimer = new Timer(CheckTimeouts, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
         Console.WriteLine($"{_clusterIdentity.Identity}: created");
+    }
+
+    private void CheckTimeouts(object? state)
+    {
+        lock (_workersLock)
+        {
+            var now = DateTime.UtcNow;
+            var timeoutThreshold = TimeSpan.FromSeconds(45); // Allow 3 missed heartbeats
+            var deadWorkers = _activeWorkers.Where(kvp => now - kvp.Value.LastSeen > timeoutThreshold).ToList();
+            
+            foreach (var (pid, value) in deadWorkers)
+            {
+                _activeWorkers.Remove(pid);
+                _agentTelemetries.Remove(pid);
+                _jobStrategy?.FailChunk(value.RequestId);
+                Console.WriteLine($"{_clusterIdentity.Identity}: Agent {pid.Address}/{pid.Id} timed out. Re-queuing chunk {value.RequestId}.");
+            }
+        }
     }
 
     public override Task MaskJobInit(HashcatMaskJobSpecs request)
@@ -73,7 +97,22 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         // Track the worker
-        _activeWorkers[workerPid] = nextChunk.RequestId;
+        lock (_workersLock)
+        {
+            _activeWorkers[workerPid] = (nextChunk.RequestId, DateTime.UtcNow);
+            if (!_agentTelemetries.ContainsKey(workerPid))
+            {
+                _agentTelemetries[workerPid] = new AgentTelemetry
+                {
+                    AgentId = request.AgentId,
+                    CurrentHashrate = -1,
+                    Temperature = -1,
+                    FanSpeed = -1,
+                    GpuUtilization = -1,
+                    RejectRate = float.NaN
+                };
+            }
+        }
 
         return await Task.FromResult(nextChunk);
     }
@@ -109,7 +148,22 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         // Track the worker
-        _activeWorkers[workerPid] = nextChunk.RequestId;
+        lock (_workersLock)
+        {
+            _activeWorkers[workerPid] = (nextChunk.RequestId, DateTime.UtcNow);
+            if (!_agentTelemetries.ContainsKey(workerPid))
+            {
+                _agentTelemetries[workerPid] = new AgentTelemetry
+                {
+                    AgentId = request.AgentId,
+                    CurrentHashrate = -1,
+                    Temperature = -1,
+                    FanSpeed = -1,
+                    GpuUtilization = -1,
+                    RejectRate = float.NaN
+                };
+            }
+        }
 
         return await Task.FromResult(nextChunk);
     }
@@ -117,7 +171,17 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     public override async Task WorkResultSubmission(WorkResult request)
     {
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        if (_activeWorkers.Remove(workerPid, out var requestId))
+        string? requestId = null;
+        lock (_workersLock)
+        {
+            if (_activeWorkers.TryGetValue(workerPid, out var state))
+            {
+                requestId = state.RequestId;
+                _activeWorkers.Remove(workerPid);
+            }
+        }
+
+        if (requestId is not null)
         {
             // Mark the chunk as complete in the strategy.
             _jobStrategy?.CompleteChunk(requestId);
@@ -161,6 +225,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             Console.WriteLine($"{_clusterIdentity.Identity}: updated progress for job: {progress}%");
             if (progress >= 100)
             {
+                _timeoutTimer?.Dispose();
                 // Notify the JobManagerGrain that the job is complete
                 var cluster = System.Cluster();
                 var manager = cluster.GetJobManagerGrain("root");
@@ -169,8 +234,17 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
     }
 
-    public override /*async*/ Task Heartbeat(AgentTelemetry request)
+    public override Task Heartbeat(AgentTelemetry request)
     {
+        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
+        lock (_workersLock)
+        {
+            if (_activeWorkers.TryGetValue(workerPid, out var state))
+            {
+                _activeWorkers[workerPid] = (state.RequestId, DateTime.UtcNow);
+                _agentTelemetries[workerPid] = request;
+            }
+        }
         return Task.CompletedTask;
     }
 
@@ -195,7 +269,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             JobId = _clusterIdentity.Identity,
             Status = progress < 100 ? "In Progress" : "Completed",
             ProgressPercentage = progress,
-            AgentIds = { _activeWorkers.Keys.Select(pid => pid.ToString()) },
+            Agents = { _agentTelemetries.Values },
             ChunkAttackSeconds = _chunkAttackSeconds,
             RecoveredPasswords = { _recoveredPasswords },
         };
@@ -207,15 +281,21 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         // Placeholder implementation for job cancellation
         Console.WriteLine($"{_clusterIdentity.Identity}: received job cancellation request");
         _jobStrategy = null;
+        _timeoutTimer?.Dispose();
 
         // Send cancellation signal to all active worker actors
-        foreach (var worker in _activeWorkers.Keys)
+        List<PID> workersToStop;
+        lock (_workersLock)
+        {
+            workersToStop = [.. _activeWorkers.Keys];
+            _activeWorkers.Clear();
+            _agentTelemetries.Clear();
+        }
+        foreach (var worker in workersToStop)
         {
             Context.Send(worker, new StopWork());
             // We don't need to FailChunk here because the job is being cancelled entirely.
         }
-
-        _activeWorkers.Clear();
 
         Context.Stop(Context.Self);
         await Task.CompletedTask;

@@ -102,18 +102,20 @@ message JobResult {
 // Telemetry data sent by agent to coordinator, to mark it as alive and provide status
 message AgentTelemetry {
   AgentId agent_id = 1;
-  double current_hashrate = 2;
-  double average_temperature = 3;
-  double average_fan_speed = 4;
+  int64 current_hashrate = 2;
+  int32 temperature = 3;
+  int32 fan_speed = 4;
+  int32 gpu_utilization = 5;
+  float reject_rate = 6;
 }
 
 // Message for reporting job status in response to GetJobStatus RPC
 message JobStatus {
   string job_id = 1;
   string status = 2; // e.g. "In Progress", "Completed", "Cancelled"
-  double progress_percentage = 3; // e.g. 75.5 for 75.5% completed
+  float progress_percentage = 3; // e.g. 75.5 for 75.5% completed
   uint64 chunk_attack_seconds = 4;
-  repeated string agent_ids = 5;
+  repeated AgentTelemetry agents = 5;
   repeated RecoveredPassword recovered_passwords = 6;
 }
 

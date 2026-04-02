@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace DPCS.Shared.Wrappers;
 
@@ -10,6 +11,12 @@ namespace DPCS.Shared.Wrappers;
 /// <param name="workloadProfile">The workload profile to use. Defaults to 2 (/4).</param>
 public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadProfile = 2)
 {
+    public int Temperature { get; private set; }
+    public int FanSpeed { get; private set; }
+    public int GpuUtilization { get; private set; }
+    public float RejectRate { get; private set; }
+    public long CurrentHashrate { get; private set; }
+
     public async Task<List<RecoveredPassword>> RunHashcatMaskAttackAsync(MaskWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
     {
         var argumentsBuilder = new StringBuilder();
@@ -60,9 +67,22 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         arguments.Append(" --quiet"); // Suppress non-essential output for cleaner logs
         arguments.Append(" --potfile-disable"); // Do not skip work using cached potfiles
         arguments.Append($" --outfile=\"{outFilePath}\""); // Safely write cracked passwords to a temp file
+        arguments.Append(" --status --status-json --status-timer 5"); // Periodically print JSON status to stdout
+
+        ResetTelemetry();
 
         // Using captureOutput: false streams the live hashcat progress to the agent's console
-        await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: false, cancellationToken);
+        await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: false, cancellationToken, line => 
+        {
+            if (line.StartsWith('{') && line.EndsWith('}'))
+            {
+                ParseTelemetryJson(line);
+            }
+            else
+            {
+                Console.WriteLine(line);
+            }
+        });
 
         if (!File.Exists(outFilePath)) return [];
 
@@ -216,15 +236,61 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         throw new Exception("Failed to parse total candidates from Hashcat output.");
     }
 
-    private async Task<string> ExecuteHashcatInternalAsync(string arguments, bool captureOutput, CancellationToken cancellationToken)
+    private void ParseTelemetryJson(string json)
     {
-        Console.WriteLine($"{hashcatPath} {arguments}");
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("devices", out var devices) && devices.ValueKind == JsonValueKind.Array)
+            {
+                int tempSum = 0, fanSum = 0, utilSum = 0, validDevices = 0;
+                long speedSum = 0;
+
+                foreach (var device in devices.EnumerateArray())
+                {
+                    if (device.TryGetProperty("temp", out var t)) tempSum += t.GetInt32();
+                    if (device.TryGetProperty("fanspeed", out var f)) fanSum += f.GetInt32();
+                    if (device.TryGetProperty("util", out var u)) utilSum += u.GetInt32();
+                    if (device.TryGetProperty("speed", out var s)) speedSum += s.GetInt64();
+                    validDevices++;
+                }
+
+                if (validDevices > 0)
+                {
+                    Temperature = tempSum / validDevices;
+                    FanSpeed = fanSum / validDevices;
+                    GpuUtilization = utilSum / validDevices;
+                    CurrentHashrate = speedSum;
+                }
+            }
+
+            if (root.TryGetProperty("rejected", out var rej) && root.TryGetProperty("progress", out var prog) && prog.ValueKind == JsonValueKind.Array && prog.GetArrayLength() > 0)
+            {
+                var rejected = rej.GetSingle();
+                var progress = prog[0].GetSingle();
+                RejectRate = progress > 0 ? (rejected / progress) : 0;
+            }
+        }
+        catch { /* Ignore parse errors from malformed JSON strings */ }
+    }
+
+    private void ResetTelemetry()
+    {
+        Temperature = 0; FanSpeed = 0; GpuUtilization = 0;
+        RejectRate = 0; CurrentHashrate = 0;
+    }
+
+    private async Task<string> ExecuteHashcatInternalAsync(string arguments, bool captureOutput, CancellationToken cancellationToken, Action<string>? onLine = null)
+    {
+        //Console.WriteLine($"{hashcatPath} {arguments}");
         var startInfo = new ProcessStartInfo
         {
             FileName = hashcatPath,
             Arguments = arguments,
-            RedirectStandardOutput = captureOutput,
-            RedirectStandardError = captureOutput,
+            RedirectStandardOutput = true, // Always redirect so we can intercept JSON lines
+            RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -244,33 +310,28 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         var outputBuilder = captureOutput ? new StringBuilder() : null;
         var outputLock = new object();
 
-        if (captureOutput)
+        process.OutputDataReceived += (sender, e) =>
         {
-            process.OutputDataReceived += (sender, e) =>
+            if (!string.IsNullOrEmpty(e.Data))
             {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
-                }
-            };
+                if (captureOutput) lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
+                onLine?.Invoke(e.Data);
+            }
+        };
 
-            process.ErrorDataReceived += (sender, e) =>
+        process.ErrorDataReceived += (sender, e) =>
+        {
+            if (!string.IsNullOrEmpty(e.Data))
             {
-                if (!string.IsNullOrEmpty(e.Data))
-                {
-                    lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
-                    Console.WriteLine($"[Hashcat Error] {e.Data}");
-                }
-            };
-        }
+                if (captureOutput) lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
+                else Console.WriteLine($"[Hashcat Error] {e.Data}");
+            }
+        };
 
         process.Start();
 
-        if (captureOutput)
-        {
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-        }
+        process.BeginOutputReadLine();
+        process.BeginErrorReadLine();
 
         try
         {

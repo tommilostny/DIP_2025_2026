@@ -12,6 +12,6 @@ public interface IJobStrategy
     Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate);
     void CompleteChunk(string requestId);
     void FailChunk(string requestId);
-    double GetProgress();
+    float GetProgress();
     void HandleRecoveredPasswords(IEnumerable<RecoveredPassword> recoveredPasswords);
 }

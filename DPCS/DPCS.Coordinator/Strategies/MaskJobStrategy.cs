@@ -92,10 +92,10 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
         }
     }
 
-    public double GetProgress() 
+    public float GetProgress() 
     {
-        if (!_totalKeyspace.HasValue || _totalKeyspace == 0) return 0.0;
-        return (double)_currentOffset / _totalKeyspace.Value * 100.0;
+        if (!_totalKeyspace.HasValue || _totalKeyspace == 0) return 0.0f;
+        return (float)_currentOffset / _totalKeyspace.Value * 100.0f;
     }
 
     public void HandleRecoveredPasswords(IEnumerable<RecoveredPassword> recoveredPasswords)

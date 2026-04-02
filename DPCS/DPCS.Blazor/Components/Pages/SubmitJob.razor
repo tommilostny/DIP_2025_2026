@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @inject ActorSystem ActorSystem
 @inject NavigationManager NavigationManager
+@inject WordlistService WordlistService
 
 <PageTitle>Submit Job</PageTitle>
 
@@ -140,9 +141,29 @@
                     <div class="card-header">Dictionary Attack Settings</div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">Wordlists (one path per line)</label>
-                            <InputTextArea @bind-Value="Model.Wordlists" class="form-control" rows="3" />
+                            <label class="form-label">Available Wordlists</label>
+                            <div class="border rounded p-2 bg-white" style="max-height: 200px; overflow-y: auto;">
+                                @if (_availableWordlists.Count == 0)
+                                {
+                                    <span class="text-muted">No wordlists available. Please go to the Wordlists page to upload some first.</span>
+                                }
+                                else
+                                {
+                                    @foreach (var wl in _availableWordlists)
+                                    {
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="@($"wl_{_availableWordlists.IndexOf(wl)}")"
+                                                   checked="@_selectedWordlists.Contains(wl)"
+                                                   @onchange="@(e => ToggleWordlist(wl, e.Value))" />
+                                            <label class="form-check-label" for="@($"wl_{_availableWordlists.IndexOf(wl)}")">
+                                                @wl
+                                            </label>
+                                        </div>
+                                    }
+                                }
+                            </div>
                             <ValidationMessage For="() => Model.Wordlists" />
+                            <div class="form-text text-muted">Select one or more wordlists for the dictionary attack.</div>
                         </div>
                     </div>
                 </div>
@@ -161,10 +182,30 @@
 
     private bool _isSubmitting;
     private bool _showMaskHelp;
+    private List<string> _availableWordlists = [];
+    private HashSet<string> _selectedWordlists = [];
 
     protected override void OnInitialized()
     {
         Model ??= new();
+        _availableWordlists = WordlistService.GetAvailableWordlists().ToList();
+        
+        // Pre-populate selections if Model.Wordlists has existing data (e.g. page reload on validation fail)
+        if (!string.IsNullOrWhiteSpace(Model.Wordlists))
+        {
+            var existing = Model.Wordlists.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var item in existing) _selectedWordlists.Add(item);
+        }
+    }
+
+    private void ToggleWordlist(string wordlist, object? isChecked)
+    {
+        if (isChecked is true) _selectedWordlists.Add(wordlist);
+        else _selectedWordlists.Remove(wordlist);
+
+        // Sync the HashSet back to the Model string so that DataAnnotations validation 
+        // correctly evaluates whether the user has selected at least one wordlist.
+        Model!.Wordlists = string.Join('\n', _selectedWordlists);
     }
 
     private async Task HandleValidSubmit()
