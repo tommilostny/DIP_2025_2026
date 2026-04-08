@@ -7,6 +7,9 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
     private int _currentWordlistIndex = 0;
     private int _currentIntervalIndex = 0;
     private long[]? _currentWordlistIndexData;
+    
+    private readonly int[] _completedIntervals = new int[specs.Wordlists.Count];
+    private readonly int[] _totalIntervals = new int[specs.Wordlists.Count];
 
     private static readonly HttpClient HttpClient = new();
 
@@ -91,7 +94,11 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
 
     public void CompleteChunk(string requestId)
     {
-        _activeChunks.Remove(requestId);
+        if (_activeChunks.Remove(requestId, out var chunkInfo))
+        {
+            _completedIntervals[chunkInfo.WordlistIndex] += (chunkInfo.EndInterval - chunkInfo.StartInterval);
+            Console.WriteLine($"Chunk completed: RequestId: {requestId}");
+        }
     }
 
     public void FailChunk(string requestId)
@@ -104,18 +111,25 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
 
     public float GetProgress()
     {
+        if (specs.Hashes.Count == 0) return 100.0f;
         if (specs.Wordlists.Count == 0) return 0.0f;
 
-        // Calculate progress across all wordlists
-        var baseProgress = (float)_currentWordlistIndex / specs.Wordlists.Count * 100.0f;
+        float progress = 0f;
+        float slice = 100.0f / specs.Wordlists.Count;
 
-        if (_currentWordlistIndexData is { Length: > 0 })
+        for (int i = 0; i < specs.Wordlists.Count; i++)
         {
-            var currentWordlistProgress = (float)_currentIntervalIndex / _currentWordlistIndexData.Length * (100.0f / specs.Wordlists.Count);
-            return baseProgress + currentWordlistProgress;
+            if (_totalIntervals[i] > 0)
+            {
+                progress += ((float)_completedIntervals[i] / _totalIntervals[i]) * slice;
+            }
+            else if (i < _currentWordlistIndex)
+            {
+                progress += slice;
+            }
         }
 
-        return baseProgress;
+        return Math.Min(100.0f, progress);
     }
 
     public void HandleRecoveredPasswords(IEnumerable<RecoveredPassword> recoveredPasswords)
@@ -123,6 +137,11 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         foreach (var pwd in recoveredPasswords)
         {
             specs.Hashes.Remove(pwd.Hash);
+        }
+        if (specs.Hashes.Count == 0)
+        {
+            Console.WriteLine($"All hashes have been cracked for job {jobId}. Marking job as complete.");
+            _currentWordlistIndex = specs.Wordlists.Count; // Force completion
         }
     }
 
@@ -135,5 +154,6 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
 
         // Reinterpret the downloaded bytes as longs and copy directly into an array
         _currentWordlistIndexData = MemoryMarshal.Cast<byte, long>(bytes).ToArray();
+        _totalIntervals[_currentWordlistIndex] = Math.Max(1, _currentWordlistIndexData.Length - 1);
     }
 }

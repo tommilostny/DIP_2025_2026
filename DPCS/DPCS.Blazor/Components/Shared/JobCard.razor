@@ -84,7 +84,7 @@
                 @foreach (var agentTelemetry in _jobStatus.Agents)
                 {
                     <li>
-                        @agentTelemetry.AgentId
+                        @agentTelemetry.AgentId.Address/@agentTelemetry.AgentId.Id
                         @if (!float.IsNaN(agentTelemetry.RejectRate))
                         {
                             <ul>

@@ -67,21 +67,21 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         arguments.Append(" --quiet"); // Suppress non-essential output for cleaner logs
         arguments.Append(" --potfile-disable"); // Do not skip work using cached potfiles
         arguments.Append($" --outfile=\"{outFilePath}\""); // Safely write cracked passwords to a temp file
-        arguments.Append(" --status --status-json --status-timer 5"); // Periodically print JSON status to stdout
+        //arguments.Append(" --status --status-json --status-timer 5"); // Periodically print JSON status to stdout
 
         ResetTelemetry();
 
         // Using captureOutput: false streams the live hashcat progress to the agent's console
         await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: false, cancellationToken, line => 
         {
-            if (line.StartsWith('{') && line.EndsWith('}'))
-            {
-                ParseTelemetryJson(line);
-            }
-            else
-            {
-                Console.WriteLine(line);
-            }
+            //if (line.StartsWith('{') && line.EndsWith('}'))
+            //{
+            //    ParseTelemetryJson(line);
+            //}
+            //else
+            //{
+            //    Console.WriteLine(line);
+            //}
         });
 
         if (!File.Exists(outFilePath)) return [];
@@ -289,8 +289,8 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         {
             FileName = hashcatPath,
             Arguments = arguments,
-            RedirectStandardOutput = true, // Always redirect so we can intercept JSON lines
-            RedirectStandardError = true,
+            RedirectStandardOutput = captureOutput,// true, // Always redirect so we can intercept JSON lines
+            RedirectStandardError = captureOutput,// true,
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -324,14 +324,17 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
             if (!string.IsNullOrEmpty(e.Data))
             {
                 if (captureOutput) lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
-                else Console.WriteLine($"[Hashcat Error] {e.Data}");
+                else Console.Error.WriteLine($"[Hashcat Error] {e.Data}");
             }
         };
 
         process.Start();
 
-        process.BeginOutputReadLine();
-        process.BeginErrorReadLine();
+        if (captureOutput)
+        {
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+        }
 
         try
         {

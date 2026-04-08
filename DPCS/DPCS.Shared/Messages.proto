@@ -27,22 +27,24 @@ message JobAssignment {
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
 message HashcatMaskJobSpecs {
   repeated string hashes = 1;
-  string mask = 2;
-  int32 min_length = 3;
-  int32 max_length = 4;
-  int32 hash_type = 5;
-  string custom_charset1 = 6;
-  string custom_charset2 = 7;
-  string custom_charset3 = 8;
-  string custom_charset4 = 9;
+  uint32 chunk_time_seconds = 2;
+  string mask = 3;
+  int32 min_length = 4;
+  int32 max_length = 5;
+  int32 hash_type = 6;
+  string custom_charset1 = 7;
+  string custom_charset2 = 8;
+  string custom_charset3 = 9;
+  string custom_charset4 = 10;
 }
 
 // Parameters for submitting a Hashcat dictionary attack job by user in the web interface
 message HashcatDictionaryJobSpecs {
   repeated string hashes = 1;
-  repeated string wordlists = 2;
-  int32 hash_type = 3;
-  repeated string rule_files = 4;
+  uint32 chunk_time_seconds = 2;
+  repeated string wordlists = 3;
+  int32 hash_type = 4;
+  repeated string rule_files = 5;
 }
 
 // Message sent by agent to request more work
@@ -121,4 +123,17 @@ message JobStatus {
 
 message JobsCollection {
   repeated JobAssignment jobs = 1;
+}
+
+message JobRegistration {
+    string JobId = 1;
+    int32 AttackMode = 2;
+    int32 HashType = 3;
+    google.protobuf.Timestamp StartTime = 4;
+}
+
+message JobProgressUpdate {
+    string JobId = 1;
+    float ProgressPercentage = 2;
+    string Status = 3; // e.g., "Running", "Completed", "Cancelled"
 }

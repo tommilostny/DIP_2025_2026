@@ -1,4 +1,5 @@
 using DPCS.Coordinator;
+using DPCS.DAL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,11 +30,6 @@ Option<int> portOption = new("--port", "-pt")
     Description = "Port for Proto.Actor (optional, defaults to 0 for dynamic)",
     DefaultValueFactory = _ => 0
 };
-Option<int> chunkTimeOption = new("--chunk-time", "-ct")
-{
-    Description = "Target time in seconds for each work chunk assigned to agents (optional)",
-    DefaultValueFactory = _ => 60
-};
 Option<bool> noConsulOption = new("--no-consul", "-nc")
 {
     Description = "Do not start the local Consul agent automatically"
@@ -45,7 +41,6 @@ rootCommand.Options.Add(consulPathOption);
 rootCommand.Options.Add(serverIpOption);
 rootCommand.Options.Add(hostOption);
 rootCommand.Options.Add(portOption);
-rootCommand.Options.Add(chunkTimeOption);
 rootCommand.Options.Add(noConsulOption);
 
 if (args.Contains("--help") || args.Contains("-h"))
@@ -91,7 +86,6 @@ else
     Console.WriteLine($"Using Host IP: {hostIp}");
 }
 var port = parseResult.GetValue(portOption);
-var chunkTime = parseResult.GetValue(chunkTimeOption);
 
 System.Diagnostics.Process? consulProcess = null;
 if (!noConsul)
@@ -117,7 +111,6 @@ try
                 { "ProtoActor:Consul", ConsulWrapper.ConsulAddress },
                 { "ProtoActor:Host", hostIp },
                 { "ProtoActor:Port", port.ToString() },
-                { "DPCS:ChunkTimeSeconds", chunkTime.ToString() },
                 { "DPCS:ServerBaseUrl", serverIp switch {
                         null or "" => null,
                         _ => $"http://{serverIp}:5065"
@@ -128,9 +121,7 @@ try
         })
         .ConfigureServices((context, services) =>
         {
-            services.AddDbContextFactory<DpcsDbContext>(options =>
-                options.UseSqlite("Data Source=dpcs_coordinator.db")
-            );
+            services.AddDpcsDbContextFactory("Data Source=dpcs_coordinator.db");
 
             services.AddSingleton(new HashcatWrapper(hashcatPath));
             
@@ -139,12 +130,7 @@ try
         })
         .Build();
 
-    using (var scope = host.Services.CreateScope())
-    {
-        var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DpcsDbContext>>();
-        using var dbContext = dbContextFactory.CreateDbContext();
-        dbContext.Database.EnsureCreated();
-    }
+    host.Services.EnsureDpcsDbCreated();
 
     var loggerFactory = host.Services.GetRequiredService<ILoggerFactory>();
     Proto.Log.SetLoggerFactory(loggerFactory);

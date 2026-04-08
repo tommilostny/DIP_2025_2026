@@ -1,0 +1,151 @@
+@page "/job-history"
+@rendermode InteractiveServer
+@using DPCS.DAL
+@using DPCS.DAL.Entities
+@using DPCS.Blazor.Models
+@using DPCS.Shared
+@using Microsoft.EntityFrameworkCore
+@inject IDbContextFactory<DpcsDbContext> DbFactory
+
+<PageTitle>Job History</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1>Job History</h1>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" @onclick="LoadDataAsync">
+            Refresh
+        </button>
+        <select class="form-select w-auto" @bind="SortOrder" @bind:after="LoadDataAsync">
+            <option value="Newest">Newest First</option>
+            <option value="Oldest">Oldest First</option>
+        </select>
+    </div>
+</div>
+
+@if (_isLoading)
+{
+    <div class="spinner-border text-primary" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else if (!_jobGroups.Any())
+{
+    <p class="text-muted">No jobs found in the database.</p>
+}
+else
+{
+    @foreach (var group in _jobGroups)
+    {
+        <h4 class="mt-4 mb-3 border-bottom pb-2">@group.Key.ToString("MMMM dd, yyyy")</h4>
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
+            @foreach (var job in group.Jobs)
+            {
+                <div class="col">
+                    <div class="card h-100 shadow-sm border-0">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <span class="text-truncate me-2 font-monospace small" title="@job.JobId">
+                                <strong>@job.JobId.Split('/').LastOrDefault()</strong>
+                            </span>
+                            @GetStatusBadge(job.Status)
+                        </div>
+                        <div class="card-body">
+                            <h5 class="card-title">
+                                @(((AttackMode)job.AttackMode).ToString()) Attack
+                            </h5>
+                            <h6 class="card-subtitle mb-3 text-muted">
+                                @HashTypeMap.GetHashTypeName(job.HashType)
+                            </h6>
+                            
+                            @if (job.Status == "Running")
+                            {
+                                <div class="progress mb-3" style="height: 8px;">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                         role="progressbar" 
+                                         style="width: @Math.Round(job.ProgressPercentage)%;" 
+                                         aria-valuenow="@Math.Round(job.ProgressPercentage)" 
+                                         aria-valuemin="0" 
+                                         aria-valuemax="100"></div>
+                                </div>
+                            }
+
+                            <div class="d-flex flex-column gap-1 small text-secondary">
+                                <div><strong>Start:</strong> @job.StartTime.ToLocalTime().ToString("HH:mm:ss")</div>
+                                @if (job.EndTime.HasValue)
+                                {
+                                    <div><strong>End:</strong> @job.EndTime.Value.ToLocalTime().ToString("HH:mm:ss")</div>
+                                }
+                                <div><strong>Duration:</strong> @GetDuration(job)</div>
+                            </div>
+                        </div>
+                        @if (job.Status is "Completed" or "Cancelled")
+                        {
+                            <div class="card-footer bg-white border-top-0 pt-0">
+                                <a href="/job-details/@Uri.EscapeDataString(job.JobId)" class="btn btn-sm btn-outline-primary w-100">View Details</a>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private bool _isLoading = true;
+    private List<JobGroup> _jobGroups = [];
+    public string SortOrder { get; set; } = "Newest";
+
+    private class JobGroup
+    {
+        public DateTime Key { get; set; }
+        public List<JobRecordEntity> Jobs { get; set; } = [];
+    }
+
+    protected override async Task OnInitializedAsync() => await LoadDataAsync();
+
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var query = db.JobRecords.AsNoTracking();
+            query = SortOrder == "Newest"
+                ? query.OrderByDescending(j => j.StartTime)
+                : query.OrderBy(j => j.StartTime);
+            
+            var allJobs = await query.ToListAsync();
+            _jobGroups = allJobs.GroupBy(j => j.StartTime.ToLocalTime().Date)
+                                .Select(g => new JobGroup { Key = g.Key, Jobs = g.ToList() })
+                                .ToList();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private string GetDuration(JobRecordEntity job)
+    {
+        var end = job.EndTime ?? DateTime.UtcNow;
+        var span = end - job.StartTime;
+        return $"{(int)span.TotalHours:D2}:{span.Minutes:D2}:{span.Seconds:D2}";
+    }
+
+    private RenderFragment GetStatusBadge(string status) => builder =>
+    {
+        var badgeClass = status switch
+        {
+            "Completed" => "bg-success",
+            "Running" => "bg-primary",
+            "Cancelled" => "bg-danger",
+            "Initializing" => "bg-secondary",
+            _ => "bg-dark"
+        };
+
+        builder.OpenElement(0, "span");
+        builder.AddAttribute(1, "class", $"badge {badgeClass}");
+        builder.AddContent(2, status);
+        builder.CloseElement();
+    };
+}

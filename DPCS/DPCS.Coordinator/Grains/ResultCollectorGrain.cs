@@ -1,4 +1,5 @@
-using DPCS.Coordinator.Entities;
+using DPCS.DAL;
+using DPCS.DAL.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace DPCS.Coordinator.Grains;
@@ -14,6 +15,24 @@ public sealed class ResultCollectorGrain : ResultCollectorGrainBase
         _dbContextFactory = dbContextFactory;
 
         Console.WriteLine($"{_clusterIdentity.Identity}: results collector grain created");
+    }
+
+    public override async Task RegisterJob(JobRegistration request)
+    {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        
+        if (!await dbContext.JobRecords.AnyAsync(j => j.JobId == request.JobId))
+        {
+            await dbContext.JobRecords.AddAsync(new JobRecordEntity
+            {
+                JobId = request.JobId,
+                AttackMode = request.AttackMode,
+                HashType = request.HashType,
+                StartTime = request.StartTime.ToDateTime(),
+                Status = "Running"
+            });
+            await dbContext.SaveChangesAsync();
+        }
     }
 
     public override async Task StoreResult(JobResult result)
@@ -38,6 +57,25 @@ public sealed class ResultCollectorGrain : ResultCollectorGrainBase
                 TimeTaken = result.TimeTaken.ToTimeSpan(),
             });
         }
+        await dbContext.SaveChangesAsync();
+    }
+
+    public override async Task UpdateJobProgress(JobProgressUpdate request)
+    {
+        await using var dbContext = await _dbContextFactory.CreateDbContextAsync();
+        var jobRecord = await dbContext.JobRecords.FindAsync(request.JobId);
+        
+        if (jobRecord is null) return;
+
+        jobRecord.ProgressPercentage = request.ProgressPercentage;
+        jobRecord.Status = request.Status;
+        
+        // Mark the finish time if the job isn't actively running anymore
+        if (request.Status is "Completed" or "Cancelled")
+        {
+            jobRecord.EndTime = DateTime.UtcNow;
+        }
+
         await dbContext.SaveChangesAsync();
     }
 }

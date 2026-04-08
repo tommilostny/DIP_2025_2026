@@ -1,0 +1,83 @@
+@rendermode InteractiveServer
+@using Proto
+@using Proto.Cluster
+@implements IDisposable
+@inject ActorSystem ActorSystem
+
+<div class="dropdown d-flex align-items-center gap-3">
+    <span class="badge bg-@BadgeColorClass bg-opacity-10 text-@BadgeColorClass border border-@BadgeColorClass border-opacity-25 rounded-pill px-3 py-2 animate-pulse text-decoration-none"
+          style="font-size: 0.8rem; cursor: pointer;"
+          @onclick="ToggleDropdown">
+        <span class="bi bi-circle-fill small me-1"></span> @BadgeText
+    </span>
+    
+    @if (_showDropdown)
+    {
+        <!-- Transparent backdrop to close the dropdown when clicking outside -->
+        <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index: 1040;" @onclick="CloseDropdown"></div>
+
+        <div class="dropdown-menu dropdown-menu-end shadow border-0 rounded-3 p-3 mt-2 show"
+             style="width: 240px; z-index: 1050; position: absolute; right: 0; top: 100%;">
+            <div class="mb-2 border-bottom pb-2">
+                <strong class="text-dark small">Active Cluster Nodes</strong>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-2 small text-secondary">
+                <span>Coordinator Nodes</span>
+                <span class="badge bg-primary rounded-pill">@_coordinatorCount</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center small text-secondary">
+                <span>Agent Nodes</span>
+                <span class="badge bg-info rounded-pill">@_agentCount</span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private int _coordinatorCount;
+    private int _agentCount;
+    private System.Timers.Timer? _timer;
+
+    private bool _showDropdown = false;
+
+    private string BadgeColorClass => _coordinatorCount == 0 ? "danger" : (_agentCount == 0 ? "warning" : "success");
+    private string BadgeText => _coordinatorCount == 0 ? "Cluster Offline" : "Cluster Online";
+
+    protected override void OnInitialized()
+    {
+        UpdateClusterInfo();
+        
+        // Poll the cluster membership list every 5 seconds
+        _timer = new System.Timers.Timer(5000);
+        _timer.Elapsed += (sender, e) =>
+        {
+            UpdateClusterInfo();
+            InvokeAsync(StateHasChanged);
+        };
+        _timer.Start();
+    }
+
+    private void UpdateClusterInfo()
+    {
+        var members = ActorSystem.Cluster()?.MemberList?.GetAllMembers() ?? [];
+        
+        _coordinatorCount = members.Count(m => m.Kinds.Contains("JobCoordinatorGrain"));
+        _agentCount = members.Length - _coordinatorCount - 1;
+    }
+
+    private void ToggleDropdown()
+    {
+        UpdateClusterInfo();
+        _showDropdown = !_showDropdown;
+    }
+
+    private void CloseDropdown()
+    {
+        _showDropdown = false;
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

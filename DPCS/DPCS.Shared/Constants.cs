@@ -20,4 +20,6 @@ public static class Constants
         (This completely defeats the purpose of the index).
     */
     public const int IndexInterval = 10_000;
+
+    public const int DefaultChunkTimeSeconds = 30;
 }

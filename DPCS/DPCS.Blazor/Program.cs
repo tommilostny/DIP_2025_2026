@@ -1,4 +1,5 @@
 using DPCS.Blazor.Components;
+using DPCS.DAL;
 using System.CommandLine;
 
 Option<string> consulPathOption = new("--consul-path", "-c")
@@ -78,6 +79,7 @@ try
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
 
+    builder.Services.AddDpcsDbContextFactory("Data Source=../DPCS.Coordinator/dpcs_coordinator.db");
     builder.Services.AddActorSystem();
     builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 
@@ -100,6 +102,8 @@ try
     app.MapStaticAssets();
     app.MapRazorComponents<App>()
         .AddInteractiveServerRenderMode();
+
+    app.Services.EnsureDpcsDbCreated();
 
     var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
     Proto.Log.SetLoggerFactory(loggerFactory);

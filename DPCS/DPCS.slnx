@@ -2,5 +2,6 @@
   <Project Path="DPCS.Agent/DPCS.Agent.csproj" />
   <Project Path="DPCS.Blazor/DPCS.Blazor.csproj" Id="13c57a41-8068-48f8-8492-6af98d8347e6" />
   <Project Path="DPCS.Coordinator/DPCS.Coordinator.csproj" />
+  <Project Path="DPCS.DAL/DPCS.DAL.csproj" Id="bfb13d36-a024-4fde-ae7d-c108c95d91f3" />
   <Project Path="DPCS.Shared/DPCS.Shared.csproj" />
 </Solution>

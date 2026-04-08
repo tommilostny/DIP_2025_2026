@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace DPCS.Coordinator.Entities;
+namespace DPCS.DAL.Entities;
 
 public class CrackedPasswordEntity
 {

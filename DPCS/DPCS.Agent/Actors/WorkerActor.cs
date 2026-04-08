@@ -19,7 +19,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         Started => OnStarted(context),
         Stopped => OnStopped(),
         StartLoop => FindJob(context),
-        StopWork => OnStopWork(),
+        StopWork => OnStopWork(context),
         PrefetchWork => OnPrefetchWork(context),
         ProcessWork => OnProcessWork(context),
         HeartbeatTick => OnHeartbeatTick(context),
@@ -40,7 +40,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         return Task.CompletedTask;
     }
 
-    private Task OnStopWork()
+    private Task OnStopWork(IContext context)
     {
         Console.WriteLine("WorkerActor received StopWork signal.");
         _currentWorkCts?.Cancel();
@@ -63,6 +63,9 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
             CleanupJobData(_currentJob.JobId);
             _currentJob = null;
         }
+
+        // Start looking for a new job immediately after stopping current work.
+        context.Send(context.Self, new StartLoop());
         return Task.CompletedTask;
     }
 
@@ -100,8 +103,11 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
             _workQueue.Clear();
             
             // Kick off the decoupled prefetch and process loops
+            //Console.WriteLine("Before sending PrefetchWork.");
             context.Send(context.Self, new PrefetchWork());
-            context.Send(context.Self, new ProcessWork());
+            //Console.WriteLine("Before sending ProcessWork.");
+            //context.Send(context.Self, new ProcessWork());
+            //Console.WriteLine("After sending ProcessWork.");
         }
         catch (Exception ex)
         {
@@ -113,9 +119,15 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private Task OnPrefetchWork(IContext context)
     {
+        //Console.WriteLine("WorkerActor received PrefetchWork signal.");
         // Don't prefetch if the queue is full, we are already downloading, or the job is out of work
         if (_currentJob is null || _isPrefetching || _noMoreWork || _workQueue.Count >= MaxPrefetchQueueSize)
+        {
+            //Console.WriteLine("Prefetch work skipped...");
             return Task.CompletedTask;
+        }
+
+        //Console.WriteLine("Prefetch work starting on next chunk...");
 
         _isPrefetching = true;
         var fetchTask = FetchNextChunkAsync(context);
@@ -127,7 +139,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
             if (task.IsFaulted)
             {
-                Console.WriteLine($"Error fetching chunk: {task.Exception?.GetBaseException().Message}");
+                Console.Error.WriteLine($"Error fetching chunk: {task.Exception?.GetBaseException().Message}");
                 Task.Delay(5000).ContinueWith(_ => context.Send(context.Self, new PrefetchWork()));
                 return;
             }
@@ -140,11 +152,14 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
                 return;
             }
 
+            //Console.WriteLine("Chunk prefetched and added to queue.");
             _workQueue.Enqueue(chunk);
             
             // Re-trigger prefetch in case we are still below the MaxPrefetchQueueSize
+            //Console.WriteLine("Triggering another PrefetchWork just in case...");
             context.Send(context.Self, new PrefetchWork());
             // Alert the processor that a chunk is ready just in case it was idle
+            //Console.WriteLine("Triggering ProcessWork in case processor is idle...");
             context.Send(context.Self, new ProcessWork());
         });
 
@@ -153,23 +168,37 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private Task OnProcessWork(IContext context)
     {
+        //Console.WriteLine("WorkerActor received ProcessWork signal.");
+
         // Don't process if we are currently cracking or if there's nothing in the queue
         if (_currentJob is null || _isCracking || _workQueue.Count == 0)
+        {
+            //Console.WriteLine("Process work skipped...");
+            //Console.WriteLine($"CurrentJob: {_currentJob?.JobId}, IsCracking: {_isCracking}, QueueCount: {_workQueue.Count}");
+            //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(_currentJob));
             return Task.CompletedTask;
+        }
+
+        //Console.WriteLine("Process work starting on next chunk...");
 
         _isCracking = true;
         var chunk = _workQueue.Dequeue();
 
+        //Console.WriteLine("Process work, sending PrefetchWork to ensure queue is topped off...");
         // Now that a spot has opened in the queue, trigger a prefetch
         context.Send(context.Self, new PrefetchWork());
 
         _currentWorkCts = new CancellationTokenSource();
+
+        //Console.WriteLine("Before calling ProcessAndSubmitAsync...");
         var processTask = ProcessAndSubmitAsync(chunk, context);
         
         context.ReenterAfter(processTask, task =>
         {
             _isCracking = false;
             CheckJobCompletion(context);
+
+            //Console.WriteLine("After calling ProcessAndSubmitAsync, before sending next ProcessWork...");
             
             // Continue processing remaining queued chunks
             context.Send(context.Self, new ProcessWork()); 
@@ -180,11 +209,15 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private async Task ProcessAndSubmitAsync(object chunk, IContext context)
     {
+        //Console.WriteLine("Starting ProcessAndSubmitAsync for chunk...");
+
         List<RecoveredPassword> recovered = [];
         bool isFaulted = false;
         try
         {
+            //Console.WriteLine("Before calling ProcessChunkAsync...");
             recovered = await ProcessChunkAsync(chunk);
+            //Console.WriteLine("After calling ProcessChunkAsync...");
         }
         catch (Exception ex)
         {
@@ -225,6 +258,8 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private async Task<object?> FetchNextChunkAsync(IContext context)
     {
+        //Console.WriteLine("Starting FetchNextChunkAsync...");
+
         var hashrate = await hashcatWrapper.GetBenchmarkHashrateAsync(_currentJob!.HashType);
         var coordinator = cluster.GetJobCoordinatorGrain(_currentJob!.JobId);
         var workRequest = new WorkRequest
@@ -233,6 +268,8 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
             JobId = _currentJob!.JobId,
             CurrentHashrate = hashrate,
         };
+
+        //Console.WriteLine("Sending work request to coordinator...");
 
         if (_currentJob!.ModeId == (int)AttackMode.Mask)
         {
@@ -369,8 +406,10 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private async Task OnHeartbeatTick(IContext context)
     {
+        //Console.WriteLine("Heartbeat tick...");
         if (_currentJob is not null)
         {
+            //Console.WriteLine("Sending heartbeat to coordinator...");
             try
             {
                 var coordinator = cluster.GetJobCoordinatorGrain(_currentJob.JobId);

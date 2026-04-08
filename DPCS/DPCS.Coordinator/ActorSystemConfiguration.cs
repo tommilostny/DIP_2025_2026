@@ -1,4 +1,5 @@
 ﻿﻿using DPCS.Coordinator.Grains;
+using DPCS.DAL;
 using Proto.Cluster.Consul;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -8,9 +9,9 @@ namespace DPCS.Coordinator;
 
 public static class ActorSystemConfiguration
 {
-    public static void AddActorSystem(this IServiceCollection serviceCollection)
+    extension(IServiceCollection serviceCollection)
     {
-        serviceCollection.AddSingleton(provider =>
+        public void AddActorSystem() => serviceCollection.AddSingleton(provider =>
         {
             var actorSystemConfig = ActorSystemConfig
                 .Setup();
@@ -20,7 +21,6 @@ public static class ActorSystemConfiguration
             var consulAddress = config["ProtoActor:Consul"] ?? throw new InvalidOperationException("Consul address must be provided in configuration under 'ProtoActor:Consul'");
             var host = _EmptyStringToNull(config["ProtoActor:Host"]) ?? "127.0.0.1";
             var port = _TryParseInt(config["ProtoActor:Port"]) ?? 0;
-            var chunkTimeSeconds = (ulong)(_TryParseInt(config["DPCS:ChunkTimeSeconds"]) ?? 60);
             var serverBaseUrl = config["DPCS:ServerBaseUrl"] ?? "http://localhost:5065";
 
             Console.WriteLine($"Configuring ActorSystem with Consul at {consulAddress}, host {host}, port {port}");
@@ -49,7 +49,6 @@ public static class ActorSystemConfiguration
                                         context,
                                         clusterIdentity,
                                         provider.GetRequiredService<HashcatWrapper>(),
-                                        chunkTimeSeconds,
                                         serverBaseUrl
                                     )
                             )

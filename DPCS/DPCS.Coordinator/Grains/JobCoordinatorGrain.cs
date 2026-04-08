@@ -17,17 +17,16 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private readonly HashcatWrapper _hashcatWrapper;
 
-    private readonly ulong _chunkAttackSeconds;
+    private ulong _chunkAttackSeconds;
     private readonly string _serverBaseUrl;
 
     private readonly HashSet<RecoveredPassword> _recoveredPasswords = [];
     private readonly Dictionary<PID, AgentTelemetry> _agentTelemetries = [];
 
-    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, ulong chunkAttackSeconds, string serverBaseUrl) : base(context)
+    public JobCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, HashcatWrapper hashcatWrapper, string serverBaseUrl) : base(context)
     {
         _clusterIdentity = clusterIdentity;
         _hashcatWrapper = hashcatWrapper;
-        _chunkAttackSeconds = chunkAttackSeconds;
         _serverBaseUrl = serverBaseUrl;
         
         // Setup the scanner to look for dead agents every 30 seconds
@@ -53,18 +52,36 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
     }
 
-    public override Task MaskJobInit(HashcatMaskJobSpecs request)
+    public override async Task MaskJobInit(HashcatMaskJobSpecs request)
     {
+        _chunkAttackSeconds = request.ChunkTimeSeconds > 0 ? request.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds;
         _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _chunkAttackSeconds);
         _jobStartTime = DateTime.UtcNow;
-        return Task.CompletedTask;
+
+        var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);
+        await collector.RegisterJob(new JobRegistration
+        {
+            JobId = _clusterIdentity.Identity,
+            AttackMode = (int)AttackMode.Mask,
+            HashType = request.HashType,
+            StartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(_jobStartTime)
+        }, CancellationToken.None);
     }
 
-    public override Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
+    public override async Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
     {
+        _chunkAttackSeconds = request.ChunkTimeSeconds > 0 ? request.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds;
         _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _chunkAttackSeconds, _serverBaseUrl);
         _jobStartTime = DateTime.UtcNow;
-        return Task.CompletedTask;
+
+        var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);
+        await collector.RegisterJob(new JobRegistration
+        {
+            JobId = _clusterIdentity.Identity,
+            AttackMode = (int)AttackMode.Dictionary,
+            HashType = request.HashType,
+            StartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(_jobStartTime)
+        }, CancellationToken.None);
     }
 
     public override async Task<MaskWorkAssignment> MaskWorkRequest(WorkRequest request)
@@ -114,7 +131,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             }
         }
 
-        return await Task.FromResult(nextChunk);
+        return nextChunk;
     }
 
     public override async Task<DictionaryWorkAssignment> DictionaryWorkRequest(WorkRequest request)
@@ -165,7 +182,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             }
         }
 
-        return await Task.FromResult(nextChunk);
+        return nextChunk;
     }
 
     public override async Task WorkResultSubmission(WorkResult request)
@@ -230,6 +247,14 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
                 var cluster = System.Cluster();
                 var manager = cluster.GetJobManagerGrain("root");
                 await manager.FinishAck(new JobId { Id = _clusterIdentity.Identity }, CancellationToken.None);
+
+                var collector = cluster.GetResultCollectorGrain(_clusterIdentity.Identity);
+                await collector.UpdateJobProgress(new JobProgressUpdate
+                {
+                    JobId = _clusterIdentity.Identity,
+                    ProgressPercentage = 100,
+                    Status = "Completed"
+                }, CancellationToken.None);
             }
         }
     }
@@ -280,8 +305,17 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
     {
         // Placeholder implementation for job cancellation
         Console.WriteLine($"{_clusterIdentity.Identity}: received job cancellation request");
+        var finalProgress = _jobStrategy?.GetProgress() ?? 0;
         _jobStrategy = null;
         _timeoutTimer?.Dispose();
+
+        var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);
+        await collector.UpdateJobProgress(new JobProgressUpdate 
+        {
+            JobId = _clusterIdentity.Identity,
+            ProgressPercentage = finalProgress,
+            Status = "Cancelled"
+        }, CancellationToken.None);
 
         // Send cancellation signal to all active worker actors
         List<PID> workersToStop;
@@ -298,7 +332,6 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
 
         Context.Stop(Context.Self);
-        await Task.CompletedTask;
     }
 
     public override async Task<HashcatMaskJobSpecs> GetMaskJobSpecs()

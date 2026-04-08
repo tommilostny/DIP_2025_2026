@@ -5,9 +5,9 @@ namespace DPCS.Agent;
 
 public static class ActorSystemConfiguration
 {
-    public static void AddActorSystem(this IServiceCollection serviceCollection)
+    extension(IServiceCollection serviceCollection)
     {
-        serviceCollection.AddSingleton(provider =>
+        public void AddActorSystem() => serviceCollection.AddSingleton(provider =>
         {
             var actorSystemConfig = ActorSystemConfig
                 .Setup();

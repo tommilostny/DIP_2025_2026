@@ -40,6 +40,13 @@
                 <div class="form-text text-muted">Select from the list or type the Hashcat mode number manually.</div>
             </div>
 
+            <div class="mb-3">
+                <label class="form-label">Chunk Time (seconds)</label>
+                <InputNumber @bind-Value="Model.ChunkTimeSeconds" class="form-control" />
+                <ValidationMessage For="() => Model.ChunkTimeSeconds" />
+                <div class="form-text text-muted">Target time for each work chunk assigned to agents.</div>
+            </div>
+
             @if (Model.AttackMode == AttackMode.Mask)
             {
                 <div class="card mb-3">
@@ -230,7 +237,8 @@
                     CustomCharset1 = Model.CustomCharset1 ?? "",
                     CustomCharset2 = Model.CustomCharset2 ?? "",
                     CustomCharset3 = Model.CustomCharset3 ?? "",
-                    CustomCharset4 = Model.CustomCharset4 ?? ""
+                    CustomCharset4 = Model.CustomCharset4 ?? "",
+                    ChunkTimeSeconds = (uint)(Model.ChunkTimeSeconds > 0 ? Model.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds)
                 };
                 await jobManager.MaskJobSubmission(request, CancellationToken.None);
             }
@@ -243,6 +251,7 @@
                     Hashes = { hashes },
                     Wordlists = { wordlists },
                     HashType = int.Parse(Model.HashType),
+                    ChunkTimeSeconds = (uint)(Model.ChunkTimeSeconds > 0 ? Model.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds)
                 };
                 await jobManager.DictionaryJobSubmission(request, CancellationToken.None);
             }

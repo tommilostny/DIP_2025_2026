@@ -9,7 +9,9 @@ public class SubmitJobViewModel : IValidatableObject
     [Required(ErrorMessage = "At least one hash must be provided.")]
     public string Hashes { get; set; } = "";
 
-    [Required]
+    public int ChunkTimeSeconds { get; set; } = Constants.DefaultChunkTimeSeconds;
+
+    [Required(ErrorMessage = "Hash type must be specified.")]
     public string HashType { get; set; } = "0";
 
     public string? Mask { get; set; } = "";

@@ -5,6 +5,7 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
     private ulong _currentOffset = 0;
     private ulong? _totalKeyspace;
     private ulong? _totalCandidates;
+    private ulong _completedKeyspace = 0;
 
     private readonly Dictionary<string, (ulong Start, ulong Length)> _activeChunks = [];
     private readonly Queue<(ulong Start, ulong Length)> _retryQueue = [];
@@ -80,8 +81,11 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
 
     public void CompleteChunk(string requestId)
     {
-        Console.WriteLine($"Chunk completed: RequestId: {requestId}");
-        _activeChunks.Remove(requestId);
+        if (_activeChunks.Remove(requestId, out var chunkInfo))
+        {
+            _completedKeyspace += chunkInfo.Length;
+            Console.WriteLine($"Chunk completed: RequestId: {requestId}");
+        }
     }
 
     public void FailChunk(string requestId)
@@ -94,8 +98,9 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
 
     public float GetProgress() 
     {
+        if (specs.Hashes.Count == 0) return 100.0f;
         if (!_totalKeyspace.HasValue || _totalKeyspace == 0) return 0.0f;
-        return (float)_currentOffset / _totalKeyspace.Value * 100.0f;
+        return Math.Min(100.0f, (float)_completedKeyspace / _totalKeyspace.Value * 100.0f);
     }
 
     public void HandleRecoveredPasswords(IEnumerable<RecoveredPassword> recoveredPasswords)
@@ -108,7 +113,8 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
         {
             // All hashes have been cracked, we can consider the job complete.
             Console.WriteLine($"All hashes have been cracked for job {jobId}. Marking job as complete.");
-            _currentOffset = _totalKeyspace ?? 0; // Force completion
+            _currentOffset = _totalKeyspace ?? 0; // Force completion dispatch
+            _completedKeyspace = _totalKeyspace ?? 0; // Force completion progress
         }
     }
 }

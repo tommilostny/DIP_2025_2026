@@ -22,13 +22,11 @@
     <PackageReference Include="Proto.OpenTelemetry" Version="1.8.0" />
     <PackageReference Include="Proto.Remote" Version="1.8.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.5" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.5" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.5" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DPCS.DAL\DPCS.DAL.csproj" />
     <ProjectReference Include="..\DPCS.Shared\DPCS.Shared.csproj" />
   </ItemGroup>
 

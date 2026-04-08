@@ -25,6 +25,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DPCS.DAL\DPCS.DAL.csproj" />
     <ProjectReference Include="..\DPCS.Shared\DPCS.Shared.csproj" />
   </ItemGroup>
 </Project>
