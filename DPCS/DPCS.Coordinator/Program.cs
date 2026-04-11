@@ -121,7 +121,7 @@ try
         })
         .ConfigureServices((context, services) =>
         {
-            services.AddDpcsDbContextFactory("Data Source=dpcs_coordinator.db");
+            services.AddDpcsDbContextFactory("localhost", 5432, "dpcs", "postgres", "password123");
 
             services.AddSingleton(new HashcatWrapper(hashcatPath));
             

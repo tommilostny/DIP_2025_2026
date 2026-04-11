@@ -79,7 +79,7 @@ try
     builder.Services.AddRazorComponents()
         .AddInteractiveServerComponents();
 
-    builder.Services.AddDpcsDbContextFactory("Data Source=../DPCS.Coordinator/dpcs_coordinator.db");
+    builder.Services.AddDpcsDbContextFactory("localhost", 5432, "dpcs", "postgres", "password123");
     builder.Services.AddActorSystem();
     builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 

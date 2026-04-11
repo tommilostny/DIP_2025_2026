@@ -7,10 +7,12 @@ public static class DpcsDbContextExtensions
 {
     extension(IServiceCollection services)
     {
-        public void AddDpcsDbContextFactory(string connectionString)
+        public void AddDpcsDbContextFactory(string host, int port, string database, string username, string password)
         {
+            var connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+
             services.AddDbContextFactory<DpcsDbContext>(options =>
-                options.UseSqlite(connectionString));
+                options.UseNpgsql(connectionString));
         }
     }
 
@@ -21,7 +23,7 @@ public static class DpcsDbContextExtensions
             using var scope = serviceProvider.CreateScope();
             var dbContextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DpcsDbContext>>();
             using var dbContext = dbContextFactory.CreateDbContext();
-            dbContext.Database.EnsureCreated();
+            dbContext.Database.Migrate();
         }
     }
 }

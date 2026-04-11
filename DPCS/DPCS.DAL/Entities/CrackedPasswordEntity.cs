@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+//using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DPCS.DAL.Entities;
 
@@ -12,4 +13,7 @@ public class CrackedPasswordEntity
     public required TimeSpan TimeTaken { get; set; }
     public required int AttackMode { get; set; }
     public required string JobId { get; set; }
+
+    //[ForeignKey(nameof(JobId))]
+    //public JobRecordEntity? JobRecord { get; set; }
 }
