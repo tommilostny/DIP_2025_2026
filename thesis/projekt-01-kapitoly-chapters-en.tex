@@ -644,10 +644,9 @@ Because of the "At-Least-Once" retry logic, it is possible for a chunk to be pro
     \item \textbf{Actor Logic}: The \verb|ResultCollector| checks an in-memory Bloom filter of recently cracked hashes before attempting a database write. If a password for a specific hash is received twice, the second message is acknowledged but discarded. This ensures that the system state remains consistent regardless of message duplication.
 \end{itemize}
 
-\begin{comment}
 
 % =========================================
-% CHAPTER 4: IMPLEMENTATION
+% CHAPTER 5: IMPLEMENTATION
 % =========================================
 \chapter{Implementation and deployment in a test environment}
 \label{chap:implementation}
@@ -658,6 +657,55 @@ Because of the "At-Least-Once" retry logic, it is possible for a chunk to be pro
 
 \section{Coordinator service implementation}
 % Job submission, progress tracking, and result aggregation.
+
+%GOOOD STUFF FOR REVIEW
+\section{Job ID Security and Denial of Service Mitigation}
+
+In distributed systems based on the Virtual Actor Model (such as Proto.Cluster or Microsoft Orleans), actors are lifecycle-managed automatically. Addressing an actor by its identity triggers its activation if it is not currently in memory. This behavior, while simplifying state management, introduces a specific Denial of Service (DoS) vulnerability.
+
+If the system exposes an endpoint (e.g., \verb|GET /job-status/{jobId}|) that directly maps user input to an actor identity, an attacker can launch a \textbf{Resource Exhaustion Attack}\cite{THIS}. By flooding the endpoint with millions of random, invalid Job IDs, the attacker forces the cluster to spawn a corresponding number of "ghost" actors. Although individual actors are lightweight, millions of concurrent activations can rapidly consume available RAM, leading to Out-Of-Memory (OOM) crashes and cluster instability.
+
+Traditional database lookups to verify existence before activation negate the performance benefits of the actor model. Therefore, a stateless, algorithmic verification mechanism is required at the API gateway level.
+
+\textbf{Cryptographically Signed Identifiers}: To mitigate this vulnerability, the system implements a \textbf{Stateless Cryptographic Signature}\cite{THIS} pattern. Instead of using raw GUIDs as Job IDs, the system issues "Signed Job IDs." These IDs contain both the unique identifier and a cryptographic authentication tag (HMAC)\cite{THIS}.
+
+The API Gateway validates this signature before interacting with the actor system. Requests with invalid signatures are rejected immediately at the edge, preventing the instantiation of invalid actors and protecting the cluster's memory resources.
+
+\subsection{ID Structure and Binary Packing}
+To maintain URL friendliness and minimize payload size, the system utilizes a custom binary packing format rather than a verbose JSON Web Token (JWT)\footnote{THIS}. The ID is constructed as a 32-byte binary array consisting of two segments:
+
+\begin{enumerate}
+    \item \textbf{Payload (16 bytes)}: A standard 128-bit UUID (Guid) representing the unique job entity.
+    \item \textbf{Signature (16 bytes)}: The first 128 bits of an HMAC-SHA256 hash computed over the Payload.
+\end{enumerate}
+
+$$ \text{JobID} = \text{Base64}{\text{URL}}(\text{UUID} \parallel \text{Truncate}{128}(\text{HMAC}(\text{Key}, \text{UUID}))) $$
+
+\subsection{Cryptographic Primitive}
+
+\begin{itemize}
+    \item \textbf{Algorithm}: HMAC-SHA256 is selected for its speed and resistance to length extension attacks.
+    \item \textbf{Key Management}: A symmetric secret key is held by the Coordinator nodes.
+    \item \textbf{Truncation}: The SHA-256 output (32 bytes) is truncated to 16 bytes. According to NIST SP 800-107, truncating an HMAC does not degrade its security properties relative to the truncated length. A 128-bit tag provides a collision resistance of $2^{64}$ and preimage resistance of $2^{128}$, which is sufficient for preventing ID forgery in this context.
+\end{itemize}
+
+\subsection{Zero-Allocation Verification (Performance)}
+
+Given that ID validation occurs on the "hot path" of every API request, the implementation is optimized to minimize Garbage Collection (GC) pressure.
+
+The verification routine utilizes C\# \verb|Span<T>| and \verb|stackalloc| to perform all operations on the stack:
+
+\begin{enumerate}
+    \item Decoding: The URL-safe Base64 string is decoded directly into a stack-allocated byte span.
+    \item Partitioning: The span is sliced into the UUID component and the provided signature component without memory copying.
+    \item Re-computation: The HMAC is re-computed based on the extracted UUID.
+    \item Comparison: The re-computed signature is compared against the provided signature using \verb|CryptographicOperations.FixedTimeEquals|.
+\end{enumerate}
+
+\subsection{Timing Attack Mitigation}
+Standard string comparison returns false as soon as the first mismatched byte is found. This creates a side-channel vulnerability where an attacker can statistically analyze response times to guess the valid signature byte-by-byte.
+
+To prevent this, the system employs \textbf{Fixed-Time Comparison}\cite{THIS}. The validation function iterates through all bytes of the signature regardless of where a mismatch occurs, ensuring that the verification time is constant and independent of the input validity.
 
 \section{Agent Actor implementation}
 % Wrapping Hashcat processes and handling task execution.
@@ -701,7 +749,6 @@ Because of the "At-Least-Once" retry logic, it is possible for a chunk to be pro
 % Summary of performance trade-offs.
 
 
-
 % =========================================
 % CHAPTER 7: CONCLUSION
 % =========================================
@@ -709,4 +756,4 @@ Because of the "At-Least-Once" retry logic, it is possible for a chunk to be pro
 \label{chap:conclusion}
 %\Summary and Future work
 
-\end{comment}
+$$T_{eff} = \frac{75\%}{M + 1}$$
