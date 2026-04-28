@@ -87,19 +87,25 @@ This chapter provides an overview of the theoretical framework for these fundame
 
 \section{Password Hashing}
 
-The foundation of modern password security lies in the concept of the cryptographic hash function. Unlike encryption, which is a reversible transformation designed to protect confidentiality while allowing authorized retrieval, hashing is a one-way deterministic process. It maps an input of arbitrary length (the password) to a fixed-length string of bytes (the digest). The security of this mechanism relies entirely on the computational difficulty of inverting the function—finding a plaintext $P$ such that $H(P) = D$—and the resistance of the algorithm to collisions, where two distinct inputs produce the same output. \cite{what_is_password_hashing}
+The foundation of modern password security lies in the concept of the cryptographic hash function. Unlike encryption, which is a reversible transformation designed to protect confidentiality while allowing authorized retrieval, hashing is a one-way deterministic process. It maps an input of arbitrary length (the password) to a fixed-length string of bytes (the digest). The security of this mechanism relies entirely on the computational difficulty of inverting the function—finding a plaintext $P$ such that $H(P) = D$—and the resistance of the algorithm to collisions, where two distinct inputs produce the same output. 
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{obrazky-figures/be5db59264e538141840c7cbc012f8e5a8b94df7-899x399.jpg}
+\caption{A visualization of the standard way to store passwords in a database (as described in an article by the Stytch Team \cite{what_is_password_hashing}) demonstrating how an unauthorized party cannot view the plaintext passwords directly from a leaked database.}
+\end{figure}
 
 \subsection{Cryptographic Primitives and the Speed-Security Paradox}
 
-Historically, the selection of hashing algorithms for password storage was driven by the requirements of data integrity verification and digital signatures. Algorithms such as MD5 (Message Digest 5) and SHA-1 (Secure Hash Algorithm 1) were engineered for speed and efficiency on general-purpose Central Processing Units (CPUs). They rely heavily on bitwise operations—logical AND, OR, XOR, and bit rotations—that are computationally inexpensive and execute rapidly. \cite{password_storage}
+Historically, the selection of hashing algorithms for password storage was driven by the requirements of data integrity verification and digital signatures. Algorithms such as MD5 (Message Digest 5) and SHA-1 (Secure Hash Algorithm 1), as described by \cite{password_storage} and \cite{what_is_password_hashing}, were engineered for speed and efficiency on general-purpose Central Processing Units (CPUs). They rely heavily on bitwise operations—logical AND, OR, XOR, and bit rotations—that are computationally inexpensive and execute rapidly.
 
-However, this design philosophy, while advantageous for calculating file checksums or verifying SSL certificates, proved catastrophic for password storage. The efficiency that allows a system to verify a file's integrity in milliseconds also allows an attacker to compute billions of password candidates per second. When modern Graphics Processing Units (GPUs) are leveraged, with their thousands of Arithmetic Logic Units (ALUs) capable of massive parallel instruction execution, algorithms like MD5 can be cracked at rates exceeding hundreds of gigahashes per second (GH/s). This phenomenon creates a "speed-security paradox": the faster a hash function is for the legitimate user, the more vulnerable it is to offline brute-force attacks. \cite{what_is_password_hashing}
+However, this design philosophy, while advantageous for calculating file checksums or verifying SSL certificates, proved catastrophic for password storage. The efficiency that allows a system to verify a file's integrity in milliseconds also allows an attacker to compute billions of password candidates per second. When modern Graphics Processing Units (GPUs) are leveraged, with their thousands of Arithmetic Logic Units (ALUs) capable of massive parallel instruction execution, algorithms like MD5 can be cracked at rates exceeding hundreds of gigahashes per second (GH/s). This phenomenon creates a "speed-security paradox": the faster a hash function is for the legitimate user, the more vulnerable it is to offline brute-force attacks.
 
-To counter this, the cryptographic community moved toward specialized Password Hashing Schemes (PHS) and Key Derivation Functions (KDFs). These algorithms, including PBKDF2 (Password-Based Key Derivation Function 2), bcrypt, scrypt, and Argon2, introduce a tunable "work factor" or "cost" parameter. This parameter forces the hashing process to iterate purely computational work—such as performing the SHA-256 hash function 100,000 times recursively—to generate a single final digest. For a legitimate user attempting to log in, a 500-millisecond delay is imperceptible. For an attacker, this delay is multiplied by the size of the keyspace, rendering exhaustive search attacks computationally infeasible on a single machine. \cite{password_storage}
+To counter this, the cryptographic community moved toward specialized Password Hashing Schemes (PHS) and Key Derivation Functions (KDFs). These algorithms, including PBKDF2 (Password-Based Key Derivation Function 2), bcrypt, scrypt, and Argon2, introduce a tunable "work factor" or "cost" parameter. This parameter forces the hashing process to iterate purely computational work—such as performing the SHA-256 hash function 100,000 times recursively—to generate a single final digest. For a legitimate user attempting to log in, a 500-millisecond delay is imperceptible. For an attacker, this delay is multiplied by the size of the keyspace, rendering exhaustive search attacks computationally infeasible on a single machine.
 
 \subsection{Salting and the Defense Against Precomputation}
 
-A critical vulnerability in early password storage implementations was the storage of unsalted hashes. In such a system, identical passwords produce identical hashes. This deterministic property allows attackers to utilize Time-Memory Trade-off (TMTO) attacks, most notably employing Rainbow Tables \cite{enwiki:1333530676}, which are vast databases of precomputed hash chains that enable attackers to reverse a hash in constant time $O(1)$ by looking it up in the table rather than recomputing it. This trades storage space for computational time. \cite{what_is_password_hashing}
+A critical vulnerability in early password storage implementations was the storage of unsalted hashes. In such a system, identical passwords produce identical hashes. As described by \cite{what_is_password_hashing}, this deterministic property allows attackers to utilize Time-Memory Trade-off (TMTO) attacks, most notably employing Rainbow Tables \cite{enwiki:1333530676}, which are vast databases of precomputed hash chains that enable attackers to reverse a hash in constant time $O(1)$ by looking it up in the table rather than recomputing it. This trades storage space for computational time.
 
 The defense against this is the "salt"—a random string of data generated using a cryptographically secure pseudorandom number generator (CSPRNG) that is concatenated with the user's password before hashing:
 
@@ -107,29 +113,46 @@ The defense against this is the "salt"—a random string of data generated using
 H_{stored}=Hash(P+S)
 \end{equation}
 
-The salt is stored in plaintext alongside the hash in the database. Its function is to ensure uniqueness. Even if two users choose the password "password123", their respective salts ($S_1$ and $S_2$) will differ, resulting in completely different stored hashes ($H_1$ and $H_2$). This effectively neutralizes Rainbow Table attacks because the precomputed tables would need to be generated for every possible salt value, which is spatially impossible. It is crucial to understand that salting does not stop dictionary or brute-force attacks; it merely forces the attacker to crack each hash individually rather than batch-processing them against a precomputed dataset. \cite{complete_guide_passwd_hash}
+The salt is stored in plaintext alongside the hash in the database. Its function is to ensure uniqueness. Even if two users choose the password "password123", their respective salts ($S_1$ and $S_2$) will differ, resulting in completely different stored hashes ($H_1$ and $H_2$). This effectively neutralizes Rainbow Table attacks because the precomputed tables would need to be generated for every possible salt value, which is spatially impossible. However, according to \cite{complete_guide_passwd_hash}, it is crucial to understand that salting does not stop dictionary or brute-force attacks; it merely forces the attacker to crack each hash individually rather than batch-processing them against a precomputed dataset.
 
 \subsection{Memory-Hardness and Modern Algorithms}
 
-As GPU acceleration became the standard for password recovery (a trend solidified by tools like Hashcat), hashing algorithms evolved to target the specific architectural weaknesses of GPUs. While GPUs possess immense computational throughput, they typically have limited high-speed memory available per core compared to a CPU.
+As GPU acceleration became the standard for password recovery (a trend solidified by tools like Hashcat), hashing algorithms evolved to target the specific architectural weaknesses of GPUs. While GPUs possess immense computational throughput, they typically have limited high-speed memory available per core compared to a CPU. These modern algorithms are described by \cite{phs_explained}, \cite{complete_guide_passwd_hash}, \cite{app13169295} as follows:
 
 \begin{itemize}
-    \item \textbf{Bcrypt}: Based on the Blowfish cipher, bcrypt utilizes a 4 KB state table that is constantly modified during the hashing process. This memory requirement disrupts the massive parallelism of GPUs, as the memory access pattern is data-dependent and unpredictable, forcing threads to stall while waiting for memory fetches. \cite{phs_explained}\cite{complete_guide_passwd_hash}
-    
-    \item \textbf{Scrypt}: This algorithm was explicitly designed to be "memory-hard." It requires the generation of a large vector of pseudorandom data in RAM, which is then accessed in a random order to produce the final key. An attacker attempting to implement scrypt on a GPU or a custom ASIC (Application-Specific Integrated Circuit) must dedicate significant silicon area or VRAM to memory storage, drastically reducing the number of parallel cracking engines that can fit on a single chip. \cite{phs_explained}\cite{complete_guide_passwd_hash}
+    \item \textbf{Bcrypt}: Based on the round-based Blowfish cipher, bcrypt utilizes a 4 KB state table that is constantly modified during the hashing process. This memory requirement disrupts the massive parallelism of GPUs, as the memory access pattern is data-dependent and unpredictable, forcing threads to stall while waiting for memory fetches.
 
-    \item \textbf{Argon2}: Selected as the winner of the Password Hashing Competition in 2015, Argon2 represents the state-of-the-art in PHS. It offers three variants: Argon2d (data-dependent addressing, resistant to GPU cracking but vulnerable to side-channel attacks), Argon2i (data-independent addressing, resistant to side-channel attacks but slightly less resistant to TMTO), and Argon2id (a hybrid). Argon2 allows administrators to tune not only the time cost but also the memory cost and the degree of parallelism. This tri-parameter tuning allows defenders to optimize the hash for their specific server hardware while maximizing the cost for an attacker. \cite{phs_explained}\cite{app13169295}
+    \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{obrazky-figures/7d29d3f05ffe6fe54105b51788cbed59f5bb4640-800x306.png}
+    \end{figure}
+
+    \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{obrazky-figures/7607b5515e4d19c9e2d48f3794e761ca78a3e852-730x471.png}
+    \caption{Visualizations provided by \cite{what_is_password_hashing} depicting the adaptive bcrypt algorithm structure containing the used underlying algorithm (Blowfish), the rounds cost (which has a default value of 10 and scales exponentially with larger values, making the computation increasingly difficult), the randomly generated salt and the hash itself.}
+    \end{figure}
+    
+    \item \textbf{Scrypt}: This algorithm was explicitly designed to be "memory-hard." It requires the generation of a large vector of pseudorandom data in RAM, which is then accessed in a random order to produce the final key. An attacker attempting to implement scrypt on a GPU or a custom ASIC (Application-Specific Integrated Circuit) must dedicate significant silicon area or VRAM to memory storage, drastically reducing the number of parallel cracking engines that can fit on a single chip.
+
+    \begin{figure}[H]
+    \centering
+    \includegraphics[width=0.7\textwidth]{obrazky-figures/99e4a2b570f1e127ac7dc33232ef3c8b807fb662-800x333.png}
+    \caption{The Scrypt algorithm uses several steps to generate the final hash as described and visualised by \cite{what_is_password_hashing}. First, generating an expensive salt using the block size factor (the r parameter in Nrp) to create “blocks.” Next, using PBKDF2 to generate a large array whose size depends on the block size factor (r) and parallelization (p). The cost factor (N) is used as the number of times that each block is mixed using a function called ROMix. Scrypt then generates a new expensive salt by concatenating all mixed blocks. Finally, PBKDF2 uses the password and the calculated salt, trimming the output to the desired number of bytes (dkLen).}
+    \end{figure}
+
+    \item \textbf{Argon2}: Selected as the winner of the Password Hashing Competition in 2015, Argon2 represents the state-of-the-art in PHS. It offers three variants: Argon2d (data-dependent addressing, resistant to GPU cracking but vulnerable to side-channel attacks), Argon2i (data-independent addressing, resistant to side-channel attacks but slightly less resistant to TMTO), and Argon2id (a hybrid). Argon2 allows administrators to tune not only the time cost but also the memory cost and the degree of parallelism. This tri-parameter tuning allows defenders to optimize the hash for their specific server hardware while maximizing the cost for an attacker.
 \end{itemize}
 
 
 
 \section{Brute Force attack}
 
-The Brute Force attack, also known as an exhaustive key search or a mask attack in Hashcat, is the most theoretically sound method of password recovery. It relies on the mathematical certainty that if a password exists within a defined character set and length, systematically trying every possible combination will eventually yield the correct result. While often dismissed in casual discourse as inefficient, it serves as the baseline against which the strength of all encryption is measured and is the primary method for cracking complex, non-dictionary passwords. \cite{enwiki:1323935452}
+The Brute Force attack, as described by \cite{enwiki:1323935452}, also known as an exhaustive key search or a mask attack in Hashcat, is the most theoretically sound method of password recovery. It relies on the mathematical certainty that if a password exists within a defined character set and length, systematically trying every possible combination will eventually yield the correct result. While often dismissed in casual discourse as inefficient, it serves as the baseline against which the strength of all encryption is measured and is the primary method for cracking complex, non-dictionary passwords.
 
 \subsection{Keyspace Theory and Combinatorics}
 
-The fundamental concept governing brute force attacks is the "keyspace"—the set of all possible permutations for a given password policy. The size of the keyspace ($C$) determines the theoretical maximum time required to crack a password and is derived from combinatorial principles. The formula for the keyspace of a password of a fixed length $L$ using a character set of size $N$ is:
+The fundamental concept governing brute force attacks is the "keyspace"—the set of all possible permutations for a given password policy, as described by \cite{brute_force_math}. The size of the keyspace ($C$) determines the theoretical maximum time required to crack a password and is derived from combinatorial principles. The formula for the keyspace of a password of a fixed length $L$ using a character set of size $N$ is:
 
 \begin{equation}
     C=N^L
@@ -141,13 +164,13 @@ For a password policy that allows variable lengths (e.g., from 1 to 8 characters
     C_{total}=\sum_{i=1}^L N^i=N^1+N^2+...+N^L
 \end{equation}
 
-This exponential relationship means that linear increases in password length result in polynomial increases in attack difficulty. For instance, moving from a 7-character password to an 8-character password multiplies the keyspace by $N$. If $N=95$ (the full printable ASCII set), the 8-character password is 95 times harder to crack than the 7-character one. Conversely, increasing the character set size ($N$) generally yields diminishing returns compared to increasing length ($L$). \cite{brute_force_math}
+This exponential relationship means that linear increases in password length result in polynomial increases in attack difficulty. For instance, moving from a 7-character password to an 8-character password multiplies the keyspace by $N$. If $N=95$ (the full printable ASCII set), the 8-character password is 95 times harder to crack than the 7-character one. Conversely, increasing the character set size ($N$) generally yields diminishing returns compared to increasing length ($L$).
 
-\subsection{Mask Attack Implementation}
+\subsection{Mask Attack Implementation in Hashcat}
 
-In practical application within the Hashcat engine, brute force is rarely executed as a blind iteration over an undefined range. It is instead implemented as a \textbf{Mask Attack} (Attack Mode 3). A mask allows the attacker to define the structure of the candidates to be generated, optimizing the attack by eliminating structurally impossible candidates.
+In practical application within the Hashcat engine \cite{hashcat_mask}, brute force is rarely executed as a blind iteration over an undefined range. It is instead implemented as a \textbf{Mask Attack} (Attack Mode 3). A mask allows the attacker to define the structure of the candidates to be generated, optimizing the attack by eliminating structurally impossible candidates.
 
-Hashcat utilizes a specific syntax to represent character sets within a mask \cite{hashcat_mask}:
+Hashcat utilizes a specific syntax to represent character sets within a mask:
 
 \begin{itemize}
     \item \verb|?l|: Lowercase letters (a-z)
@@ -171,9 +194,9 @@ A mask is constructed by concatenating these placeholders. For example, if an an
 
 This reduces the search from a full 9-character brute force (which would take centuries) to a 4-digit search ($10^4 = 10,000$ combinations), which Hashcat can resolve basically instantly.
 
-\textbf{Custom Character Sets}: Hashcat allows for even greater granularity through custom character sets, defined using the flags \verb|-1|, \verb|-2|, \verb|-3|, and \verb|-4|. If, for example, a password policy requires "at least one uppercase letter and one digit," but the attacker wants to try a specific subset of symbols, they can define a custom set with the following command: \verb|hashcat -a 3 -1?d?s ?u?l?l?l?l?1|, where the custom set \verb|-1| is defined as digits plus symbols (\verb|?d?s|). The mask tries an uppercase letter (\verb|?u|), followed by four lowercase letters (\verb|?l|), followed by a character from the custom set (\verb|?1|). This precise targeting prevents the engine from wasting cycles on candidates that do not fit the known criteria. \cite{hashcat_mask}
+\textbf{Custom Character Sets}: Hashcat allows for even greater granularity through custom character sets, defined using the flags \verb|-1|, \verb|-2|, \verb|-3|, and \verb|-4|. If, for example, a password policy requires "at least one uppercase letter and one digit," but the attacker wants to try a specific subset of symbols, they can define a custom set with the following command: \verb|hashcat -a 3 -1?d?s ?u?l?l?l?l?1|, where the custom set \verb|-1| is defined as digits plus symbols (\verb|?d?s|). The mask tries an uppercase letter (\verb|?u|), followed by four lowercase letters (\verb|?l|), followed by a character from the custom set (\verb|?1|). This precise targeting prevents the engine from wasting cycles on candidates that do not fit the known criteria.
 
-\textbf{Increment Mode}: A standard mask attack (for example, \verb|?a?a?a?a?a?a?a?a|) only attempts passwords of exactly that length (8 characters). It does not check 7-character or 6-character passwords. To address this, Hashcat utilizes increment mode (\verb|--increment|), which automatically iterates the mask from a starting length (\verb|--increment-min|) to the full mask length (\verb|--increment-max|). This ensures that the entire keyspace up to the limit is covered. \cite{hashcat_mask}
+\textbf{Increment Mode}: A standard mask attack (for example, \verb|?a?a?a?a?a?a?a?a|) only attempts passwords of exactly that length (8 characters). It does not check 7-character or 6-character passwords. To address this, Hashcat utilizes increment mode (\verb|--increment|), which automatically iterates the mask from a starting length (\verb|--increment-min|) to the full mask length (\verb|--increment-max|). This ensures that the entire keyspace up to the limit is covered.
 
 \begin{comment}    
 Furthermore, pure brute force assumes that all characters are equally likely in all positions. Human behavior contradicts this; vowels are more common than consonants, and 's' is more common than 'z'. Hashcat supports \textbf{Markov Chain attacks}, which utilize a statistical model (defined in a .hcstat file) derived from large datasets of leaked passwords. This model predicts the probability of a character based on the preceding characters. By ordering the brute force generation based on these probabilities, Hashcat attempts the most "human-like" random strings first, statistically reducing the Time-To-Crack (TTC) for non-random passwords generated by humans.
@@ -183,49 +206,49 @@ Furthermore, pure brute force assumes that all characters are equally likely in 
 
 \section{Dictionary attack}
 
-While brute force is mathematically comprehensive, the exponential growth of the keyspace renders it impractical for long passwords. The dictionary attack (Mode 0) exploits the linguistic nature of human-generated passwords. Users typically select passwords based on mnemonics, dictionary words, names, or cultural references to aid memorization. A dictionary attack iterates through a finite list of these candidates (a "wordlist") and hashes each one to compare against the target.
+While brute force is mathematically comprehensive, the exponential growth of the keyspace renders it impractical for long passwords. The dictionary attack (Mode 0) exploits the linguistic nature of human-generated passwords, as described by \cite{enwiki:1320882747}. Users typically select passwords based on mnemonics, dictionary words, names, or cultural references to aid memorization. A dictionary attack iterates through a finite list of these candidates (a "wordlist") and hashes each one to compare against the target.
 
-The efficiency of a dictionary attack is not primarily determined by the speed of the hardware but by the quality and relevance of the wordlist. A word list containing millions of English words will fail against a password like "P@ssw0rd!" as the exact string is not in the dictionary. To bridge this gap, modern cracking engines employ sophisticated rule-based permutations. \cite{enwiki:1320882747}
+The efficiency of a dictionary attack is not primarily determined by the speed of the hardware but by the quality and relevance of the wordlist. A word list containing millions of English words will fail against a password like "P@ssw0rd!" as the exact string is not in the dictionary. To bridge this gap, modern cracking engines employ sophisticated rule-based permutations.
 
 \subsection{Rule-Based Attacks}
 
-The \textbf{Rule-Based Attack} (utilized within Mode 0) is arguably the most powerful capability of the Hashcat engine. It allows the attacker to apply a series of functional transformations to each word in the dictionary dynamically. This effectively multiplies the dictionary size by the number of rules, generating a "virtual wordlist" that covers common user obfuscation techniques (e.g., substituting 'a' with '@', capitalizing the first letter, and appending/prepending symbols).
+The \textbf{Rule-Based Attack} (utilized within Mode 0) is arguably the most powerful capability of the Hashcat engine \cite{hashcat_rules_based}. It allows the attacker to apply a series of functional transformations to each word in the dictionary dynamically. This effectively multiplies the dictionary size by the number of rules, generating a "virtual wordlist" that covers common user obfuscation techniques (e.g., substituting 'a' with '@', capitalizing the first letter, and appending/prepending symbols).
 
-Rules are defined in a compact, single-letter syntax compatible with the legacy "John the Ripper" format. These rules can be stacked, meaning multiple rules can be applied to a single word in sequence. Hashcat also ships with optimized rule files (e.g., best64.rule, dive.rule) generated from analyzing statistical patterns in breached databases. \cite{hashcat_rules_based}
+Rules are defined in a compact, single-letter syntax compatible with the legacy "John the Ripper" format. These rules can be stacked, meaning multiple rules can be applied to a single word in sequence. Hashcat also ships with optimized rule files (e.g., best64.rule, dive.rule) generated from analyzing statistical patterns in breached databases.
 
 \subsection{Combinator Attacks}
 
-Passphrases consisting of multiple words are becoming increasingly common due to length-based security recommendations. Standard dictionary attacks fail here because the space is included, or the combination is not a single token. The \textbf{Combinator Attack} (Attack Mode 1) addresses this by taking two dictionaries (or the same dictionary twice) and computing the Cartesian product of the two lists.
+Passphrases consisting of multiple words are becoming increasingly common due to length-based security recommendations. Standard dictionary attacks fail here because the space is included, or the combination is not a single token. The \textbf{Combinator Attack} (Attack Mode 1) \cite{hashcat_combinator} addresses this by taking two dictionaries (or the same dictionary twice) and computing the Cartesian product of the two lists.
 
 \begin{equation}
     Candidate = Word_{Left} + Word_{Right}
 \end{equation}
 
-If dict1.txt contains "pass" and dict2.txt contains "word," the combinator attack generates "password". This mode is particularly effective when combined with rules that add separators, numbers, and other special symbols. \cite{hashcat_combinator}
+If dict1.txt contains "pass" and dict2.txt contains "word," the combinator attack generates "password". This mode is particularly effective when combined with rules that add separators, numbers, and other special symbols.
 
 \subsection{Hybrid Attacks}
 
-The principle of hybrid attacks (Modes 6 and 7) is similar to the combinator attack, as it fuses the strengths of both dictionary and brute force attacks. They are designed to crack passwords that consist of a linguistic base followed or preceded by a random or patterned suffix/prefix. \cite{hashcat_hybrid}
+The principle of hybrid attacks (Modes 6 and 7) \cite{hashcat_hybrid} is similar to the combinator attack, as it fuses the strengths of both dictionary and brute force attacks. They are designed to crack passwords that consist of a linguistic base followed or preceded by a random or patterned suffix/prefix.
 
 \begin{itemize}
     \item \textbf{Mode 6 (Wordlist + Mask)}: The engine takes a word from the dictionary and appends a brute-force mask to it.
     
-(Example command: \verb|hashcat -a 6 -m 0 <$hash> rockyou.txt ?d?d?d|)
+ (Example command: \verb|hashcat -a 6 -m 0 <$hash> rockyou.txt ?d?d?d|)
 
     \item \textbf{Mode 7 (Mask + Wordlist)}: The engine prepends a mask to the dictionary word.
     
-(Example command: \verb|hashcat -a 7 -m 0 <$hash> ?d?d?d rockyou.txt|) \cite{hashcat_hybrid}
+ (Example command: \verb|hashcat -a 7 -m 0 <$hash> ?d?d?d rockyou.txt|)
 \end{itemize}
 
 
 
 \section{The Hashcat Engine}
 
-Hashcat's dominance as the de facto standard for password recovery is derived from its sophisticated internal engine, which is engineered to maximize the throughput of heterogeneous computing platforms. Unlike legacy CPU-based crackers, Hashcat is designed from the ground up to exploit the Single Instruction, Multiple Data (SIMD) architecture of modern GPU accelerators using OpenCL. \cite{bitwarden_hashcat}
+Hashcat's dominance as the de facto standard for password recovery is derived from its sophisticated internal engine, which is engineered to maximize the throughput of heterogeneous computing platforms. As described by \cite{bitwarden_hashcat}, Hashcat is designed from the ground up to exploit the Single Instruction, Multiple Data (SIMD) architecture of modern GPU accelerators using OpenCL, unlike legacy CPU-based crackers.
 
 \subsection{Performance Tuning and Workload Profiles}
 
-The throughput of the Hashcat engine is not static; it is highly dependent on how effectively the GPU pipeline is saturated. A GPU is a latency-hiding machine; it requires a massive queue of work to keep all ALU cores busy while waiting for memory fetches. Hashcat provides granular control over this workload via several tuning parameters.
+The throughput of the Hashcat engine is not static; it is highly dependent on how effectively the GPU pipeline is saturated. A GPU is a latency-hiding machine; it requires a massive queue of work to keep all ALU cores busy while waiting for memory fetches. Hashcat provides granular control over this workload via several tuning parameters, as described in detail by the Hashcat documentation \cite{workload_profiles}.
 
 \textbf{Workload Profiles} (\verb|-w|): This high-level parameter controls the size of the task batch sent to the GPU.
 
@@ -236,20 +259,20 @@ The throughput of the Hashcat engine is not static; it is highly dependent on ho
 
     \item \verb|-w 3| (High): Prioritizes throughput. Large batches are queued. The desktop interface will likely freeze or lag significantly as the GPU is fully occupied with compute tasks.
 
-    \item \verb|-w 4| (Nightmare): Maximizes batch size to the limits of the hardware. Designed for headless servers. This can cause the OS watchdog (TDR) to reset the driver if the batch takes too long to execute. \cite{workload_profiles}
+    \item \verb|-w 4| (Nightmare): Maximizes batch size to the limits of the hardware. Designed for headless servers. This can cause the OS watchdog (TDR) to reset the driver if the batch takes too long to execute.
 \end{itemize}
 
 \subsection{Workload Distribution}
 
-To tackle massive keyspaces or to distribute work across a cluster of machines, Hashcat implements a deterministic segmentation strategy using the \verb|--skip| (\verb|-s|) and \verb|--limit| (\verb|-l|) parameters.
+To tackle massive keyspaces or to distribute work across a cluster of machines, Hashcat implements a deterministic keyspace segmentation strategy, as described by \cite{hashcat_work_dist}. The fundamental terms to move forward are:
 
 \begin{itemize}
-    \item \textbf{Keyspace}: Hashcat calculates the total work unit count for a given attack. This is accessible via the \verb|--keyspace| flag.
+    \item \textbf{Keyspace}: Hashcat calculates the total work unit count for a given attack. This is accessible via the \verb|--keyspace| and \verb|--total-candidates| flags.
 
-    \item \textbf{Segmentation}: The keyspace is a linear sequence of values. By assigning a specific offset (\verb|--skip|) and a chunk size (\verb|--limit|), the user can instruct Hashcat to process a specific slice of the keyspace. \cite{hashcat_work_dist}
-    This has proven to be very useful when designing a distributed system with multiple nodes.
+    \item \textbf{Segmentation}: The keyspace is a linear sequence of values. By assigning a specific offset (\verb|--skip|) and a chunk size (\verb|--limit|), the user can instruct Hashcat to process a specific slice of the keyspace.
 \end{itemize}
 
+This functionality has proven to be very useful when designing a distributed system with coordinator and agent nodes working together to crack a given password hash with a large number of candidates. The exact strategy on how these parameters are used is described in later chapters.
 
 
 
@@ -260,29 +283,29 @@ This chapter provides an exhaustive analysis of the theoretical and practical ch
 
 \section{Challenges in distributed systems}
 
-The inherent hostility of the distributed environment is best summarized by the "Fallacies of Distributed Computing," a set of assertions that architects often incorrectly assume to be true: that the network is reliable, latency is zero, and bandwidth is infinite. In the specific domain of distributed password cracking, these fallacies manifest as tangible impediments to throughput (hashes per second) and correctness (keyspace coverage). \cite{distribution_challenges}
+The inherent hostility of the distributed environment is best summarized by the "Fallacies of Distributed Computing" in \cite{distribution_challenges}, as a set of assertions that architects often incorrectly assume to be true: that the network is reliable, latency is zero, and bandwidth is infinite. In the specific domain of distributed password cracking, these fallacies manifest as tangible impediments to throughput (hashes per second) and correctness (keyspace coverage).
 
 \subsection{Network Latency and Communication Overhead}
 \label{net_lat_comm_ov}
 
-Network latency—the time delay between the initiation of a network transmission and the receipt of the first unit of data—plays a pivotal role in the efficiency of a distributed cracker. This latency is distinct from bandwidth; while bandwidth measures the capacity of the pipe, latency measures the speed of travel through it. In a distributed environment, latency is composed of transmission latency, propagation latency, and processing delays at routers and switches. \cite{distribution_challenges}\cite{network_latency}
+Network latency—the time delay between the initiation of a network transmission and the receipt of the first unit of data, as described by \cite{distribution_challenges} and \cite{network_latency}—plays a pivotal role in the efficiency of a distributed cracker. This latency is distinct from bandwidth; while bandwidth measures the capacity of the pipe, latency measures the speed of travel through it. In a distributed environment, latency is composed of transmission latency, propagation latency, and processing delays at routers and switches.
 
-In the context of password cracking, the impact of latency is non-uniform and highly dependent on the cryptographic function being attacked. This relationship dictates the architectural requirements for the "Work Generator"—the component responsible for carving the keyspace into assignable chunks.
+In the context of password cracking, the impact of latency is non-uniform and highly dependent on the cryptographic function being attacked. This relationship dictates the architectural requirements for the "Coordinator" or "Work Generator"—the component responsible for carving the keyspace into assignable chunks.
 
-\textbf{The Latency-Throughput Correlation}: The critical metric in distributed cracking is the ratio of computation time to communication time.
+\textbf{The Latency-Throughput Correlation}: The critical metric in distributed cracking is the ratio of computation time to communication time, as described by \cite{distribution_challenges} and \cite{what_is_password_hashing}.
 
 \begin{itemize}
     \item \textbf{Scenario A: Slow Hashes (High Computational Cost)}: When attacking algorithms like bcrypt with high iteration counts, a single candidate password may require milliseconds of GPU time. A relatively small batch of candidates can occupy a worker node for minutes. In this scenario, network latency is negligible. Even if the round-trip time (RTT) for requesting a new job is 500 ms, it represents a fraction of a percent of the total job execution time. The system is "compute-bound."
 
-    \item \textbf{Scenario B: Fast Hashes (Low Computational Cost)}: Conversely, algorithms like NTLM or MD5 allow modern GPUs to compute billions of hashes per second. If the orchestrator assigns a small keyspace segment (e.g., 100 million candidates), a high-end GPU might exhaust this workload in milliseconds. If the network latency to request the next batch is 50 ms, the GPU spends more time idling (waiting for work) than computing. This "starvation" phenomenon significantly degrades the aggregate cluster performance. \cite{distribution_challenges}\cite{what_is_password_hashing}
+    \item \textbf{Scenario B: Fast Hashes (Low Computational Cost)}: Conversely, algorithms like NTLM or MD5 allow modern GPUs to compute billions of hashes per second. If the orchestrator assigns a small keyspace segment (e.g., 100 million candidates), a high-end GPU might exhaust this workload in milliseconds. If the network latency to request the next batch is 50 ms, the GPU spends more time idling (waiting for work) than computing. This "starvation" phenomenon significantly degrades the aggregate cluster performance.
 \end{itemize}
 
-\textbf{Bandwidth Constraints}: While latency impacts the control plane, bandwidth constrains the data plane. Distributed cracking often involves the dissemination of large dictionaries (wordlists) or rule files. The fallacy that "bandwidth is infinite" leads to bottlenecks when an orchestrator attempts to simultaneously push a multi-gigabyte wordlist to hundreds of worker nodes. Architectural mitigations must include local caching strategies, compression, or the use of peer-to-peer distribution protocols (like BitTorrent) to alleviate strain on the central server. Furthermore, the variability of network performance—caused by congestion, packet loss, and jitter—means that no finite protocol can guarantee deterministic delivery times. The system must be designed to tolerate unbounded latency, never assuming that a delayed response implies a failed node. \cite{distribution_challenges}
+\textbf{Bandwidth Constraints}: While latency impacts the control plane, bandwidth constrains the data plane. Distributed cracking often involves the dissemination of large dictionaries (wordlists) or rule files. The fallacy that "bandwidth is infinite" leads to bottlenecks when an orchestrator attempts to simultaneously push a multi-gigabyte wordlist to hundreds of worker nodes. Architectural mitigations must include local caching strategies, compression, or the use of peer-to-peer distribution protocols (like BitTorrent) to alleviate strain on the central server. Furthermore, the variability of network performance—caused by congestion, packet loss, and jitter—means that no finite protocol can guarantee deterministic delivery times. The system must be designed to tolerate unbounded latency, never assuming that a delayed response implies a failed node.
 
 \subsection{Partial Failures and System State}
 \label{part_fails_sys_state}
 
-The defining characteristic of a distributed system is the concept of partial failure. In a monolithic application, components share a fate; if the memory bus fails, the entire application halts. In a distributed cluster, one component (e.g., a worker node) may fail while others (e.g., the server or database) continue to operate correctly. This creates a state of deep uncertainty.
+The defining characteristic of a distributed system is the concept of partial failure. In a monolithic application, components share a fate; if the memory bus fails, the entire application halts. As depicted by \cite{distribution_challenges} and \cite{distribution_challenges_amazon}, in a distributed cluster, one component (e.g., a worker node) may fail while others (e.g., the server or database) continue to operate correctly. This creates a state of deep uncertainty.
 
 \textbf{The Three-State Nature of Remote Operations}: When an orchestrator sends a command to a worker node, the outcome is not binary (Success/Failure) but ternary:
 
@@ -291,7 +314,7 @@ The defining characteristic of a distributed system is the concept of partial fa
 
     \item \textbf{Failure}: The worker receives the command but cannot execute it (e.g., the plaintext password was not found, or there was a GPU driver error) and reports a failure.
 
-    \item \textbf{Unknown}: The orchestrator receives no response. The failure could be located in the request path (the worker never got the job), the execution phase (the worker is executing the job but is slow), or the response path (the work is done, but the acknowledgement was lost). If the orchestrator assumes the worker failed and re-assigns the job to another node, it risks duplicating work—an inefficiency that, while tolerable, wastes resources. More critically, if the orchestrator assumes the worker succeeded (perhaps due to a timeout logic error) and marks the chunk as done, the system incurs data corruption: a segment of the keyspace has been skipped, and the password may be missed. This mandates the implementation of robust timeout and retry mechanisms, often utilizing "heartbeats" to distinguish between a slow node and a dead node. However, even heartbeats are imperfect; a node under heavy load may fail to respond to a heartbeat while still successfully processing a job. \cite{distribution_challenges}\cite{distribution_challenges_amazon}
+    \item \textbf{Unknown}: The orchestrator receives no response. The failure could be located in the request path (the worker never got the job), the execution phase (the worker is executing the job but is slow), or the response path (the work is done, but the acknowledgement was lost). If the orchestrator assumes the worker failed and re-assigns the job to another node, it risks duplicating work—an inefficiency that, while tolerable, wastes resources. More critically, if the orchestrator assumes the worker succeeded (perhaps due to a timeout logic error) and marks the chunk as done, the system incurs data corruption: a segment of the keyspace has been skipped, and the password may be missed. This mandates the implementation of robust timeout and retry mechanisms, often utilizing "heartbeats" to distinguish between a slow node and a dead node. However, even heartbeats are imperfect; a node under heavy load may fail to respond to a heartbeat while still successfully processing a job.
 \end{enumerate}
 
 \section{Reliability strategies}
@@ -300,38 +323,38 @@ The defining characteristic of a distributed system is the concept of partial fa
 %    \item \textbf{Idempotency:} Ensuring that repeated task execution does not corrupt aggregated results.
 %\end{itemize}
 
-To engineer a system that remains robust in the face of the aforementioned challenges, two primary reliability strategies are employed: Checkpointing and Idempotency. These patterns allow the system to make forward progress despite interruptions and ensure data integrity despite message duplication.
+To engineer a system that remains robust in the face of the aforementioned challenges, two primary reliability strategies are employed: checkpointing and idempotency. These patterns allow the system to make forward progress despite interruptions and ensure data integrity despite message duplication.
 
 \subsection{Checkpointing}
 
-Checkpointing is the technique of persisting the state of a running process so that, in the event of a failure, execution can resume from the last saved state rather than restarting from the origin. In distributed password cracking, this concept operates at two distinct levels: the granular task level (Distributed Checkpointing) and the engine level (Local Checkpointing). \cite{checkpointing}
+Checkpointing, as described in \cite{checkpointing}, is the technique of persisting the state of a running process so that, in the event of a failure, execution can resume from the last saved state rather than restarting from the origin. In distributed password cracking, this concept operates at two distinct levels: the granular task level (Distributed Checkpointing) and the engine level (Local Checkpointing).
 
-\textbf{Local Checkpointing (Engine Level)}: The underlying cracking engine, Hashcat, implements a native checkpointing mechanism. As it iterates through a specific mask or wordlist, it maintains a .restore file. This binary file records the precise position in the keyspace loop where the engine is currently operating. If the Hashcat process is terminated (e.g., via user interruption or power loss), relaunching the executable with the \verb|--restore| flag allows it to read this file and resume operations exactly where it left off. However, relying solely on local checkpointing is insufficient for a distributed cluster. If a worker node suffers a catastrophic hardware failure (e.g., disk corruption or total loss), the local .restore file is effectively gone. The orchestrator would have no visibility into how much of the assigned work was actually completed. \cite{hashcat_restore}
+\textbf{Local Checkpointing (Engine Level)}: The underlying cracking engine, Hashcat \cite{hashcat_restore}, implements a native checkpointing mechanism. As it iterates through a specific mask or wordlist, it maintains a .restore file. This binary file records the precise position in the keyspace loop where the engine is currently operating. If the Hashcat process is terminated (e.g., via user interruption or power loss), relaunching the executable with the \verb|--restore| flag allows it to read this file and resume operations exactly where it left off. However, relying solely on local checkpointing is insufficient for a distributed cluster. If a worker node suffers a catastrophic hardware failure (e.g., disk corruption or total loss), the local .restore file is effectively gone. The orchestrator would have no visibility into how much of the assigned work was actually completed.
 
 \textbf{Distributed Checkpointing (Task Granularity)}: To survive the loss of individual nodes, the system must implement checkpointing at the orchestration level. This is achieved through \textbf{Keyspace Segmentation}.
 
 \begin{enumerate}
-    \item \textbf{Segmentation}: The global keyspace is divided into discrete, immutable "Work Units" or "Chunks". \cite{BUT168182} 
+    \item \textbf{Segmentation}: The global keyspace is divided into discrete, immutable "Work Units" or "Chunks" (for example, as a mechanism described in \cite{BUT168182}).
 
     \item \textbf{State Tracking}: The orchestrator maintains the status of each chunk in a persistent database (e.g., Pending, Running, Completed).
 
     \item \textbf{Checkpoint}: In this architecture, the successful completion and acknowledgement of a Work Unit is the checkpoint. The system does not attempt to save the precise state of every GPU register across the network in real-time. Instead, it relies on the atomicity of the Work Unit.
 \end{enumerate}
 
-If a node crashes while working on a chunk, the orchestrator detects the timeout and re-queues the entire chunk for another node. While this results in a small amount of duplicated work, it guarantees that no gaps are left in the keyspace. This approach aligns with "Uncoordinated Checkpointing" strategies, where global consistency is maintained by the independence of tasks rather than a global freeze-and-save protocol. To optimize this, the size of the Work Unit must be tuned: small enough that a retry is inexpensive, but large enough to amortize the network latency overhead (as discussed in \ref{net_lat_comm_ov}). \cite{checkpointing}
+If a node crashes while working on a chunk, the orchestrator detects the timeout and re-queues the entire chunk for another node. While this results in a small amount of duplicated work, it guarantees that no gaps are left in the keyspace. This approach aligns with "Uncoordinated Checkpointing" strategies, where global consistency is maintained by the independence of tasks rather than a global freeze-and-save protocol. To optimize this, the size of the Work Unit must be tuned: small enough that a retry is inexpensive, but large enough to amortize the network latency overhead (as discussed in \ref{net_lat_comm_ov}).
 
 \newpage
 
 \subsection{Idempotency}
 
-Idempotency is a property of an operation whereby applying it multiple times yields the same result as applying it once. In mathematical terms, a function $f$ is idempotent if $f(f(x)) = f(x)$. In distributed systems, this property is the primary defense against the "at-least-once" delivery semantics of unreliable networks. \cite{idempotency}
+Idempotency, as depicted in \cite{idempotency}, is a property of an operation whereby applying it multiple times yields the same result as applying it once. In mathematical terms, a function $f$ is idempotent if $f(f(x)) = f(x)$. In distributed systems, this property is the primary defense against the "at-least-once" delivery semantics of unreliable networks.
 
 \textbf{The Necessity of Idempotency}: Because network acknowledgements can be lost (as discussed in \ref{part_fails_sys_state}), an orchestrator must be aggressive in retrying tasks. If a worker completes a job but the "Completed" message is dropped, the orchestrator will eventually time out and re-send the job to a different worker. This leads to the same job being executed twice.
 
 \begin{itemize}
     \item \textbf{Non-Idempotent System}: If the system simply counts "Total Hashes Checked" by adding the job size to a running total, processing the job twice results in an inflated, incorrect hashrate and progress percentage.
 
-    \item \textbf{Idempotent System}: If the system marks a specific Job ID as "Completed," processing the completion message a second time changes nothing; the Job ID is already marked. \cite{idempotency}
+    \item \textbf{Idempotent System}: If the system marks a specific Job ID as "Completed," processing the completion message a second time changes nothing; the Job ID is already marked.
 \end{itemize}
 
 \textbf{Implementation Patterns}: To achieve idempotency in a cracking cluster, several patterns are essential:
@@ -345,34 +368,34 @@ Idempotency is a property of an operation whereby applying it multiple times yie
     
        Running this query multiple times has the exact same effect as running it once.
 
-    \item \textbf{Result Deduplication}: In a scenario where multiple nodes might redundantly crack the same hash, the system must check whether the hash is already present in the "Cracked" table before inserting it. \cite{idempotency}
+    \item \textbf{Result Deduplication}: In a scenario where multiple nodes might redundantly crack the same hash, the system must check whether the hash is already present in the "Cracked" table before inserting it.
 \end{itemize}
 
 By baking idempotency into the API and database schema, the system becomes resilient to network "stuttering," retries, and the chaotic replay of messages that often accompanies system recovery.
 
 \section{Core concepts of the Actor Model}
 
-To manage the high concurrency and state complexity of distributed cracking, the Actor Model offers a superior theoretical framework compared to traditional object-oriented programming (OOP). Originating in 1973 with Carl Hewitt, the Actor Model treats "Actors" as the universal primitives of concurrent computation, offering a high-level abstraction that naturally aligns with distributed systems. \cite{enwiki:1323072662}
+To manage the high concurrency and state complexity of distributed cracking, the Actor Model, as described by \cite{enwiki:1323072662}, offers a superior theoretical framework compared to traditional object-oriented programming (OOP). Originating in 1973 with Carl Hewitt, the Actor Model treats "Actors" as the universal primitives of concurrent computation, offering a high-level abstraction that naturally aligns with distributed systems.
 
 \subsection{State and Behavior: Encapsulation and Isolation}
 
-In traditional concurrent programming (e.g., utilizing threads and locks), shared memory is the primary medium of interaction. This leads to complex race conditions and deadlocks. The Actor Model inverts this: \textbf{Actors share nothing}.
+In traditional concurrent programming (e.g., utilizing threads and locks), shared memory is the primary medium of interaction. This leads to complex race conditions and deadlocks. The Actor Model inverts this: \textbf{Actors share nothing} and only communicate by sending messages to each others mailboxes, as described in \cite{actor_model_understanding}.
 
 \begin{itemize}
     \item \textbf{Encapsulated State}: Each actor maintains its own private internal state, which can never be accessed directly by another actor. There are no "public properties" to read or write. Instead, actors communicate via messages.
 
-    \item \textbf{Behavior}: An actor is defined by its behavior—the code it executes in response to a message. This behavior can modify the actor's private state, create new actors, or send messages to others. \cite{actor_model_understanding}
+    \item \textbf{Behavior}: An actor is defined by its behavior—the code it executes in response to a message. This behavior can modify the actor's private state, create new actors, or send messages to others.
 \end{itemize}
 
-For a password cracker, a job coordinator actor might hold the state of the keyspace (e.g., a bitmap of completed chunks). Because only the job coordinator can modify this bitmap, and because it processes messages sequentially (one at a time), this approach avoids race conditions \cite{actor_model_understanding}. Two worker nodes cannot simultaneously "check out" the same chunk because the job coordinator processes the first request, updates its state, and only then processes the second request. This "single-threaded illusion" simplifies the mental model for developers, eliminating the need for complex mutexes or semaphores.
+For a password cracker, a job coordinator actor might hold the state of the keyspace (e.g., a bitmap of completed chunks). Because only the job coordinator can modify this bitmap, and because it processes messages sequentially (one at a time), this approach avoids race conditions. Two worker nodes cannot simultaneously "check out" the same chunk because the job coordinator processes the first request, updates its state, and only then processes the second request. This "single-threaded illusion" simplifies the mental model for developers, eliminating the need for complex mutexes or semaphores.
 
 \subsection{Asynchronous Messaging: The Non-Blocking Paradigm}
 
-Communication in the Actor Model is exclusively asynchronous. An actor sends a message to another actor's "mailbox" and immediately continues its own execution. It does not block waiting for a return value. This non-blocking nature is critical for the scalability of the orchestration layer. \cite{actor_model_understanding}
+Communication in the Actor Model is exclusively asynchronous. An actor sends a message to another actor's "mailbox" and immediately continues its own execution. It does not block waiting for a return value. This non-blocking nature is critical for the scalability of the orchestration layer.
 
 \subsection{Supervision Strategy: Hierarchical Fault Tolerance}
 
-The Actor Model handles failure through a strict parental hierarchy. When an actor is created, it is the child of the actor that created it. This establishes a supervision tree. The core philosophy, popularized by Erlang, is "Let It Crash." Instead of defensive programming (wrapping every line in \verb|try/catch|), actors are allowed to fail. \cite{actor_supervision}
+The Actor Model handles failure through a strict parental hierarchy, as described by \cite{actor_supervision}. When an actor is created, it is the child of the actor that created it. This establishes a supervision tree. The core philosophy, popularized by Erlang, is "Let It Crash." Instead of defensive programming (wrapping every line in \verb|try/catch|), actors are allowed to fail.
 
 When a child fails, their parent intercepts the error and decides how to react using the following \textbf{Supervision Directives}: 
 
@@ -383,7 +406,7 @@ When a child fails, their parent intercepts the error and decides how to react u
 
     \item \textbf{Stop}: The error is fatal, and the child is permanently terminated.
 
-    \item \textbf{Escalate}: The parent does not know how to handle the error and fails, passing the problem up to the grandparent actor. \cite{actor_supervision}
+    \item \textbf{Escalate}: The parent does not know how to handle the error and fails, passing the problem up to the grandparent actor.
 \end{itemize}
 
 Failure of a node may affect other actors in a cluster in two ways:
@@ -391,7 +414,7 @@ Failure of a node may affect other actors in a cluster in two ways:
 \begin{itemize}
     \item \textbf{One-For-One}: The directive applies only to the failing child. This is the standard for independent workers. For example, if GPU Node 1 crashes, the Supervisor restarts Node 1. Node 2 is unaffected.
 
-    \item \textbf{All-For-One}: The directive applies to all children of the supervisor. This is used when actors are tightly coupled. For example, if a "File Reader" actor fails in a pipeline, the "File Parser" and "Database Writer" actors might also need to be restarted because they are now out of sync. \cite{actor_supervision}
+    \item \textbf{All-For-One}: The directive applies to all children of the supervisor. This is used when actors are tightly coupled. For example, if a "File Reader" actor fails in a pipeline, the "File Parser" and "Database Writer" actors might also need to be restarted because they are now out of sync.
 \end{itemize}
 
 For a distributed cracker, the One-For-One strategy is essential to ensure that a single faulty node does not destabilize the entire cluster.
@@ -411,38 +434,38 @@ Akka.NET is a port of the JVM-based Akka framework, widely considered the gold s
 \begin{itemize}
     \item \textbf{Explicit Actors}: Akka.NET requires developers to explicitly define actor classes, manage their creation (using the \verb|Props| class), and orchestrate the supervision hierarchy. This explicitness offers granular control over the system's behavior.
 
-    \item \textbf{Clustering and Gossip}: The Akka.Cluster module implements a decentralized membership protocol based on Amazon's Dynamo. Nodes communicate via a Gossip Protocol, exchanging state information to converge on a view of the cluster members. This creates a peer-to-peer network with no single point of failure. \cite{akka_cluster}
+    \item \textbf{Clustering and Gossip}: The Akka.Cluster module \cite{akka_cluster} implements a decentralized membership protocol based on Amazon's Dynamo. Nodes communicate via a Gossip Protocol, exchanging state information to converge on a view of the cluster members. This creates a peer-to-peer network with no single point of failure.
 
-    \item \textbf{Persistence}: The Akka.Persistence module supports Event Sourcing. Actors can persist their internal state changes as a sequence of events. If an actor crashes and is restarted (even on a different node), it replays these events to restore its state. This is ideal for a job coordinator that must not lose track of assigned chunks. \cite{akka_persistance}
+    \item \textbf{Persistence}: The Akka.Persistence module \cite{akka_persistance} supports Event Sourcing. Actors can persist their internal state changes as a sequence of events. If an actor crashes and is restarted (even on a different node), it replays these events to restore its state. This is ideal for a job coordinator that must not lose track of assigned chunks.
 \end{itemize}
 
-\textbf{Performance}: Akka.NET uses the DotNetty transport layer (TCP/UDP). It includes self-optimizing batching systems that group messages to reduce network overhead. Benchmarks indicate it can handle approximately 190,000 messages per second in batched scenarios on standard hardware. While high, this throughput is bounded by the overhead of the detailed actor context serialization. \cite{akka_performance}
+\textbf{Performance}: Akka.NET uses the DotNetty transport layer (TCP/UDP). It includes self-optimizing batching systems that group messages to reduce network overhead. Benchmarks from \cite{akka_performance} indicate it can handle approximately 190,000 messages per second in batched scenarios on standard hardware. While high, this throughput is bounded by the overhead of the detailed actor context serialization.
 
 \subsection{Microsoft Orleans}
 
-Microsoft Orleans, created by Microsoft Research, introduces a radical evolution of the model: the "Virtual Actor" or "Grain," which, unlike Akka's actors that must be explicitly created and started, are virtual entities that always exist logically.
+Microsoft Orleans, created by Microsoft Research, introduces a radical evolution of the model described in \cite{orleans_overview}: the "Virtual Actor" or "Grain," which, unlike Akka's actors that must be explicitly created and started, are virtual entities that always exist logically. This approach has many quality of life benefits as described by \cite{orleans_benefits}.
 
 \begin{itemize}
-    \item \textbf{Activation on Demand}: A Grain is automatically activated (instantiated in memory) by the runtime only when a message is sent to it. The developer does not manage the lifecycle. \cite{orleans_overview}
+    \item \textbf{Activation on Demand}: A Grain is automatically activated (instantiated in memory) by the runtime only when a message is sent to it. The developer does not manage the lifecycle.
 
     \item \textbf{Deactivation}: When a Grain is idle, the runtime deactivates it (removes it from memory) to free resources.
 
-    \item \textbf{Location Transparency}: The runtime handles the placement of Grains on silos (servers). A "Grain Directory" tracks where each Grain lives. \cite{orleans_benefits}
+    \item \textbf{Location Transparency}: The runtime handles the placement of Grains on silos (servers). A "Grain Directory" tracks where each Grain lives.
 \end{itemize}
 
-\textbf{Performance}: Orleans is optimized for high-concurrency, low-latency IO-bound workloads (e.g., web requests). It employs a cooperative multitasking model where Grains execute on a limited number of threads (typically one per CPU core). This presents a significant challenge for password cracking. If a Grain executes a long-running CPU-bound task (like calculating a complex hash or managing a large batch of work), it blocks the thread. This "starves" the silo, preventing it from processing other messages, heartbeats, or acknowledgements. To work around this, developers must use \verb|StatelessWorker| grains or explicitly offload work to the .NET ThreadPool (with \verb|Task.Run|), which breaks the single-threaded safety guarantees of the Grain model and introduces complexity. \cite{orleans_perf}
-While libraries like Orleans.SyncWork exist to mitigate this, the framework fights against the nature of heavy computational tasks. \footnote{https://github.com/OrleansContrib/Orleans.SyncWork/tree/main}
+\textbf{Performance}: Orleans is optimized for high-concurrency, low-latency IO-bound workloads (e.g., web requests). According to \cite{orleans_perf}, it employs a cooperative multitasking model where Grains execute on a limited number of threads (typically one per CPU core). This presents a significant challenge for password cracking. If a Grain executes a long-running CPU-bound task (like calculating a complex hash or managing a large batch of work), it blocks the thread. This "starves" the silo, preventing it from processing other messages, heartbeats, or acknowledgements. To work around this, developers must use \verb|StatelessWorker| grains or explicitly offload work to the .NET ThreadPool (with \verb|Task.Run|), which breaks the single-threaded safety guarantees of the Grain model and introduces complexity.
+While libraries like \textit{Orleans.SyncWork} exist to mitigate this, the framework fights against the nature of heavy computational tasks. \footnote{https://github.com/OrleansContrib/Orleans.SyncWork/tree/main}
 
 \subsection{Proto.Actor}
 
-Proto.Actor was created by Roger Alsing, a co-founder of Akka.NET, specifically to address perceived architectural limitations in Akka.NET regarding performance and complexity. It is a cross-platform framework (C\#, Go, Kotlin) built on gRPC. \cite{about_proto_actor}
+Proto.Actor was created by Roger Alsing, a co-founder of Akka.NET, specifically to address perceived architectural limitations in Akka.NET regarding performance and complexity, as described by \cite{about_proto_actor}. It is a cross-platform framework (C\#, Go, Kotlin) built on Google's gRPC high-performance Remote Procedure Call (RPC) messaging framework.
 
 \begin{itemize}
-    \item \textbf{gRPC and Protobuf}: Proto.Actor leverages Protocol Buffers for serialization and gRPC streams for transport. This results in ultra-low overhead. Benchmarks have shown Proto.Actor capable of handling about 2.5 million messages per second over the network, significantly outperforming Akka.NET's ~190k. \cite{akka_performance}
+    \item \textbf{gRPC and Protobuf}: Proto.Actor leverages Protocol Buffers for serialization and gRPC streams for transport. This results in ultra-low overhead. Benchmarks have shown Proto.Actor capable of handling about 2.5 million messages per second over the network, significantly outperforming Akka.NET's ~190k.
 
-    \item \textbf{Hybrid Model}: Proto.Actor supports both "Classic Actors" (explicit lifecycle, like Akka) and "Grains" (virtual, like Orleans), giving developers the flexibility to mix paradigms. \cite{proto_cluster}
+    \item \textbf{Hybrid Model}: Proto.Actor supports both "Classic Actors" (explicit lifecycle, like Akka) and "Grains" (virtual actors, like Orleans via the Proto.Cluster package \cite{proto_cluster}), giving developers the flexibility to mix paradigms.
 
-    \item \textbf{Pluggable Clustering}: Rather than implementing a monolithic clustering engine, Proto.Actor outsources cluster membership to dedicated providers like \textbf{Consul}, \textbf{Kubernetes}, or \textbf{etcd}. This allows it to leverage existing cloud-native infrastructure for reliability. \cite{proto_cluster}
+    \item \textbf{Pluggable Clustering}: Rather than implementing a monolithic clustering engine, Proto.Actor outsources cluster membership to dedicated providers like \textbf{Consul}, \textbf{Kubernetes}, or \textbf{etcd}. This allows it to leverage existing cloud-native infrastructure for reliability.
 \end{itemize}
 
 
@@ -480,7 +503,7 @@ The development of a distributed password cracking system imposes a unique set o
 
     \item \textbf{Fault Tolerance}: The system must survive the sudden loss of any worker node without data corruption. Unfinished work units from failed nodes must be automatically reassigned.
 
-    \item \textbf{Low Latency Overhead}: The time required to assign a new work unit must be negligible compared to the time required to process it. For fast hashing algorithms (e.g., NTLM or MD5), the amount of messages transferred over the network should be minimal, favoring larger chunks.
+    \item \textbf{Low Latency Overhead}: The time required to assign a new work unit must be negligible compared to the time required to process it. For fast hashing algorithms (e.g., NTLM or MD5), the amount of messages transferred over the network should be minimal, favoring larger chunks. This raises the need to design a dynamic chunking algorithm that sets the size of the work unit based on the agent node's capabilities (the hash rate metric provided by Hashcat's \verb|--benchmark| flag gives us this required insight).
 \end{itemize}
 
 \section{Analysis of Existing Solutions: FitCrack and Hashtopolis}
@@ -489,30 +512,36 @@ To contextualize the proposed architecture, it is essential to evaluate the two 
 
 \subsection{FitCrack}
 
-FitCrack is a distributed password cracking system built on top of the \textbf{BOINC} (Berkeley Open Infrastructure for Network Computing) framework. It was developed primarily for digital forensics and research at the Brno University of Technology.
+As described in \cite{BUT168182}, FitCrack is a distributed password cracking system built on top of the \textbf{BOINC} (Berkeley Open Infrastructure for Network Computing) framework. It was developed primarily for digital forensics and research at the Brno University of Technology.
 
 The architecture of FitCrack utilizes a "Volunteer Computing" model. The server encapsulates cracking tasks into independent "Work Units" that are pushed to client queues. Clients download these units, process them offline, and upload the results upon completion.
 
-Its arguable strength is high fault tolerance because it is designed for volunteer grids (like SETI@home); it assumes clients are unreliable. It handles node disconnections gracefully by automatically re-issuing uncompleted work units. However, it can suffer from high latency because BOINC is not designed for real-time responsiveness; canceling or modifying a job takes time to propagate. \cite{BUT168182}
+Its arguable strength is high fault tolerance because it is designed for volunteer grids (like SETI@home); it assumes clients are unreliable. It handles node disconnections gracefully by automatically re-issuing uncompleted work units. However, it can suffer from high latency because BOINC is not designed for real-time responsiveness; canceling or modifying a job takes time to propagate.
+
+%approach to mask attack
+%approach to dictionary attack
 
 \subsection{Hashtopolis}
 
-Hashtopolis is a client-server management platform widely adopted by the penetration testing community. It uses a PHP/MySQL backend and Python-based agents.
+Hashtopolis provides us with insights into a different approach in this field. As described in \cite{hashtopolis}, it is a client-server management platform widely adopted by the penetration testing community. It uses a PHP/MySQL backend and Python-based agents.
 
 Its architecture operates on a Pull-Based model via a REST API. Agents periodically poll the server (e.g., every 5-30 seconds) to request a "Chunk" of work.
 
-One of its strengths is the comprehensive web interface provided for managing "Supertasks" (chained attack modes), uploading wordlists, and visualizing cluster heatmaps. Unlike FitCrack, it features granular control that allows for relatively fast job cancelation and modification. However, its reliance on HTTP polling creates significant network overhead as the cluster grows. Thousands of agents polling a PHP server every few seconds can induce a Denial-of-Service (DoS) condition on the control plane. Also, the central MySQL database often becomes a point of contention for writing status updates and chunk assignments, limiting linear scalability. \cite{hashtopolis}
+One of its strengths is the comprehensive web interface provided for managing "Supertasks" (chained attack modes), uploading wordlists, and visualizing cluster heatmaps. Unlike FitCrack, it features granular control that allows for relatively fast job cancelation and modification. However, its reliance on HTTP polling creates significant network overhead as the cluster grows. Thousands of agents polling a PHP server every few seconds can induce a Denial-of-Service (DoS) condition on the control plane. Also, the central MySQL database often becomes a point of contention for writing status updates and chunk assignments, limiting linear scalability.
+
+%approach to mask attack
+%approach to dictionary attack
 
 \section{Proposed Actor-Based architecture}
 
-The system architecture adopts a Master-Worker (or Coordinator-Agent) topology implemented using the Proto.Actor framework. Unlike FitCrack, which relies on the polling-based BOINC infrastructure, this system utilizes a persistent gRPC connection maintained by the actor system, allowing for real-time bi-directional communication, which should also be more performant than the REST API model used by Hashtopolis.
+The system architecture adopts a Master-Worker (or Coordinator-Agent) topology, implemented using the \textbf{Proto.Actor} framework. Unlike FitCrack, which relies on the polling-based BOINC infrastructure or the REST API model used by Hashtopolis, this system utilizes a persistent gRPC connection maintained by the actor system, allowing for real-time bi-directional asynchronous communication.
 
 \subsection{The Coordinator Node}
 
 The Coordinator serves as the cluster leader and state manager. It does not perform cracking tasks; instead, it manages the lifecycle of jobs.
 
 \begin{itemize}
-    \item \verb|JobManagerActor|: The root supervisor for all cracking operations. When a new job is submitted, it spawns a child JobCoordinator specifically for that task.
+    \item \verb|JobManagerActor|: The root supervisor Grain for all cracking operations. When a new job is submitted, it spawns a child JobCoordinator specifically for that task.
 
     \item \verb|JobCoordinator| (Virtual Actor / Grain): A unique actor assigned to a specific Job ID. It holds the "Global Cursor" of the keyspace. It is responsible for generating work chunks and tracking their state (Pending, Assigned, or Completed). By implementing this as a Virtual Actor (Grain), we ensure that the job state is always addressable and effectively "single-threaded," preventing race conditions where two workers might claim the same keyspace.
 
