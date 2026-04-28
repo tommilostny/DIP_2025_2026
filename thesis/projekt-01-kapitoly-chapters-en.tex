@@ -503,6 +503,8 @@ The development of a distributed password cracking system imposes a unique set o
 
     \item \textbf{Fault Tolerance}: The system must survive the sudden loss of any worker node without data corruption. Unfinished work units from failed nodes must be automatically reassigned.
 
+    \item \textbf{Concurrent Data Access}: The backing storage must smoothly handle parallel operations. The distributed actor system will constantly bulk-insert progress updates and recovered passwords, while the web interface simultaneously queries this exact data to render live user dashboards.
+
     \item \textbf{Low Latency Overhead}: The time required to assign a new work unit must be negligible compared to the time required to process it. For fast hashing algorithms (e.g., NTLM or MD5), the amount of messages transferred over the network should be minimal, favoring larger chunks. This raises the need to design a dynamic chunking algorithm that sets the size of the work unit based on the agent node's capabilities (the hash rate metric provided by Hashcat's \verb|--benchmark| flag gives us this required insight).
 \end{itemize}
 
@@ -534,30 +536,39 @@ One of its strengths is the comprehensive web interface provided for managing "S
 
 \section{Proposed Actor-Based architecture}
 
-The system architecture adopts a Master-Worker (or Coordinator-Agent) topology, implemented using the \textbf{Proto.Actor} framework. Unlike FitCrack, which relies on the polling-based BOINC infrastructure or the REST API model used by Hashtopolis, this system utilizes a persistent gRPC connection maintained by the actor system, allowing for real-time bi-directional asynchronous communication.
+The system architecture adopts a Coordinator-Agent (Master-Worker) topology, implemented using the \textbf{Proto.Actor} framework. Unlike FitCrack, which relies on the polling-based BOINC infrastructure, or the REST API model used by Hashtopolis, this system utilizes a persistent gRPC connection maintained by the actor system, allowing for real-time bi-directional asynchronous communication. To facilitate dynamic cluster membership and fault tolerance, the system integrates \textbf{Consul}.
 
-\subsection{The Coordinator Node}
-
-The Coordinator serves as the cluster leader and state manager. It does not perform cracking tasks; instead, it manages the lifecycle of jobs.
+\subsection{Technology Stack Selection}
+Before detailing the exact node roles, it is crucial to establish the foundational technologies that enable this architecture:
 
 \begin{itemize}
-    \item \verb|JobManagerActor|: The root supervisor Grain for all cracking operations. When a new job is submitted, it spawns a child JobCoordinator specifically for that task.
-
-    \item \verb|JobCoordinator| (Virtual Actor / Grain): A unique actor assigned to a specific Job ID. It holds the "Global Cursor" of the keyspace. It is responsible for generating work chunks and tracking their state (Pending, Assigned, or Completed). By implementing this as a Virtual Actor (Grain), we ensure that the job state is always addressable and effectively "single-threaded," preventing race conditions where two workers might claim the same keyspace.
-
-    \item \verb|ResultCollector|: A specialized actor that receives successful "Cracked" messages. It interfaces with the persistence layer (database) to store found passwords and notifies the \verb|JobCoordinator| to cancel remaining work if the target hash is unique and has been found.
+    \item \textbf{Proto.Actor \& Consul}: Proto.Actor handles high-performance, distributed actor messaging over gRPC. Because Hashcat workers can join or leave the network at any time, Consul handles service discovery dynamically. It tracks node health and ensures the actor system routing remains up to date without the need for hardcoded IP addresses.
+    \item \textbf{PostgreSQL \& Entity Framework Core}: PostgreSQL was chosen over NoSQL alternatives (like MongoDB) or local flat-file databases (like SQLite) for its robust Multi-Version Concurrency Control (MVCC). In this system, the actor network constantly bulk-inserts recovered passwords and telemetry updates. MVCC ensures that these heavy write operations never block the Web UI from reading and displaying real-time data.
+    \item \textbf{Blazor Server}: By embedding a Blazor Server application directly alongside the Coordinator's actor system, the architecture eliminates the need for a traditional decoupled REST API and JavaScript frontend. The user interface resides in the exact same memory space as the cluster, querying Grain states locally and pushing updates to the browser instantly via SignalR.
 \end{itemize}
 
-\subsection{The Agent Node}
+\subsection{The Coordinator (Manager) Node}
 
-The Agent runs on the compute nodes. Its primary responsibility is to keep the GPU saturated.
+The Coordinator serves as the cluster leader, state manager, and web server. It hosts the Blazor Server web interface, the central Consul server instance, and connects to the PostgreSQL database. It does not perform cracking tasks itself; instead, it orchestrates the lifecycle of jobs.
+
+\begin{itemize}
+    \item \verb|JobManagerGrain|: The root supervisor Grain for all cracking operations. When a new job is submitted via the web UI, it spawns a child coordinator specifically for that task.
+
+    \item \verb|JobCoordinatorGrain| (Virtual Actor / Grain): A unique actor assigned to a specific Job ID. It holds the "Global Cursor" of the keyspace. It is responsible for generating work chunks and tracking their state (Pending, Assigned, or Completed). By implementing this as a Virtual Actor (Grain), we ensure that the job state is always addressable and effectively "single-threaded," naturally preventing race conditions where two workers might attempt to claim the exact same keyspace chunk.
+
+    \item \verb|ResultCollectorGrain|: A specialized actor that receives successful "Cracked" messages from the cluster. It interfaces directly with Entity Framework Core to map and store the recovered passwords into the PostgreSQL database, and notifies the relevant \verb|JobCoordinatorGrain| to halt further work if a target hash has been fully compromised.
+\end{itemize}
+
+\subsection{The Agent (Worker) Node}
+
+The Agent runs as a standalone, lightweight .NET console application on the compute nodes alongside a local Consul agent. Its primary responsibility is to keep the underlying GPU hardware saturated with hashing instructions.
 
 \begin{itemize}
     \item \verb|NodeGuardian|: The top-level supervisor on the client machine. It manages the connection to the cluster and supervises the \verb|CrackingService|.
 
     \item \verb|CrackingService|: Implements the "Work Pulling" pattern. It monitors the local GPU status. When the current task is near completion, it preemptively sends a \verb|RequestWork| message to the Coordinator to fetch the next chunk, ensuring zero downtime between batches.
 
-    \item \verb|HashcatWrapper|: A child actor that manages the OS-level Hashcat process. It translates actor messages into CLI arguments (e.g., converting a given chunk range into --skip and --limit flags) and parses the stdout/stderr streams from Hashcat to report progress back to the \verb|NodeGuardian|.
+    \item \verb|HashcatWrapper|: An encapsulated service that manages the OS-level Hashcat process. It translates actor messages into executable arguments (e.g., converting a given chunk range into \verb|--skip| and \verb|--limit| flags) and parses the standard output streams from Hashcat to continuously report progress and hardware telemetry back to the \verb|NodeGuardian|.
 \end{itemize}
 
 \section{Communication protocols}
@@ -569,7 +580,7 @@ To maximize performance, the system utilizes \textbf{Protobuf} (Protocol Buffers
 Instead of the Coordinator "pushing" work (which risks overwhelming slow nodes), the Workers "pull" work.
 
 \begin{enumerate}
-    \item \textbf{Job Discovery}: If the Agent has just joined the cluster or if the previous job is finished, it can send a \verb|JobDiscovery| message to the root \verb|JobManagerActor| node, which can respond with a \verb|JobAssignment| message containing a JobID of unfinished pending work, if any is available.
+    \item \textbf{Job Discovery}: If the Agent has just joined the cluster or if the previous job is finished, it can send a \verb|JobDiscovery| message to the root \verb|JobManagerGrain|, which can respond with a \verb|JobAssignment| message containing a JobID of unfinished pending work, if any is available.
 
 \begin{verbatim}
 message JobDiscovery {
@@ -582,7 +593,7 @@ message JobAssignment {
 }
 \end{verbatim}
 
-    \item \textbf{Work Request}: The Agent can then request work from a \verb|JobCoordinator| node with the Grain Identity matching the assigned JobID via a \verb|WorkRequest| message containing its \verb|AgentID| and the average hashrate used for adaptive chunk sizing, which can be obtained by running a local Hashcat benchmark for a specific hash type based on the given mode ID (with the command \verb|hashcat -b -m <mode_id>|). The result of the benchmark can be cached for future use, ensuring faster availability of the Agent node for the current task.
+    \item \textbf{Work Request}: The Agent can then request work from the \verb|JobCoordinatorGrain| with the identity matching the assigned JobID via a \verb|WorkRequest| message. This message contains its \verb|AgentID| and the benchmarked hashrate used for adaptive chunk sizing. The hashrate is obtained by running a local Hashcat benchmark for the specific hash type (with the command \verb|hashcat -b -m <mode_id>|). The result of this benchmark is cached locally, ensuring faster availability of the Agent for subsequent tasks of the same type.
 
 \begin{verbatim}
 message WorkRequest {
@@ -591,7 +602,7 @@ message WorkRequest {
 }
 \end{verbatim}
 
-    \item \textbf{Assignment}: The \verb|JobCoordinator| node creates a work assignment message based on the type of attack it is meant to perform. To handle work assignment messages effectively for both Brute Force (Mode 3) and Dictionary (Mode 0) attacks, the system must employ a polymorphic message design, which means it will create a message with common metadata and additional specialized fields.
+    \item \textbf{Assignment}: The \verb|JobCoordinatorGrain| creates a work assignment message based on the type of attack it is orchestrating. To handle assignments effectively for both Brute Force (Mode 3) and Dictionary (Mode 0) attacks, the system employs a polymorphic message design, containing common metadata and additional specialized fields.
 
     \begin{verbatim}
 // Shared metadata for tracking and idempotency
@@ -603,7 +614,7 @@ message WorkMetadata {
     \end{verbatim}
 
     \begin{enumerate}
-        \item \textbf{Handling Mask Attacks (Mode 3)}: This is the "Zero-Latency" path. The Coordinator calculates the total keyspace ($N^L$) and maintains a \verb|GlobalCursor| (a \verb|long| integer). When a worker requests work, the Coordinator reserves a range starting at the \verb|GlobalCursor| based on the given hash rate of the worker node and populates additional fields accordingly.
+        \item \textbf{Handling Mask Attacks (Mode 3)}: This is the "Zero-Latency" path. To safely partition work, the Coordinator evaluates two essential Hashcat metrics: \verb|--keyspace| and \verb|--total-candidates|. The keyspace represents the divisible outer loop of the attack algorithm, defining the discrete units of work. However, because a single keyspace unit might expand into multiple password guesses (e.g. due to internal amplification), the keyspace alone is insufficient for time-based load balancing. By dividing the total candidates by the keyspace, the coordinator derives an \textit{amplification factor}. This allows the system to accurately translate an agent's raw benchmarked hashrate (candidates per second) into an exact number of keyspace units. When a worker requests work, the Coordinator reserves a range starting at its \verb|GlobalCursor|, sized specifically to the agent's hardware capabilities, ensuring the task completes within a strict, predictable time window.
 
 \begin{verbatim}
 // Message for Attack Mode 3 (Stateless)
@@ -635,7 +646,7 @@ message DictionaryWorkAssignment {
 
     \item \textbf{Execution \& Reporting}: The Agent spawns the Hashcat process. While running, it streams Heartbeat messages every 5 seconds, containing telemetry (GPU temperature, Fan Speed, etc.).
 
-    \item \textbf{Completion}: Upon finishing the chunk, the Agent sends a \verb|WorkResult| message back to the \verb|JobCoordinator|, which marks the chunk as \verb|Completed|. If any recovered passwords were found in the chunk, they are sent to the \verb|ResultCollector| actor.
+    \item \textbf{Completion}: Upon finishing the chunk, the Agent sends a \verb|WorkResult| message back to the \verb|JobCoordinatorGrain|, which safely marks the chunk as \verb|Completed|. If any recovered passwords were found in the chunk, they are sent to the \verb|ResultCollectorGrain|.
 
 \begin{verbatim}
 message WorkResult {
@@ -649,16 +660,16 @@ message WorkResult {
 
 \section{Fault tolerance and recovery}
 
-Reliability in this architecture is achieved through \textbf{At-Least-Once} processing guarantees, managed via the \verb|JobCoordinator|'s state machine.
+Reliability in this architecture is achieved through \textbf{At-Least-Once} processing guarantees, managed via the \verb|JobCoordinatorGrain|'s state machine.
 
 \subsection{Distributed Checkpointing}
 
-Unlike Hashcat's local .restore file, which is useless if a node dies, checkpointing is managed logically by the Coordinator.
+Unlike Hashcat's local \verb|.restore| file, which is useless if a physical node fails, checkpointing is managed logically by the Coordinator's actor state.
 
 \begin{enumerate}
     \item \textbf{Leasing}: When a chunk is assigned to a worker, it moves from \verb|Pending| to \verb|Assigned| with a timestamp.
 
-    \item \textbf{Timeout Supervision}: The \verb|JobCoordinator| maintains a timer for every \verb|Assisgned| chunk. If a \verb|WorkResult| is not received within the expected duration (plus a buffer margin), the chunk is considered "Lost."
+    \item \textbf{Timeout Supervision}: The \verb|JobCoordinatorGrain| maintains a timer for every \verb|Assigned| chunk. Because the chunks are dynamically sized to fit an exact time window (e.g., 60 seconds), the Coordinator can easily identify anomalies. If a \verb|WorkResult| is not received within the expected duration (plus a slight buffer margin), the chunk is considered "Lost."
 
     \item \textbf{Re-queuing}: "Lost" chunks are forcefully moved back to the Pending queue. They will be reassigned to the next available worker. This guarantees that a crashed GPU driver or network partition does not result in a permanent gap in the keyspace coverage.
 \end{enumerate}
@@ -668,9 +679,9 @@ Unlike Hashcat's local .restore file, which is useless if a node dies, checkpoin
 Because of the "At-Least-Once" retry logic, it is possible for a chunk to be processed twice (e.g., a worker finishes, but the \verb|WorkResult| message drops due to network lag; the Coordinator times out and reassigns the chunk). To prevent data corruption:
 
 \begin{itemize}
-    \item \textbf{Database Constraints}: The results table uses the specific Hash+Salt combination as a Unique Key.
+    \item \textbf{Database Constraints}: The PostgreSQL database is configured using Entity Framework Core to enforce primary keys and foreign key constraints on the recovered passwords linked to specific jobs. This naturally rejects duplicate insert attempts at the data layer.
 
-    \item \textbf{Actor Logic}: The \verb|ResultCollector| checks an in-memory Bloom filter of recently cracked hashes before attempting a database write. If a password for a specific hash is received twice, the second message is acknowledged but discarded. This ensures that the system state remains consistent regardless of message duplication.
+    \item \textbf{Actor Logic}: The \verb|ResultCollectorGrain| can optionally check an in-memory cache of recently cracked hashes before attempting a database write. If a password for a specific hash is received twice, the second message is gracefully acknowledged but discarded. This ensures that the system state remains highly consistent regardless of message duplication or replay.
 \end{itemize}
 
 
