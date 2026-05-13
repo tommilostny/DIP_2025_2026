@@ -1,6 +1,9 @@
 ﻿@inherits LayoutComponentBase
 
+<Microsoft.AspNetCore.Components.Sections.SectionOutlet SectionName="modal-layer" @rendermode="InteractiveServer" />
+
 <div class="page modern-layout">
+    
     <div class="sidebar modern-sidebar">
         <NavMenu />
     </div>
@@ -89,7 +92,7 @@
     }
 
     .animate-fade-in-up {
-        animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        animation: fadeInUp 1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
     .animate-pulse {

@@ -98,8 +98,12 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
 
     public float GetProgress() 
     {
-        if (specs.Hashes.Count == 0) return 100.0f;
-        if (!_totalKeyspace.HasValue || _totalKeyspace == 0) return 0.0f;
+        if (_totalKeyspace is null or 0)
+            return 0.0f;
+
+        if (specs.Hashes.Count == 0 || (_currentOffset >= _totalKeyspace && _retryQueue.Count == 0 && _activeChunks.Count == 0))
+            return 100.0f;
+
         return Math.Min(100.0f, (float)_completedKeyspace / _totalKeyspace.Value * 100.0f);
     }
 
@@ -118,3 +122,4 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, Has
         }
     }
 }
+//52108C136A6D4821580455628FD355A2

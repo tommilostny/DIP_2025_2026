@@ -1,0 +1,309 @@
+@page "/job-details/{*JobId}"
+@rendermode InteractiveServer
+@using DPCS.DAL
+@using DPCS.DAL.Entities
+@using DPCS.Shared
+@using Microsoft.EntityFrameworkCore
+@inject ActorSystem ActorSystem
+@inject IDbContextFactory<DpcsDbContext> DbFactory
+@implements IDisposable
+
+<PageTitle>Job Details</PageTitle>
+
+<div class="mb-4">
+    @if (_jobStatus is not null)
+    {
+        <a href="/" class="text-decoration-none">&larr; Back to Dashboard</a>
+    }
+    else
+    {
+        @if (_dbJob is not null)
+        {
+            <a href="job-history" class="text-decoration-none">&larr; Back to History</a>
+        }
+    }
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>Job Details</h1>
+        <h5 class="text-muted font-monospace mb-0">@JobId</h5>
+    </div>
+    <button class="btn btn-outline-secondary" @onclick="LoadData">Refresh</button>
+</div>
+
+@if (_isLoading)
+{
+    <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+}
+else if (_dbJob == null && _jobStatus == null)
+{
+    <div class="alert alert-warning">Job not found.</div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <strong>Configuration</strong>
+                </div>
+                <div class="card-body">
+                    <p>
+                        <strong>Attack mode:</strong> @(_dbJob?.AttackMode ?? 0) 
+                        (@( _dbJob?.AttackMode == (int)AttackMode.Mask ? "Mask" : "Dictionary" ))
+                    </p>
+                    
+                    @if (_maskJobSpecs is not null && !string.IsNullOrEmpty(_maskJobSpecs.Mask))
+                    {
+                        <p><strong>Mask: </strong> @_maskJobSpecs.Mask</p>
+                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset1))
+                        {
+                            <p class="mb-1"><strong>Charset 1 (?1): </strong> @_maskJobSpecs.CustomCharset1</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset2))
+                        {
+                            <p class="mb-1"><strong>Charset 2 (?2): </strong> @_maskJobSpecs.CustomCharset2</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset3))
+                        {
+                            <p class="mb-1"><strong>Charset 3 (?3): </strong> @_maskJobSpecs.CustomCharset3</p>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset4))
+                        {
+                            <p class="mb-1"><strong>Charset 4 (?4): </strong> @_maskJobSpecs.CustomCharset4</p>
+                        }
+                    }
+                    else if (_dictionaryJobSpecs is not null && _dictionaryJobSpecs.Wordlists.Count > 0)
+                    {
+                        <strong>Wordlists:</strong>
+                        <ul>
+                            @foreach (var wordlist in _dictionaryJobSpecs.Wordlists)
+                            {
+                                <li>@wordlist</li>
+                            }
+                        </ul>
+                    }
+
+                    <p class="mt-3">
+                        <strong>Hash type:</strong> @(_dbJob?.HashType ?? 0) (@HashTypeMap.GetHashTypeName(_dbJob?.HashType ?? 0))
+                    </p>
+                    
+                    <strong style="cursor: pointer;" @onclick="ToggleHashes" class="d-block mb-2">
+                        Hashes (@(_hashes.Count))
+                        <span class="float-end">@(_isHashesExpanded ? "▼" : "▶")</span>
+                    </strong>
+                    @if (_isHashesExpanded && _hashes.Count > 0)
+                    {
+                        <div class="bg-light p-2 rounded" style="max-height: 200px; overflow-y: auto;">
+                            <ul class="mb-0 font-monospace small" style="word-break: break-all;">
+                                @foreach (var hash in _hashes)
+                                {
+                                    <li>@hash</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <p class="mt-3 mb-0"><strong>Chunk Attack seconds:</strong> @(_jobStatus?.ChunkAttackSeconds ?? 0)</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            <div class="card h-100 shadow-sm border-0">
+                <div class="card-header bg-light">
+                    <strong>Execution Status</strong>
+                </div>
+                <div class="card-body">
+                    <p><strong>Status:</strong> <span class="badge @GetStatusBadgeClass(_jobStatus?.Status ?? _dbJob?.Status)">@(_jobStatus?.Status ?? _dbJob?.Status ?? "Unknown")</span></p>
+                    <p><strong>Progress:</strong> @((_jobStatus?.ProgressPercentage ?? _dbJob?.ProgressPercentage ?? 0).ToString("F2")) %</p>
+                    
+                    @if ((_jobStatus?.Status ?? _dbJob?.Status) is "Running" or "In Progress")
+                    {
+                        <div class="progress mb-3" style="height: 10px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                 role="progressbar" 
+                                 style="width: @Math.Round(_jobStatus?.ProgressPercentage ?? _dbJob?.ProgressPercentage ?? 0)%;"></div>
+                        </div>
+                        <button class="btn btn-danger btn-sm mt-2" @onclick="CancelJob">Cancel Job</button>
+                    }
+
+                    <hr />
+                    
+                    <h5 class="card-title mb-3" style="cursor: pointer;" @onclick="ToggleAgents">
+                        Active agents (@(_jobStatus?.Agents.Count ?? 0))
+                        @if (_jobStatus is { Agents: { Count: > 0 } })
+                        {
+                            <span class="float-end fs-6">@(_isAgentsExpanded ? "▼" : "▶")</span>
+                        }
+                    </h5>
+                    @if (_isAgentsExpanded && _jobStatus is { Agents: { Count: > 0 } })
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Agent</th>
+                                        <th>Hashrate</th>
+                                        <th>Temp</th>
+                                        <th>Fan</th>
+                                        <th>GPU</th>
+                                        <th>Reject</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var agentTelemetry in _jobStatus.Agents)
+                                    {
+                                        <tr>
+                                            <td class="font-monospace small align-middle">@agentTelemetry.AgentId.Address/@agentTelemetry.AgentId.Id</td>
+                                            @if (!float.IsNaN(agentTelemetry.RejectRate))
+                                            {
+                                                <td class="align-middle">@agentTelemetry.CurrentHashrate H/s</td>
+                                                <td class="align-middle">@agentTelemetry.Temperature °C</td>
+                                                <td class="align-middle">@agentTelemetry.FanSpeed %</td>
+                                                <td class="align-middle">@agentTelemetry.GpuUtilization %</td>
+                                                <td class="align-middle">@(agentTelemetry.RejectRate * 100)%</td>
+                                            }
+                                            else
+                                            {
+                                                <td colspan="5" class="text-muted text-center align-middle">Waiting for telemetry...</td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    
+                    <hr />
+                    
+                    <h5 class="card-title mb-3" style="cursor: pointer;" @onclick="ToggleRecoveredPasswords">
+                        Recovered passwords (@((_dbJob?.Status == "Completed" ? _hashes.Count : _jobStatus?.RecoveredPasswords.Count) ?? 0))
+                        @if (_jobStatus is { RecoveredPasswords: { Count: > 0 } })
+                        {
+                            <span class="float-end fs-6">@(_isRecoveredPasswordsExpanded ? "▼" : "▶")</span>
+                        }
+                    </h5>
+                    @if (_isRecoveredPasswordsExpanded && _jobStatus is { RecoveredPasswords: { Count: > 0 } })
+                    {
+                        <ul class="list-group list-group-flush mb-0">
+                            @foreach (var rec in _jobStatus.RecoveredPasswords)
+                            {
+                                <li class="list-group-item text-break px-0">
+                                    <span class="text-muted small">@rec.Hash</span><br/>
+                                    <strong>@rec.Plaintext</strong>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public string JobId { get; set; } = "";
+
+    private bool _isLoading = true;
+    private JobRecordEntity? _dbJob;
+    private JobStatus? _jobStatus;
+    private HashcatMaskJobSpecs? _maskJobSpecs;
+    private HashcatDictionaryJobSpecs? _dictionaryJobSpecs;
+    private List<string> _hashes = [];
+    
+    private readonly CancellationTokenSource _cts = new();
+    private bool _isAgentsExpanded = true;
+    private bool _isRecoveredPasswordsExpanded = true;
+    private bool _isHashesExpanded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        _isLoading = false;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+                while (await timer.WaitForNextTickAsync(_cts.Token))
+                {
+                    var status = _dbJob?.Status ?? _jobStatus?.Status;
+                    if (status is "Running" or "In Progress" or "Initializing")
+                    {
+                        await InvokeAsync(LoadData);
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+            }
+            catch (OperationCanceledException) { }
+        });
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            _dbJob = await db.JobRecords.AsNoTracking().FirstOrDefaultAsync(j => j.JobId == JobId);
+
+            // Fetch real-time status from Orleans if available
+            var jobCoordinator = ActorSystem.Cluster().GetJobCoordinatorGrain(JobId);
+            _jobStatus = await jobCoordinator.GetJobStatus(CancellationToken.None);
+
+            // Fetch specs based on mode
+            var mode = _dbJob?.AttackMode;
+            if (mode == (int)AttackMode.Mask)
+            {
+                _maskJobSpecs = await jobCoordinator.GetMaskJobSpecs(CancellationToken.None);
+                if (_maskJobSpecs != null && _maskJobSpecs.Hashes.Any())
+                {
+                    _hashes = _maskJobSpecs.Hashes.ToList();
+                }
+            }
+            else if (mode == (int)AttackMode.Dictionary)
+            {
+                _dictionaryJobSpecs = await jobCoordinator.GetDictionaryJobSpecs(CancellationToken.None);
+                if (_dictionaryJobSpecs != null && _dictionaryJobSpecs.Hashes.Any())
+                {
+                    _hashes = _dictionaryJobSpecs.Hashes.ToList();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading job details: {ex.Message}");
+        }
+    }
+
+    private async Task CancelJob()
+    {
+        var jobManager = ActorSystem.Cluster().GetJobManagerGrain("root");
+        await jobManager.CancelJob(new JobId { Id = JobId }, CancellationToken.None);
+        await LoadData();
+    }
+
+    private void ToggleAgents() => _isAgentsExpanded = !_isAgentsExpanded;
+    private void ToggleRecoveredPasswords() => _isRecoveredPasswordsExpanded = !_isRecoveredPasswordsExpanded;
+    private void ToggleHashes() => _isHashesExpanded = !_isHashesExpanded;
+
+    private string GetStatusBadgeClass(string? status) => status switch
+    {
+        "Completed" => "bg-success",
+        "Running" or "In Progress" => "bg-primary",
+        "Cancelled" => "bg-danger",
+        "Initializing" => "bg-secondary",
+        _ => "bg-dark"
+    };
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+}

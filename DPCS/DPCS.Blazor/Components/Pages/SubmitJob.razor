@@ -8,10 +8,10 @@
 
 <h1>Submit New Job</h1>
 
-<div class="row">
-    <div class="col-md-6">
-        <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" FormName="SubmitJobForm">
-            <DataAnnotationsValidator />
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" FormName="SubmitJobForm">
+    <DataAnnotationsValidator />
+    <div class="row">
+        <div class="col-md-6">
             
             <div class="mb-3">
                 <label class="form-label">Attack Mode</label>
@@ -46,6 +46,9 @@
                 <ValidationMessage For="() => Model.ChunkTimeSeconds" />
                 <div class="form-text text-muted">Target time for each work chunk assigned to agents.</div>
             </div>
+        </div>
+
+        <div class="col-md-6">
 
             @if (Model.AttackMode == AttackMode.Mask)
             {
@@ -99,47 +102,49 @@
 
                 @if (_showMaskHelp)
                 {
-                    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick="() => _showMaskHelp = false">
-                        <div class="modal-dialog modal-dialog-centered modal-lg" @onclick:stopPropagation="true">
-                            <div class="modal-content">
-                                <div class="modal-header">
-                                    <h5 class="modal-title">Hashcat Built-in Charsets</h5>
-                                    <button type="button" class="btn-close" @onclick="() => _showMaskHelp = false"></button>
-                                </div>
-                                <div class="modal-body">
-                                    <table class="table table-bordered table-sm mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>Placeholder</th>
-                                                <th>Characters</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <tr><td><code>?l</code></td><td>abcdefghijklmnopqrstuvwxyz</td></tr>
-                                            <tr><td><code>?u</code></td><td>ABCDEFGHIJKLMNOPQRSTUVWXYZ</td></tr>
-                                            <tr><td><code>?d</code></td><td>0123456789</td></tr>
-                                            <tr><td><code>?h</code></td><td>0123456789abcdef</td></tr>
-                                            <tr><td><code>?H</code></td><td>0123456789ABCDEF</td></tr>
-                                            <tr><td><code>?s</code></td><td>«space»!"#$%&amp;'()*+,-./:;&lt;=&gt;?@@[\]^_`{|}~</td></tr>
-                                            <tr><td><code>?a</code></td><td>?l?u?d?s</td></tr>
-                                            <tr><td><code>?b</code></td><td>0x00 - 0xff</td></tr>
-                                        </tbody>
-                                    </table>
-                                    
-                                    <h6 class="mt-3">Custom Charsets</h6>
-                                    <p class="mb-0 small">
-                                        You can define up to 4 custom character sets using the fields provided. Reference them in your mask using <code>?1</code>, <code>?2</code>, <code>?3</code>, and <code>?4</code>.
-                                        <br/><strong>Example:</strong> If Charset 1 is <code>?l?d</code>, a mask of <code>?1?1?1</code> will test all 3-character combinations of lowercase letters and digits.
-                                    </p>
-                                </div>
-                                <div class="modal-footer" style="justify-content: flex-start;">
-                                    <p class="mb-0 small">
-                                        More info about mask attack submission: <a href="https://hashcat.net/wiki/doku.php?id=mask_attack" target="_blank">https://hashcat.net/wiki/doku.php?id=mask_attack</a>
-                                    </p>
+                    <Microsoft.AspNetCore.Components.Sections.SectionContent SectionName="modal-layer">
+                        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick="() => _showMaskHelp = false">
+                            <div class="modal-dialog modal-dialog-centered modal-lg animate-fade-in-up" @onclick:stopPropagation="true">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Hashcat Built-in Charsets</h5>
+                                        <button type="button" class="btn-close" @onclick="() => _showMaskHelp = false"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <table class="table table-bordered table-sm mb-0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Placeholder</th>
+                                                    <th>Characters</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                <tr><td><code>?l</code></td><td>abcdefghijklmnopqrstuvwxyz</td></tr>
+                                                <tr><td><code>?u</code></td><td>ABCDEFGHIJKLMNOPQRSTUVWXYZ</td></tr>
+                                                <tr><td><code>?d</code></td><td>0123456789</td></tr>
+                                                <tr><td><code>?h</code></td><td>0123456789abcdef</td></tr>
+                                                <tr><td><code>?H</code></td><td>0123456789ABCDEF</td></tr>
+                                                <tr><td><code>?s</code></td><td>«space»!"#$%&amp;'()*+,-./:;&lt;=&gt;?@@[\]^_`{|}~</td></tr>
+                                                <tr><td><code>?a</code></td><td>?l?u?d?s</td></tr>
+                                                <tr><td><code>?b</code></td><td>0x00 - 0xff</td></tr>
+                                            </tbody>
+                                        </table>
+                                        
+                                        <h6 class="mt-3">Custom Charsets</h6>
+                                        <p class="mb-0 small">
+                                            You can define up to 4 custom character sets using the fields provided. Reference them in your mask using <code>?1</code>, <code>?2</code>, <code>?3</code>, and <code>?4</code>.
+                                            <br/><strong>Example:</strong> If Charset 1 is <code>?l?d</code>, a mask of <code>?1?1?1</code> will test all 3-character combinations of lowercase letters and digits.
+                                        </p>
+                                    </div>
+                                    <div class="modal-footer" style="justify-content: flex-start;">
+                                        <p class="mb-0 small">
+                                            More info about mask attack submission: <a href="https://hashcat.net/wiki/doku.php?id=mask_attack" target="_blank">https://hashcat.net/wiki/doku.php?id=mask_attack</a>
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </Microsoft.AspNetCore.Components.Sections.SectionContent>
                 }
             }
             else if (Model.AttackMode == AttackMode.Dictionary)
@@ -179,9 +184,9 @@
             <ValidationSummary class="text-danger" />
 
             <button type="submit" class="btn btn-primary mb-5" disabled="@_isSubmitting">Submit Job</button>
-        </EditForm>
+        </div>
     </div>
-</div>
+</EditForm>
 
 @code {
     [SupplyParameterFromForm]

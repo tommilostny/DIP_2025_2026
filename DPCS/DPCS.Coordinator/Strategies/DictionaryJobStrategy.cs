@@ -121,7 +121,7 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         {
             if (_totalIntervals[i] > 0)
             {
-                progress += ((float)_completedIntervals[i] / _totalIntervals[i]) * slice;
+                progress += (float)_completedIntervals[i] / _totalIntervals[i] * slice;
             }
             else if (i < _currentWordlistIndex)
             {

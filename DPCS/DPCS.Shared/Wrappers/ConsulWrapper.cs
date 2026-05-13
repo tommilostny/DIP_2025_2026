@@ -23,7 +23,7 @@ public static class ConsulWrapper
 
     public static Process StartConsulServer(string consulPath, string hostIp)
     {
-        return StartConsul(consulPath, $"agent -server -bootstrap-expect=1 -data-dir ./.consul -bind {hostIp} -client 0.0.0.0");
+        return StartConsul(consulPath, $"agent -server -bootstrap-expect=1 -data-dir ./.consul -bind {hostIp} -client 0.0.0.0 -hcl \"server_rejoin_age_max=\\\"87600h\\\"\"");
     }
 
     public static Process StartConsulAgent(string consulPath, string hostIp, string serverIp)

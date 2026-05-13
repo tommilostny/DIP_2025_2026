@@ -281,6 +281,7 @@ public sealed class JobCoordinatorGrain : JobCoordinatorGrainBase
             Context.Stop(Context.Self);
             return new JobStatus
             {
+                JobId = _clusterIdentity.Identity,
                 Status = "Cancelled",
                 ProgressPercentage = 100,
                 ChunkAttackSeconds = _chunkAttackSeconds,
