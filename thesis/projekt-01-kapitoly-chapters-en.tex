@@ -949,7 +949,7 @@ Therefore, the DPCS uniformly employs the file-based approach to support multi-h
 
 A crucial optimization is implemented within this lifecycle: as the Agent recovers passwords (or receives notification from the Coordinator that specific hashes were cracked by other nodes), it executes \verb|UpdateHashFileAsync|. This method actively removes the solved hashes from the internal job memory and completely overwrites the physical \verb|.hashes| file with the remaining uncracked targets. This ensures Hashcat dynamically shrinks its internal comparison list upon every new chunk initialization, preventing wasted GPU cycles on already-cracked credentials.
 
-Once the job concludes or is aborted, the \verb|CleanupJobData| routine ensures these sensitive temporary files are permanently purged from the agent's disk. Furthermore, the actor's termination lifecycle hooks explicitly iterate through the internal prefetch queue, deleting any downloaded wordlist chunks that were fetched in the background but never executed, thereby preventing orphaned files from silently exhausting the host's storage capacity over time.
+Once the job concludes or is aborted, the \verb|CleanupJobData| routine ensures that these sensitive temporary files are permanently purged from the agent's disk. Furthermore, the job termination routines explicitly iterate through the internal prefetch queue, deleting any downloaded wordlist chunks that were fetched in the background but were never executed, thereby preventing orphaned files from silently exhausting the host's storage capacity over time.
 
 \subsection{Telemetry, Benchmarking, and Keyspace Evaluation}
 \label{sec:telemetry_benchmarking}
