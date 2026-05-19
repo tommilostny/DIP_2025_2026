@@ -795,9 +795,14 @@ During the initial design phases, lightweight flat-file databases like SQLite we
 PostgreSQL was selected specifically for its Multi-Version Concurrency Control (MVCC) architecture, as described by \cite{enwiki:1353064384} and \cite{enwiki:1317946678}. MVCC ensures that \textit{reads do not block writes, and writes do not block reads}. When the \verb|ResultCollectorGrain| asynchronously inserts a batch of newly cracked passwords into the \verb|CrackedPasswordEntity| table, the Blazor Server UI can still perform \verb|SELECT| queries to render the dashboard seamlessly, completely eliminating database contention.
 
 \subsection{Entity Modeling and Relational Integrity}
-The relational schema is mapped via EF Core's Code-First approach. The \verb|CrackedPasswordEntity| is strictly linked to its parent \verb|JobRecordEntity| via a foreign key constraint. This enforces data integrity at the database engine level; if a job is deleted from the system, the database can safely cascade the deletion to all associated recovered passwords. EF Core allows the application to resolve these relationships trivially using LINQ \verb|.Include()| statements when loading complex job overviews.
+The relational database schema is mapped via EF Core's Code-First approach. The \verb|CrackedPasswordEntity| is strictly linked to its parent \verb|JobRecordEntity| via a foreign key constraint. This enforces data integrity at the database engine level; if a job is deleted from the system, the database can safely cascade the deletion to all associated recovered passwords. EF Core allows the application to resolve these relationships trivially using LINQ \verb|.Include()| statements when loading complex job overviews.
 
-To support database migrations and schema creation without needing to boot the entire Blazor web host (which would require connecting to the Consul service mesh), the DAL implements the \verb|IDesignTimeDbContextFactory| interface. This design pattern allows the Entity Framework CLI tools to instantiate the \verb|DpcsDbContext| in isolation, enabling seamless schema updates and structural refactoring.
+To support database migrations and schema creation without needing to boot the entire Blazor web host (which would require connecting to the Consul service mesh), the DAL implements the \verb|IDesignTimeDbContextFactory| interface. This design pattern allows the Entity Framework CLI tools to instantiate the \verb|DpcsDbContext| in isolation, enabling seamless schema updates and structural refactoring. By utilizing the official EF Core Command-Line Interface (CLI) \cite{ef_core_migrations}, incremental schema changes can be automatically generated and directly applied to the PostgreSQL database using standard commands such as:
+
+\begin{verbatim}
+dotnet ef migrations add InitialCreate --project DPCS.DAL
+dotnet ef database update --project DPCS.DAL
+\end{verbatim}
 
 \section{Manager and Coordinator service implementation}
 
