@@ -9,7 +9,7 @@ namespace DPCS.Shared.Wrappers;
 /// </summary>
 /// <param name="hashcatPath">Path to the Hashcat executable. Defaults to "hashcat" assuming it's in the system PATH.</param>
 /// <param name="workloadProfile">The workload profile to use. Defaults to 2 (/4).</param>
-public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadProfile = 2)
+public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadProfile = 2) : IHashcatWrapper
 {
     public int Temperature { get; private set; }
     public int FanSpeed { get; private set; }
@@ -67,21 +67,21 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         arguments.Append(" --quiet"); // Suppress non-essential output for cleaner logs
         arguments.Append(" --potfile-disable"); // Do not skip work using cached potfiles
         arguments.Append($" --outfile=\"{outFilePath}\""); // Safely write cracked passwords to a temp file
-        //arguments.Append(" --status --status-json --status-timer 5"); // Periodically print JSON status to stdout
+        arguments.Append(" --status --status-json --status-timer 5"); // Periodically print JSON status to stdout
 
-        ResetTelemetry();
-
-        // Using captureOutput: false streams the live hashcat progress to the agent's console
+        // We set captureOutput: false to prevent memory bloat during long jobs, 
+        // but onLine will still receive stdout because we force redirection internally.
         await ExecuteHashcatInternalAsync(arguments.ToString(), captureOutput: false, cancellationToken, line => 
         {
-            //if (line.StartsWith('{') && line.EndsWith('}'))
-            //{
-            //    ParseTelemetryJson(line);
-            //}
-            //else
-            //{
-            //    Console.WriteLine(line);
-            //}
+            var trimmedLine = line.Trim();
+            if (trimmedLine.StartsWith('{') && trimmedLine.EndsWith('}'))
+            {
+                ParseTelemetryJson(trimmedLine);
+            }
+            else if (!string.IsNullOrWhiteSpace(trimmedLine))
+            {
+                Console.WriteLine(trimmedLine);
+            }
         });
 
         if (!File.Exists(outFilePath)) return [];
@@ -240,46 +240,57 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
     {
         try
         {
+            //Console.WriteLine($"Received telemetry JSON: {json}");
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
             if (root.TryGetProperty("devices", out var devices) && devices.ValueKind == JsonValueKind.Array)
             {
-                int tempSum = 0, fanSum = 0, utilSum = 0, validDevices = 0;
+                int tempSum = 0, fanSum = 0, utilSum = 0;
+                int validTemps = 0, validFans = 0, validUtils = 0;
                 long speedSum = 0;
 
                 foreach (var device in devices.EnumerateArray())
                 {
-                    if (device.TryGetProperty("temp", out var t)) tempSum += t.GetInt32();
-                    if (device.TryGetProperty("fanspeed", out var f)) fanSum += f.GetInt32();
-                    if (device.TryGetProperty("util", out var u)) utilSum += u.GetInt32();
-                    if (device.TryGetProperty("speed", out var s)) speedSum += s.GetInt64();
-                    validDevices++;
+                    if (device.TryGetProperty("temp", out var t) && t.ValueKind == JsonValueKind.Number)
+                    {
+                        var temp = t.GetInt32();
+                        if (temp > 0) { tempSum += temp; validTemps++; }
+                    }
+                    if (device.TryGetProperty("fanspeed", out var f) && f.ValueKind == JsonValueKind.Number)
+                    {
+                        var fan = f.GetInt32();
+                        if (fan >= 0) { fanSum += fan; validFans++; }
+                    }
+                    if (device.TryGetProperty("util", out var u) && u.ValueKind == JsonValueKind.Number)
+                    {
+                        var util = u.GetInt32();
+                        if (util >= 0) { utilSum += util; validUtils++; }
+                    }
+                    if (device.TryGetProperty("speed", out var s) && s.ValueKind == JsonValueKind.Number)
+                    {
+                        speedSum += s.GetInt64();
+                    }
                 }
 
-                if (validDevices > 0)
-                {
-                    Temperature = tempSum / validDevices;
-                    FanSpeed = fanSum / validDevices;
-                    GpuUtilization = utilSum / validDevices;
-                    CurrentHashrate = speedSum;
-                }
+                Temperature = validTemps > 0 ? tempSum / validTemps : 0;
+                FanSpeed = validFans > 0 ? fanSum / validFans : 0;
+                GpuUtilization = validUtils > 0 ? utilSum / validUtils : 0;
+                CurrentHashrate = speedSum;
+
+                //Console.WriteLine($"Updated telemetry - Temp: {Temperature}°C, Fan: {FanSpeed}%, Utilization: {GpuUtilization}%, Hashrate: {CurrentHashrate} H/s");
             }
 
-            if (root.TryGetProperty("rejected", out var rej) && root.TryGetProperty("progress", out var prog) && prog.ValueKind == JsonValueKind.Array && prog.GetArrayLength() > 0)
+            if (root.TryGetProperty("rejected", out var rej) && rej.ValueKind == JsonValueKind.Number && 
+                root.TryGetProperty("progress", out var prog) && prog.ValueKind == JsonValueKind.Array && prog.GetArrayLength() > 0 &&
+                prog[0].ValueKind == JsonValueKind.Number)
             {
-                var rejected = rej.GetSingle();
-                var progress = prog[0].GetSingle();
-                RejectRate = progress > 0 ? (rejected / progress) : 0;
+                var rejected = rej.GetInt64();
+                var progress = prog[0].GetInt64();
+                RejectRate = progress > 0 ? ((float)rejected / progress) : 0;
             }
         }
         catch { /* Ignore parse errors from malformed JSON strings */ }
-    }
-
-    private void ResetTelemetry()
-    {
-        Temperature = 0; FanSpeed = 0; GpuUtilization = 0;
-        RejectRate = 0; CurrentHashrate = 0;
     }
 
     private async Task<string> ExecuteHashcatInternalAsync(string arguments, bool captureOutput, CancellationToken cancellationToken, Action<string>? onLine = null)
@@ -289,8 +300,9 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         {
             FileName = hashcatPath,
             Arguments = arguments,
-            RedirectStandardOutput = captureOutput,// true, // Always redirect so we can intercept JSON lines
-            RedirectStandardError = captureOutput,// true,
+            RedirectStandardOutput = true, // Always redirect to intercept telemetry
+            RedirectStandardError = true, // Always redirect to prevent buffer deadlocks
+            RedirectStandardInput = true, // Crucial: Prevent Hashcat from pausing to ask for terminal input
             UseShellExecute = false,
             CreateNoWindow = true
         };
@@ -323,18 +335,18 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         {
             if (!string.IsNullOrEmpty(e.Data))
             {
-                if (captureOutput) lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
-                else Console.Error.WriteLine($"[Hashcat Error] {e.Data}");
+                if (captureOutput)
+                {
+                    lock (outputLock) { outputBuilder?.AppendLine(e.Data); }
+                    Console.Error.WriteLine($"[Hashcat Error] {e.Data}");
+                }
             }
         };
 
         process.Start();
 
-        if (captureOutput)
-        {
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-        }
+        process.BeginOutputReadLine(); // Always begin reading to prevent the OS pipe from filling up and blocking
+        process.BeginErrorReadLine();
 
         try
         {

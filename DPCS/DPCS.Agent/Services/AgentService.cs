@@ -2,7 +2,7 @@ using DPCS.Agent.Actors;
 
 namespace DPCS.Agent.Services;
 
-public sealed class AgentService(ActorSystem actorSystem, HashcatWrapper hashcatWrapper) : BackgroundService
+public sealed class AgentService(ActorSystem actorSystem, IHashcatWrapper hashcatWrapper) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

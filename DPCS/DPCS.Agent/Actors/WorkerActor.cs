@@ -1,6 +1,6 @@
 namespace DPCS.Agent.Actors;
 
-public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) : IActor
+public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper, int maxPrefetchQueueSize = 1, TimeSpan? heartbeatInterval = null) : IActor
 {
     private CancellationTokenSource? _currentWorkCts;
     private JobAssignment? _currentJob;
@@ -10,9 +10,9 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
     private bool _isPrefetching;
     private bool _isCracking;
     private bool _noMoreWork;
-    private const int MaxPrefetchQueueSize = 2;
     private static readonly HttpClient _httpClient = new();
     private Timer? _heartbeatTimer;
+    private readonly TimeSpan _heartbeatInterval = heartbeatInterval ?? TimeSpan.FromSeconds(15);
 
     public Task ReceiveAsync(IContext context) => context.Message switch
     {
@@ -29,7 +29,7 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
     private Task OnStarted(IContext context)
     {
         Console.WriteLine($"WorkerActor {context.Self} started.");
-        _heartbeatTimer = new Timer(_ => context.Send(context.Self, new HeartbeatTick()), null, 15000, 15000);
+        _heartbeatTimer = new Timer(_ => context.Send(context.Self, new HeartbeatTick()), null, _heartbeatInterval, _heartbeatInterval);
         context.Send(context.Self, new StartLoop());
         return Task.CompletedTask;
     }
@@ -119,11 +119,19 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
 
     private Task OnPrefetchWork(IContext context)
     {
-        //Console.WriteLine("WorkerActor received PrefetchWork signal.");
-        // Don't prefetch if the queue is full, we are already downloading, or the job is out of work
-        if (_currentJob is null || _isPrefetching || _noMoreWork || _workQueue.Count >= MaxPrefetchQueueSize)
+        if (_currentJob is null || _isPrefetching || _noMoreWork)
         {
             //Console.WriteLine("Prefetch work skipped...");
+            return Task.CompletedTask;
+        }
+
+        if (maxPrefetchQueueSize == 0 && (_isCracking || _workQueue.Count >= 1))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (maxPrefetchQueueSize > 0 && _workQueue.Count >= maxPrefetchQueueSize)
+        {
             return Task.CompletedTask;
         }
 
@@ -198,8 +206,12 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
             _isCracking = false;
             CheckJobCompletion(context);
 
-            //Console.WriteLine("After calling ProcessAndSubmitAsync, before sending next ProcessWork...");
-            
+            // If we are in strict polling mode, we must trigger the next fetch now that the GPU is idle
+            if (maxPrefetchQueueSize == 0)
+            {
+                context.Send(context.Self, new PrefetchWork());
+            }
+
             // Continue processing remaining queued chunks
             context.Send(context.Self, new ProcessWork()); 
         });
@@ -237,7 +249,12 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         {
             AgentId = new AgentId { Address = context.Self.Address, Id = context.Self.Id },
             Success = !isFaulted && recovered.Count > 0,
-            RecoveredPasswords = { recovered }
+            RecoveredPasswords = { recovered },
+            RequestId = chunk switch {
+                MaskWorkAssignment m => m.RequestId,
+                DictionaryWorkAssignment d => d.RequestId,
+                _ => ""
+            },
         };
 
         try
@@ -343,7 +360,8 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
             return path;
         }
 
-        var newPath = Path.Combine(Path.GetTempPath(), $"dpcs_{jobId}.hashes");
+        // Using a Guid ensures the file path is unique per actor instance, preventing locking issues in local simulation.
+        var newPath = Path.Combine(Path.GetTempPath(), $"dpcs_{jobId}_{Guid.NewGuid():N}.hashes");
         await File.WriteAllLinesAsync(newPath, hashes);
         _jobHashFilePaths[jobId] = newPath;
         Console.WriteLine($"Created hash file for job {jobId} at {newPath}");
@@ -378,7 +396,8 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
             Console.WriteLine("No more chunks for this job. Cleaning up and returning to discovery pool.");
             CleanupJobData(_currentJob?.JobId);
             _currentJob = null;
-            context.Send(context.Self, new StartLoop());
+            // Add a delay to prevent tight polling if the job is waiting for straggler timeouts.
+            Task.Delay(3000).ContinueWith(_ => context.Send(context.Self, new StartLoop()));
         }
     }
 
@@ -409,9 +428,9 @@ public sealed class WorkerActor(Cluster cluster, HashcatWrapper hashcatWrapper) 
         //Console.WriteLine("Heartbeat tick...");
         if (_currentJob is not null)
         {
-            //Console.WriteLine("Sending heartbeat to coordinator...");
             try
             {
+                //Console.WriteLine($"Sending heartbeat to coordinator - Temp: {hashcatWrapper.Temperature}°C, Fan: {hashcatWrapper.FanSpeed}%, Utilization: {hashcatWrapper.GpuUtilization}%, Hashrate: {hashcatWrapper.CurrentHashrate} H/s");
                 var coordinator = cluster.GetJobCoordinatorGrain(_currentJob.JobId);
                 
                 await coordinator.Heartbeat(new AgentTelemetry 

@@ -48,7 +48,7 @@ public static class ActorSystemConfiguration
                                     new JobCoordinatorGrain(
                                         context,
                                         clusterIdentity,
-                                        provider.GetRequiredService<HashcatWrapper>(),
+                                        provider.GetRequiredService<IHashcatWrapper>(),
                                         serverBaseUrl
                                     )
                             )

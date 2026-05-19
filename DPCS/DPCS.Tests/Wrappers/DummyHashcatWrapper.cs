@@ -1,0 +1,73 @@
+using System.Collections.Concurrent;
+using DPCS.Shared;
+using DPCS.Shared.Wrappers;
+
+namespace DPCS.Tests.Wrappers;
+
+public record ChunkExecutionRecord(ulong KeyspaceStart, ulong KeyspaceLength, double SimulatedSeconds, double RealWaitSeconds);
+
+public sealed class DummyHashcatWrapper(long simulatedHashrate) : IHashcatWrapper
+{
+    public int Temperature { get; private set; } = 65;
+
+    public int FanSpeed { get; private set; } = 50;
+
+    public int GpuUtilization { get; private set; } = 99;
+
+    public float RejectRate { get; private set; } = 0.0f;
+
+    public long CurrentHashrate { get; private set; } = simulatedHashrate;
+
+    // Allows tests to explicitly dictate the fake keyspace size for testing dynamic chunking math
+    public ulong MockKeyspaceSize { get; set; } = 10_000_000UL; 
+    
+    // Speeds up actual test execution (e.g. 0.1 means a 10-second chunk is simulated in 1 second)
+    public double TimeMultiplier { get; set; } = 1.0;
+
+    // Thread-safe collection to capture metrics for the thesis report
+    public ConcurrentBag<ChunkExecutionRecord> ExecutedChunks { get; } = [];
+
+    public Task<ulong> GetBenchmarkHashrateAsync(int hashType, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult((ulong)CurrentHashrate);
+    }
+
+    public Task<ulong> GetMaskCandidateCountAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(MockKeyspaceSize);
+    }
+
+    public Task<ulong> GetMaskKeyspaceSizeAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(MockKeyspaceSize);
+    }
+
+    public async Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1 * TimeMultiplier), ct);
+        }
+        catch (TaskCanceledException) { }
+        return [];
+    }
+
+    public async Task<List<RecoveredPassword>> RunHashcatMaskAttackAsync(MaskWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    {
+        // Simulated Time = Chunk Size / Simulated Hashrate
+        double simulatedSeconds = (double)chunk.KeyspaceLength / CurrentHashrate;
+        double actualWaitSeconds = simulatedSeconds * TimeMultiplier;
+
+        var record = new ChunkExecutionRecord(chunk.KeyspaceStart, chunk.KeyspaceLength, simulatedSeconds, actualWaitSeconds);
+
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(actualWaitSeconds), ct);
+        }
+        catch (TaskCanceledException) { }
+        finally {
+            ExecutedChunks.Add(record);
+        }
+        return [];
+    }
+}

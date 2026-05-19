@@ -4,4 +4,5 @@
   <Project Path="DPCS.Coordinator/DPCS.Coordinator.csproj" />
   <Project Path="DPCS.DAL/DPCS.DAL.csproj" Id="bfb13d36-a024-4fde-ae7d-c108c95d91f3" />
   <Project Path="DPCS.Shared/DPCS.Shared.csproj" />
+  <Project Path="DPCS.Tests/DPCS.Tests.csproj" Id="0acfcad5-6d4b-4a6b-84c3-3d98855898e9" />
 </Solution>

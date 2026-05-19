@@ -90,6 +90,7 @@ message WorkResult {
   AgentId agent_id = 1;
   bool success = 2;
   repeated RecoveredPassword recovered_passwords = 3; // Optional
+  string request_id = 4;
 }
 
 // Message for final job results

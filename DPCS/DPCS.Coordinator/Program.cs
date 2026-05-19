@@ -123,7 +123,7 @@ try
         {
             services.AddDpcsDbContextFactory("localhost", 5432, "dpcs", "postgres", "password123");
 
-            services.AddSingleton(new HashcatWrapper(hashcatPath));
+            services.AddSingleton<IHashcatWrapper>(new HashcatWrapper(hashcatPath));
             
             services.AddActorSystem();
             services.AddHostedService<ActorSystemClusterHostedService>();

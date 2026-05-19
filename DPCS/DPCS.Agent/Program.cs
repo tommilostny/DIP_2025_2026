@@ -125,7 +125,7 @@ try
         })
         .ConfigureServices((context, services) =>
         {
-            services.AddSingleton(new HashcatWrapper(hashcatPath, workloadProfile));
+            services.AddSingleton<IHashcatWrapper>(new HashcatWrapper(hashcatPath, workloadProfile));
             services.AddActorSystem();
             services.AddHostedService<ActorSystemClusterHostedService>();
             services.AddHostedService<AgentService>();
