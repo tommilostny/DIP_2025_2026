@@ -554,7 +554,7 @@ Its architecture operates on a Pull-Based model via a REST API. Agents periodica
 
 One of its strengths is the comprehensive web interface provided for managing "Supertasks" (chained attack modes), uploading wordlists, and visualizing cluster heatmaps. Unlike FitCrack, it features granular control that allows for relatively fast job cancelation and modification. However, its reliance on HTTP polling creates significant network overhead as the cluster grows. Thousands of agents polling a PHP server every few seconds can induce a Denial-of-Service (DoS) condition on the control plane. Additionally, the central MySQL database often becomes a point of contention for writing status updates and chunk assignments, limiting linear scalability.
 
-In \textbf{Mask Attacks}, Hashtopolis typically assigns statically sized blocks of the keyspace. In a heterogeneous cluster containing both high-end GPUs and standard CPUs, this static sizing often results in the "straggler problem"—where fast nodes finish quickly and run out of work, while the entire job waits on a slow node to finish its disproportionately large chunk. 
+In \textbf{Mask Attacks}, Hashtopolis attempts to mitigate hardware heterogeneity by dynamically sizing blocks of the keyspace based on an agent's benchmarked speed. However, because it relies on a central relational database to calculate, assign, and track these non-overlapping chunks, issuing them to hundreds of polling agents simultaneously often causes severe database lock contention. This architectural bottleneck restricts the platform's ability to scale linearly.
 
 For \textbf{Dictionary Attacks}, Hashtopolis requires agents to download the required wordlists locally in advance or on-demand. It then orchestrates the attack by sending specific \verb|--skip| and \verb|--limit| line-number directives. While effective, parsing millions of newlines to reach a high \verb|--skip| value introduces a computational penalty on the agent before hashing even begins.
 
@@ -639,7 +639,8 @@ message WorkRequest {
     \item \textbf{Assignment}: The \verb|JobCoordinatorGrain| creates a work assignment message based on the type of attack it is orchestrating. To handle assignments effectively for both Brute Force (Mode 3) and Dictionary (Mode 0) attacks, the system defines specific, flattened message structures containing both common tracking fields and specialized parameters.
 
     \begin{enumerate}
-        \item \textbf{Handling Mask Attacks (Mode 3)}: This is the "Zero-Latency" path. To safely partition work, the Coordinator evaluates two essential Hashcat metrics: \verb|--keyspace| and \verb|--total-candidates|. The keyspace represents the divisible outer loop of the attack algorithm, defining the discrete units of work. However, because a single keyspace unit might expand into multiple password guesses (e.g. due to internal amplification), the keyspace alone is insufficient for time-based load balancing. By dividing the total candidates by the keyspace, the coordinator derives an \textit{amplification factor}. This allows the system to accurately translate an agent's raw benchmarked hashrate (candidates per second) into an exact number of keyspace units (the algorithmic implementation of this dynamic scaling is further elaborated in Section \ref{sec:dynamic_chunk_sizing}). When a worker requests work, the Coordinator reserves a range starting at its \verb|GlobalCursor|, sized specifically to the agent's hardware capabilities, ensuring the task completes within a strict, predictable time window. This directly mitigates the straggler problem observed in systems like Hashtopolis, as fast GPUs and slow CPUs receive proportionally sized assignments and complete them simultaneously.
+        \item \textbf{Handling Mask Attacks (Mode 3)}: This is the "Zero-Latency" path. To safely partition work, the Coordinator evaluates two essential Hashcat metrics: \verb|--keyspace| and \verb|--total-candidates|. The keyspace represents the divisible outer loop of the attack algorithm, defining the discrete units of work. However, because a single keyspace unit might expand into multiple password guesses (e.g. due to internal amplification), the keyspace alone is insufficient for time-based load balancing. By dividing the total candidates by the keyspace, the coordinator derives an \textit{amplification factor}. This allows the system to accurately translate an agent's raw benchmarked hashrate (candidates per second) into an exact number of keyspace units (the algorithmic implementation of this dynamic scaling is further elaborated in Section \ref{sec:dynamic_chunk_sizing}). When a worker requests work, the Coordinator reserves a range starting at its \verb|GlobalCursor|, sized specifically to the agent's hardware capabilities, ensuring the task completes within a strict, predictable time window. Unlike legacy systems like Hashtopolis that rely on database transactions to issue dynamic assignments, the \verb|JobCoordinatorGrain| manages this cursor entirely in-memory. This completely eliminates database lock contention, allowing the orchestrator to scale effortlessly across thousands of agents while ensuring that fast GPUs and slow CPUs complete their proportionally sized tasks simultaneously.
+
 
 \begin{verbatim}
 message MaskWorkAssignment {
@@ -671,9 +672,11 @@ message DictionaryWorkAssignment {
 \end{verbatim}
     \end{enumerate}
 
+\newpage
+
     \item \textbf{Execution \& Reporting}: The Agent spawns the Hashcat process. While running, it streams \verb|AgentTelemetry| heartbeat messages to the Coordinator every 15 seconds containing hardware status (the methodology for asynchronously extracting this telemetry from the Hashcat subprocess is covered in Section \ref{sec:telemetry_benchmarking}). This continuous stream also acts as a liveness probe for the Coordinator's fault-tolerance mechanisms.
 
-    \item \textbf{Completion}: Upon finishing the chunk, the Agent sends a \verb|WorkResult| message back to the \verb|JobCoordinatorGrain|, which safely marks the chunk as \verb|Completed|. If any recovered passwords were found in the chunk, they are sent to the \verb|ResultCollectorGrain|. A deeper dive into how the agent securely extracts these recovered passwords using temporary outfiles without fragile standard output parsing is provided in Section \ref{sec:result_extraction}.
+    \item \textbf{Completion}: Upon finishing the chunk, the Agent sends a \verb|WorkResult| message back to the \verb|JobCoordinatorGrain|, which safely marks the chunk as \verb|Completed|. If any recovered passwords were found in the chunk, they are sent to the \verb|ResultCollectorGrain|. A deeper dive into how the agent securely extracts these recovered passwords using temporary outfiles is provided in Section \ref{sec:result_extraction}.
 
 \begin{verbatim}
 message RecoveredPassword {
@@ -681,7 +684,6 @@ message RecoveredPassword {
   string plaintext = 2;
   int32 hash_type = 3;
 }
-
 message WorkResult {
   AgentId agent_id = 1;
   bool success = 2;
@@ -693,7 +695,7 @@ message WorkResult {
 
 \begin{figure}[H]
 \centering
-\includesvg[width=0.8\textwidth]{obrazky-figures/dpcs-nodes.drawio.svg}
+\includesvg[width=0.75\textwidth]{obrazky-figures/dpcs-nodes.drawio.svg}
 \caption{A visualization of the message flow, the cluster actors hierarchy and how they can be distributed across machines in a network. This demonstrates the horizontal scaling principle used in Agent and Coordinator nodes deployment.}
 \end{figure}
 
@@ -733,7 +735,7 @@ Unlike Hashcat's local \verb|.restore| file, which is useless if a physical node
 
     \item \textbf{Telemetry-Based Supervision}: Rather than relying on rigid time-to-completion estimates, which can fluctuate wildly depending on thermal throttling or OS background tasks, the \verb|JobCoordinatorGrain| actively monitors the liveness of the worker. The Agent sends \verb|AgentTelemetry| heartbeats at fixed intervals (e.g., every 15 seconds). The Coordinator tracks the \verb|LastSeen| timestamp for every \verb|Assigned| worker. 
 
-    \item \textbf{Re-queuing}: If an agent misses a predetermined threshold of consecutive heartbeats (e.g., three missed heartbeats, totaling 45 seconds), it is presumed dead. The "Lost" chunk is forcefully moved back to the Pending queue to be reassigned to the next available worker. This guarantees that a crashed GPU driver or network partition does not result in a permanent gap in the keyspace coverage.
+    \item \textbf{Re-queuing}: If an agent misses a predetermined threshold of consecutive heartbeats (e.g., three missed heartbeats totaling 45 seconds), it is presumed dead. The "Lost" chunk is forcefully moved back to the Pending queue to be reassigned to the next available worker. This guarantees that a crashed GPU driver or network partition does not result in a permanent gap in the keyspace coverage.
 \end{enumerate}
 
 \begin{figure}[H]
