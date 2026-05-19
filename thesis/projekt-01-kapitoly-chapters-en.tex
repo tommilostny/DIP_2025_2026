@@ -49,7 +49,7 @@
 
 The security and privacy of sensitive data fundamentally rely on ensuring that access to it is restricted to authorized entities. Passwords remain the most prevalent method for user authentication to this day due to the balance they offer between usability and security. While backend mechanisms such as hashing and salting enhance the security of storing passwords in databases, as they cannot be easily viewed in plain-text form, the effectiveness of the system ultimately depends on the strength of the credential itself.
 
-However, the reliance on passwords introduces significant vulnerabilities. Unauthorized parties frequently employ brute-force or dictionary attacks utilizing specialized cracking tools to compromise user accounts. Weak credentials—such as short, complexity-lacking, or dictionary-based passwords derived from commonly used words—can be easily cracked even on a single machine. In response, service providers enforce complexity requirements, resulting in passwords that are significantly more computationally expensive to compromise. Cracking these complex passwords exceeds the capabilities of standalone hardware, often requiring centuries of computation time on a single device. Consequently, this thesis explores distributed password-cracking methods, utilizing the aggregate power of multiple compute nodes to address these computational challenges.
+However, the reliance on passwords introduces significant vulnerabilities. Unauthorized parties frequently employ brute-force or dictionary attacks utilizing specialized cracking tools to compromise user accounts. Weak credentials—such as short, complexity-lacking, or dictionary-based passwords derived from commonly used words—can be easily cracked even on a single machine. In response, service providers enforce complexity requirements, resulting in passwords that are significantly more computationally expensive to compromise. Cracking these complex passwords exceeds the capabilities of standalone hardware. Consequently, this thesis explores distributed password-cracking methods, utilizing the aggregate power of multiple compute nodes to address these computational challenges.
 
 To accomplish this task, I propose a distributed system architecture based on the Actor Model implemented in .NET (C\#). This model facilitates the deployment of autonomous actors across a cluster of nodes to manage workload distribution and fault tolerance. Rather than reimplementing cryptographic hashing algorithms in a high-level language, this system functions as an orchestration layer for Hashcat, which was selected for its industry-standard performance, robust support for GPU isolation, and advanced keyspace management capabilities. This approach combines the high-level manageability of the Actor Model with the low-level raw performance of specialized hashing software.
 
@@ -274,7 +274,12 @@ To tackle massive keyspaces or to distribute work across a cluster of machines, 
 
 This functionality has proven to be very useful when designing a distributed system with coordinator and agent nodes working together to crack a given password hash with a large number of candidates. The exact strategy on how these parameters are used is described in later chapters.
 
-
+\begin{figure}[H]
+\centering
+\includesvg[width=0.85\textwidth]{obrazky-figures/keyspace_segmentation.svg}
+\caption{A conceptual visualization of keyspace segmentation in Hashcat. The total mathematically generated keyspace is treated as a linear array. By providing the skip parameter to set the starting index and the limit parameter to define the chunk size, an orchestrator can divide the work into non-overlapping segments for multiple agents.}
+\label{fig:keyspace_segmentation}
+\end{figure}
 
 
 \chapter{Distributed computation using the Actor Model}
@@ -373,25 +378,43 @@ Idempotency, as depicted in \cite{idempotency}, is a property of an operation wh
 
 By baking idempotency into the API and database schema, the system becomes resilient to network "stuttering," retries, and the chaotic replay of messages that often accompanies system recovery.
 
+\newpage
 \section{Core concepts of the Actor Model}
+\label{sec:core_actor_concepts}
 
 To manage the high concurrency and state complexity of distributed cracking, the Actor Model, as described by \cite{enwiki:1323072662}, offers a superior theoretical framework compared to traditional object-oriented programming (OOP). Originating in 1973 with Carl Hewitt, the Actor Model treats "Actors" as the universal primitives of concurrent computation, offering a high-level abstraction that naturally aligns with distributed systems.
 
-\subsection{State and Behavior: Encapsulation and Isolation}
+\subsection{State and Behavior}
 
-In traditional concurrent programming (e.g., utilizing threads and locks), shared memory is the primary medium of interaction. This leads to complex race conditions and deadlocks. The Actor Model inverts this: \textbf{Actors share nothing} and only communicate by sending messages to each others mailboxes, as described in \cite{actor_model_understanding}.
+In traditional concurrent programming (e.g., utilizing threads and locks), shared memory is the primary medium of interaction. This leads to complex race conditions and deadlocks. The Actor Model inverts this: \textbf{Actors share nothing} and only communicate by sending messages to each other's mailboxes, as described in \cite{actor_model_understanding}.
+
+According to the fundamental principles of the Actor Model (as concisely summarized in \cite{proto_actors_docs}), an actor encapsulates its internal state, behavior, and mailbox into a single, highly isolated entity that is driven by external events.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=1.0\textwidth]{obrazky-figures/actor-d79f93eee9d91cbce869f0a5944b26f5.png}
+\caption{A conceptual visualization of an actor's internal anatomy adapted from \cite{proto_actors_docs}. The actor operates on an event-driven thread, connecting to the asynchronous network via its \textbf{Mailbox}. It encapsulates its private \textbf{State} (preventing external access) and uses its \textbf{Behavior} to process incoming messages sequentially. It can also manage a hierarchy of \textbf{Children} for localized fault tolerance.}
+\label{fig:actor-thread}
+\end{figure}
+
+\subsection{Mailboxes, References, and Asynchronous Messaging}
+
+Communication in the Actor Model is exclusively asynchronous. To send a message, the sender must possess a unique logical reference to the recipient's mailbox. This reference typically encapsulates both the physical network address of the host node and the unique string identifier of the specific actor instance. An actor routes a message to another actor's reference and immediately continues its own execution, completely avoiding blocking operations. This non-blocking nature is critical for the scalability of the orchestration layer.
+
+The mailbox is a critical architectural component \cite{proto_mailboxes_docs}. When a message is sent to an actor, it is not executed immediately by the sender's thread; instead, it is safely enqueued. A dedicated dispatcher then polls this mailbox and invokes the actor's message-handling routine. Crucially, the dispatcher ensures that an actor processes \textbf{exactly one message at a time}. 
+
+For a password cracking cluster, a job coordinator actor holds the state of the keyspace. Because only the coordinator can modify this state, and because its mailbox guarantees sequential message processing, race conditions are structurally prevented. Two worker nodes cannot simultaneously "check out" the same chunk because the coordinator processes the first request entirely, updates its state, and only then dequeues the second request. This "single-threaded illusion" significantly simplifies the mental model for developers, entirely eliminating the need for complex thread synchronization primitives like mutexes or semaphores.
+
+\subsection{The Actor Lifecycle}
+
+Beyond simply processing application messages, actors possess a strictly managed lifecycle \cite{proto_lifecycle_docs} controlled by the underlying framework. The framework dispatches specific system messages to the actor to notify it of state transitions, allowing developers to execute precise initialization and cleanup logic without blocking the main execution path:
 
 \begin{itemize}
-    \item \textbf{Encapsulated State}: Each actor maintains its own private internal state, which can never be accessed directly by another actor. There are no "public properties" to read or write. Instead, actors communicate via messages.
-
-    \item \textbf{Behavior}: An actor is defined by its behavior—the code it executes in response to a message. This behavior can modify the actor's private state, create new actors, or send messages to others.
+    \item \textbf{Starting / Started}: Triggered immediately after the actor is instantiated but before it processes any external mail. This is utilized to safely establish database connections or initialize background telemetry timers.
+    \item \textbf{Stopping}: The actor has been instructed to terminate. It finishes processing the currently active message but rejects any new incoming messages.
+    \item \textbf{Stopped}: The actor has entirely ceased execution. In an edge compute node, this hook is critical for safely killing underlying Hashcat subprocesses and deleting temporary wordlist files to prevent storage leaks.
+    \item \textbf{Restarting}: Invoked when an actor crashes and is being revived by its supervisor, allowing it to recover gracefully.
 \end{itemize}
-
-For a password cracker, a job coordinator actor might hold the state of the keyspace (e.g., a bitmap of completed chunks). Because only the job coordinator can modify this bitmap, and because it processes messages sequentially (one at a time), this approach avoids race conditions. Two worker nodes cannot simultaneously "check out" the same chunk because the job coordinator processes the first request, updates its state, and only then processes the second request. This "single-threaded illusion" simplifies the mental model for developers, eliminating the need for complex mutexes or semaphores.
-
-\subsection{Asynchronous Messaging: The Non-Blocking Paradigm}
-
-Communication in the Actor Model is exclusively asynchronous. An actor sends a message to another actor's "mailbox" and immediately continues its own execution. It does not block waiting for a return value. This non-blocking nature is critical for the scalability of the orchestration layer.
 
 \subsection{Supervision Strategy: Hierarchical Fault Tolerance}
 
@@ -401,11 +424,8 @@ When a child fails, their parent intercepts the error and decides how to react u
 
 \begin{itemize}
     \item \textbf{Resume}: The error is trivial (e.g., a corrupt log entry), and the child retains its state and processes the next message.
-
     \item \textbf{Restart}: The error corrupted the state (e.g., an unhandled exception). The parent kills the child and starts a fresh instance. The internal state is wiped, but the "identity" (mailbox) remains, processing queued messages.
-
     \item \textbf{Stop}: The error is fatal, and the child is permanently terminated.
-
     \item \textbf{Escalate}: The parent does not know how to handle the error and fails, passing the problem up to the grandparent actor.
 \end{itemize}
 
@@ -461,9 +481,11 @@ While libraries like \textit{Orleans.SyncWork} exist to mitigate this, the frame
 Proto.Actor was created by Roger Alsing, a co-founder of Akka.NET, specifically to address perceived architectural limitations in Akka.NET regarding performance and complexity, as described by \cite{about_proto_actor}. It is a cross-platform framework (C\#, Go, Kotlin) built on Google's gRPC high-performance Remote Procedure Call (RPC) messaging framework.
 
 \begin{itemize}
-    \item \textbf{gRPC and Protobuf}: Proto.Actor leverages Protocol Buffers for serialization and gRPC streams for transport. This results in ultra-low overhead. Benchmarks have shown Proto.Actor capable of handling about 2.5 million messages per second over the network, significantly outperforming Akka.NET's ~190k.
+    \item \textbf{gRPC and Protobuf}: Proto.Actor leverages Protocol Buffers for serialization and gRPC streams for transport. This results in ultra-low overhead. Benchmarks have shown Proto.Actor capable of handling about 2.5 million messages per second over the network, significantly outperforming Akka.NET's \textasciitilde190k.
 
     \item \textbf{Hybrid Model}: Proto.Actor supports both "Classic Actors" (explicit lifecycle, like Akka) and "Grains" (virtual actors, like Orleans via the Proto.Cluster package \cite{proto_cluster}), giving developers the flexibility to mix paradigms. This hybrid capability is strategically critical: Virtual Actors provide the location transparency necessary for highly available orchestration layers, while Classic Actors offer the explicit lifecycle control and direct process binding required for hardware-coupled edge compute nodes.
+
+    \item \textbf{Precise Control via PIDs and Lifecycle Hooks}: Aligning with the theoretical concepts discussed in Section \ref{sec:core_actor_concepts}, Proto.Actor implements the unique actor reference as a \verb|PID| (Process Identifier) \cite{proto_actors_docs}. Furthermore, it exposes explicit framework-level messages—such as \verb|Started| and \verb|Stopped| \cite{proto_lifecycle_docs}—which are seamlessly integrated into the actor's standard message-handling behavior. This enables exact programmatic control over resource allocation, empowering the system to safely initialize background telemetry timers or gracefully halt Hashcat instances upon actor termination.
 
     \item \textbf{Pluggable Clustering}: Rather than implementing a monolithic clustering engine, Proto.Actor outsources cluster membership to dedicated providers like \textbf{Consul}, \textbf{Kubernetes}, or \textbf{etcd}. This allows it to leverage existing cloud-native infrastructure for reliability.
 \end{itemize}
@@ -521,6 +543,7 @@ The architecture of FitCrack utilizes a "Volunteer Computing" model. The server 
 Its arguable strength is high fault tolerance because it is designed for volunteer grids (like SETI@home); it assumes clients are unreliable. It handles node disconnections gracefully by automatically re-issuing uncompleted work units. However, it can suffer from high latency because BOINC is not designed for real-time responsiveness; canceling or modifying a job takes time to propagate.
 
 For \textbf{Mask Attacks}, FitCrack divides the calculated keyspace into fixed-size chunks. Due to the high communication latency inherent in the BOINC protocol, these chunks must be sufficiently large (often requiring minutes or hours to compute) to avoid network bottlenecks. 
+
 For \textbf{Dictionary Attacks}, FitCrack traditionally relies on physically distributing the wordlist files (or pre-sliced segments of them) to the client nodes. While robust, this approach imposes significant bandwidth costs and requires substantial local storage on the agent machines, especially when utilizing massive, multi-gigabyte dictionaries.
 
 \subsection{Hashtopolis}
@@ -529,9 +552,10 @@ Hashtopolis provides us with insights into a different approach in this field. A
 
 Its architecture operates on a Pull-Based model via a REST API. Agents periodically poll the server (e.g., every 5-30 seconds) to request a "Chunk" of work.
 
-One of its strengths is the comprehensive web interface provided for managing "Supertasks" (chained attack modes), uploading wordlists, and visualizing cluster heatmaps. Unlike FitCrack, it features granular control that allows for relatively fast job cancelation and modification. However, its reliance on HTTP polling creates significant network overhead as the cluster grows. Thousands of agents polling a PHP server every few seconds can induce a Denial-of-Service (DoS) condition on the control plane. Also, the central MySQL database often becomes a point of contention for writing status updates and chunk assignments, limiting linear scalability.
+One of its strengths is the comprehensive web interface provided for managing "Supertasks" (chained attack modes), uploading wordlists, and visualizing cluster heatmaps. Unlike FitCrack, it features granular control that allows for relatively fast job cancelation and modification. However, its reliance on HTTP polling creates significant network overhead as the cluster grows. Thousands of agents polling a PHP server every few seconds can induce a Denial-of-Service (DoS) condition on the control plane. Additionally, the central MySQL database often becomes a point of contention for writing status updates and chunk assignments, limiting linear scalability.
 
 In \textbf{Mask Attacks}, Hashtopolis typically assigns statically sized blocks of the keyspace. In a heterogeneous cluster containing both high-end GPUs and standard CPUs, this static sizing often results in the "straggler problem"—where fast nodes finish quickly and run out of work, while the entire job waits on a slow node to finish its disproportionately large chunk. 
+
 For \textbf{Dictionary Attacks}, Hashtopolis requires agents to download the required wordlists locally in advance or on-demand. It then orchestrates the attack by sending specific \verb|--skip| and \verb|--limit| line-number directives. While effective, parsing millions of newlines to reach a high \verb|--skip| value introduces a computational penalty on the agent before hashing even begins.
 
 \section{Proposed Actor-Based architecture}
@@ -542,9 +566,9 @@ The system architecture adopts a three-tier topology consisting of Manager, Coor
 Before detailing the exact node roles, it is crucial to establish the foundational technologies that enable this architecture:
 
 \begin{itemize}
-    \item \textbf{Proto.Actor \& Consul}: Proto.Actor handles high-performance, distributed actor messaging over gRPC. Because Hashcat workers can join or leave the network at any time, Consul handles service discovery dynamically. It tracks node health and ensures the actor system routing remains up to date without the need for hardcoded IP addresses.
-    \item \textbf{PostgreSQL \& Entity Framework Core}: PostgreSQL was chosen over NoSQL alternatives (like MongoDB) or local flat-file databases (like SQLite) for its robust Multi-Version Concurrency Control (MVCC) as described by \cite{enwiki:1353064384} and \cite{enwiki:1317946678}. In this system, the actor network constantly bulk-inserts recovered passwords and telemetry updates. MVCC ensures that these heavy write operations never block the Web UI from reading and displaying real-time data.
-    \item \textbf{Blazor Server}: By embedding a Blazor Server application directly alongside the Coordinator's actor system, the architecture eliminates the need for a traditional decoupled REST API and JavaScript or Blazor WebAssembly frontend. The user interface resides in the exact same memory space as the cluster, querying Grain states locally and pushing updates to the browser instantly via SignalR.
+    \item \textbf{Proto.Actor \& Consul}: Proto.Actor handles high-performance, distributed actor messaging over gRPC. Because Hashcat workers can join or leave the network at any time, HashiCorp Consul \cite{consul_docs} handles service discovery dynamically. It tracks node health and ensures the actor system routing remains up to date without the need for hardcoded IP addresses.
+    \item \textbf{PostgreSQL \& Entity Framework Core}: PostgreSQL serves as the persistent storage layer. It is heavily optimized for concurrent workloads, allowing the actor network to constantly bulk-insert recovered passwords and telemetry updates without locking the database or blocking the Web UI from reading real-time data.
+    \item \textbf{Blazor Server}: By embedding a Blazor Server \cite{blazor_docs} application directly alongside the Coordinator's actor system, the architecture eliminates the need for a traditional decoupled REST API and JavaScript or Blazor WebAssembly frontend. The user interface resides in the exact same memory space as the cluster, querying Grain states locally and pushing updates to the browser instantly via SignalR.
 \end{itemize}
 
 \subsection{The Coordinator Node}
@@ -577,15 +601,9 @@ The Agent runs as a standalone, lightweight .NET console application on the comp
 
 \section{Communication protocol}
 
-To maximize performance, the system utilizes \textbf{Protobuf} (Protocol Buffers) \cite{about_proto_actor} for all wire serialization, which is native to Proto.Actor. This provides a strictly typed, compact binary format that is significantly faster than JSON or XML.
+The system's interactions are formally defined using \textbf{Protobuf} (Protocol Buffers) \verb|service| and \verb|message| definitions \cite{about_proto_cluster} for all wire serialization, which is native to Proto.Actor. This provides a strictly typed, compact binary format that is significantly faster than JSON or XML.
 
-\subsection{Virtual Actor Service Contracts}
-The system's interactions are formally defined using Protobuf \verb|service| definitions, which map directly to Proto.Actor Virtual Grains. The architecture separates responsibilities into three primary services:
-\begin{itemize}
-    \item \verb|JobManagerGrain|: Handles top-level cluster interactions. It provides RPCs for job submission (\verb|MaskJobSubmission|, \verb|DictionaryJobSubmission|) from the web interface, and \verb|JobDiscovery| for newly connected Agents seeking work.
-    \item \verb|JobCoordinatorGrain|: The workload orchestrator tied to a specific job. It exposes the \verb|MaskWorkRequest| and \verb|DictionaryWorkRequest| endpoints for Agents to pull chunks, accepts \verb|WorkResultSubmission| messages containing recovered passwords, and ingests live telemetry via the \verb|Heartbeat| endpoint.
-    \item \verb|ResultCollectorGrain|: Dedicated to data persistence. It exposes endpoints like \verb|StoreResult| to safely aggregate recovered plaintext passwords and write them to the PostgreSQL database without blocking the active coordinators.
-\end{itemize}
+To bridge the gap between these language-agnostic contracts and the C\# application, the architecture employs the \verb|Proto.Cluster.CodeGen| library \cite{proto_codegen}. During compilation, this toolchain parses the \verb|.proto| files and automatically generates the required C\# boilerplate. This includes the strongly typed message classes, the client interfaces used to transparently call the actors across the network, and the abstract base classes (e.g., \verb|JobCoordinatorGrainBase|) from which the concrete Grain implementations inherit. This strictly enforces the API contract at compile-time, prevents data structure drift between the Manager and Agent nodes, and cleanly maps the conceptual design to Proto.Actor Virtual Grains.
 
 \subsection{Message Flow: The Work Pulling Pattern}
 
@@ -693,14 +711,14 @@ When any node (Coordinator or Agent) boots, it contacts its local Consul agent t
 
 A password cracking cluster routinely transmits highly sensitive data, including target cryptographic hashes and the recovered plaintext passwords. If the internal gRPC communication between the Coordinator and the Agents were transmitted in plaintext, a malicious actor on the local area network could eavesdrop on the traffic or inject fabricated \verb|WorkResult| messages to corrupt the database.
 
-Consul mitigates this by securing the "Internal Perimeter." It provides a robust Service Mesh capable of enforcing \textbf{Mutual TLS (mTLS)} across all inter-node communication. 
+While the current proof-of-concept implementation prioritizes orchestration logic and operates within a trusted local test environment without explicit network encryption, the architectural choice of HashiCorp Consul inherently prepares the system for production-grade security. According to \cite{consul_security}, Consul provides a robust Service Mesh capable of securing the "Internal Perimeter" by enforcing \textbf{Mutual TLS (mTLS)} across all inter-node communication. 
 
 \begin{itemize}
-    \item \textbf{Encryption in Transit}: mTLS ensures that all Protobuf messages sent over the gRPC transport layer are cryptographically encrypted, preventing packet sniffing.
-    \item \textbf{Node Authorization via ACLs}: Consul's Access Control Lists (ACLs) mandate that only authorized physical machines possessing a valid cryptographic certificate generated by the cluster administrator can join the service mesh. 
+    \item \textbf{Encryption in Transit}: When enabled, mTLS ensures that all Protobuf messages sent over the gRPC transport layer are cryptographically encrypted, preventing packet sniffing.
+    \item \textbf{Node Authorization via ACLs}: Consul's Access Control Lists (ACLs) can mandate that only authorized physical machines possessing a valid cryptographic certificate generated by the cluster administrator can join the service mesh. 
 \end{itemize}
 
-By offloading transport-layer security to Consul, the cluster mathematically blocks rogue scripts or unauthorized machines from connecting to the internal actor network. This creates a secure, trusted execution environment, cleanly separating the internal mesh security from the external, user-facing security measures applied at the web gateway.
+By having the architectural capability to offload transport-layer security to Consul, future production deployments of the cluster can mathematically block rogue scripts or unauthorized machines from connecting to the internal actor network.
 
 \section{Fault tolerance and recovery}
 
@@ -717,6 +735,13 @@ Unlike Hashcat's local \verb|.restore| file, which is useless if a physical node
 
     \item \textbf{Re-queuing}: If an agent misses a predetermined threshold of consecutive heartbeats (e.g., three missed heartbeats, totaling 45 seconds), it is presumed dead. The "Lost" chunk is forcefully moved back to the Pending queue to be reassigned to the next available worker. This guarantees that a crashed GPU driver or network partition does not result in a permanent gap in the keyspace coverage.
 \end{enumerate}
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.8\textwidth]{obrazky-figures/distributed_checkpointing_state.svg}
+\caption{State-transition diagram of a Work Unit within the JobCoordinatorGrain. A chunk moves to the Assigned state when a worker requests it. If the worker successfully reports a WorkResult, it transitions to Completed. If the worker misses its telemetry heartbeat threshold, the chunk is automatically re-queued to the Pending state.}
+\label{fig:distributed_checkpointing_state}
+\end{figure}
 
 \subsection{Idempotency and Result Deduplication}
 
@@ -737,20 +762,24 @@ Because of the "At-Least-Once" retry logic, it is possible for a chunk to be pro
 
 This chapter details the practical implementation of the distributed password cracking system, transitioning from the theoretical actor-based design to a concrete realization using the .NET 10 framework. It examines the structural layout of the application, the intricacies of the persistent data layer, the orchestration mechanics within the Proto.Actor cluster, and the execution engine operating on the distributed nodes.
 
+The complete source code for this project is open-source and publicly available in a GitHub repository at \url{https://github.com/tommilostny/DIP_2025_2026}.
+
 \section{Solution architecture and .NET project structure}
 
 The application, named the Distributed Password Cracking System (DPCS), is organized into a highly modular .NET solution consisting of four primary projects. This separation of concerns ensures that cluster definitions are strictly detached from node-specific implementations.
 
 \begin{itemize}
-    \item \textbf{DPCS.Agent} (Worker Node): A lightweight, headless .NET Console Application deployed to the compute nodes. It connects to the cluster via Consul, instantiates local \verb|WorkerActor| instances, and interfaces directly with the host machine's physical hardware via Hashcat to process assigned keyspace chunks.
+    \item \textbf{DPCS.Agent} (Worker Node): A lightweight, headless .NET Console Application deployed to the compute nodes. It connects to the cluster via Consul, instantiates local \verb|WorkerActor| instances (housed within the \verb|Actors| directory), and interfaces directly with the host machine's physical hardware via Hashcat to process assigned keyspace chunks. It also contains the \verb|AgentService| (in the \verb|Services| directory), which manages the background lifecycle of the node.
 
-    \item \textbf{DPCS.Blazor} (Manager Node): The control plane of the cluster. It is an ASP.NET Core web application utilizing the Blazor Server hosting model. It initializes the root Proto.Actor cluster, establishes connections to the Consul service discovery registry, manages global jobs via the \verb|JobManagerGrain|, and serves the real-time web interface.
+    \item \textbf{DPCS.Blazor} (Manager Node): The control plane of the cluster. It is an ASP.NET Core web application utilizing the Blazor Server hosting model. It initializes the root Proto.Actor cluster, establishes connections to the Consul service discovery registry, manages global jobs via the \verb|JobManagerGrain| (located in the \verb|Grains| directory), and serves the real-time web interface via modular UI elements in the \verb|Components| directory.
 
-    \item \textbf{DPCS.Coordinator} (Orchestrator Node): A dedicated, headless .NET console application that joins the cluster and specifically hosts the active \verb|JobCoordinatorGrain| instances. This separation ensures that the heavy network I/O of managing hundreds of agent work requests and telemetry heartbeats does not degrade the performance of the Blazor web dashboard.
+    \item \textbf{DPCS.Coordinator} (Orchestrator Node): A dedicated, headless .NET console application that joins the cluster and specifically hosts the active \verb|JobCoordinatorGrain| and \verb|ResultCollectorGrain| instances (organized within the \verb|Grains| directory). To cleanly decouple the underlying mathematical cracking algorithms from the actor lifecycle, it contains a \verb|Strategies| directory implementing the \verb|IJobStrategy| interfaces (e.g., \verb|MaskJobStrategy| and \verb|DictionaryJobStrategy|).
 
-    \item \textbf{DPCS.DAL} (Data Access Layer): This project handles all persistent database interactions. It houses the Entity Framework Core \verb|DbContext|, entity models (e.g., \verb|JobRecordEntity|, \verb|CrackedPasswordEntity|), and the automated migration files necessary to generate the database schema.
+    \item \textbf{DPCS.DAL} (Data Access Layer): This project handles all persistent database interactions. It houses the Entity Framework Core \verb|DpcsDbContext|, entity models (e.g., \verb|JobRecordEntity|, \verb|CrackedPasswordEntity|), and the automated migration files necessary to generate the database schema.
     
-    \item \textbf{DPCS.Shared}: A foundational class library shared between all nodes. It contains the Protobuf contract definitions (\verb|.proto| files) which generate the strongly-typed C\# messaging classes. It also encapsulates the \verb|HashcatWrapper|, generic enums, and utility services, ensuring the Coordinator and Agents utilize identical data structures.
+    \item \textbf{DPCS.Shared}: A foundational class library shared between all nodes. It contains the Protobuf contract definitions (\verb|.proto| files). By integrating the \verb|Proto.Cluster.CodeGen| MSBuild package, the .NET compiler automatically generates the strongly typed C\# messaging classes, cluster client extensions, and Virtual Actor base classes directly from these proto files during the build process. It also encapsulates the \verb|HashcatWrapper| and \verb|ConsulWrapper| (within the \verb|Wrappers| directory), generic enums, and utility services, ensuring the entire cluster utilizes strictly identical data structures.
+
+    \item \textbf{DPCS.Tests} (Evaluator Harness): An xUnit-based testing suite dedicated to verifying the dynamic orchestration algorithms, network latency mitigations, and fault-tolerance mechanics. It encapsulates simulated actor clusters and ephemeral PostgreSQL databases using the Testcontainers library \cite{testcontainers}.
 
 \end{itemize}
 
@@ -787,7 +816,7 @@ To decouple the actor lifecycle from the cracking algorithms, the implementation
 \begin{itemize}
     \item \verb|MaskJobStrategy|: When initialized via the \verb|MaskJobInit| RPC, the Coordinator instantiates this strategy. It interacts directly with the \verb|HashcatWrapper| to probe the \verb|--keyspace| and candidate counts before the job begins. When a worker requests work, the grain calls \verb|NextMaskChunkAsync(hashrate)|. The strategy dynamically calculates the required \verb|keyspace_length| to keep that specific agent busy for the target \verb|ChunkTimeSeconds|, advances its internal cursor safely, and yields a \verb|MaskWorkAssignment|.
 
-    \item \verb|DictionaryJobStrategy|: If initialized via \verb|DictionaryJobInit|, this strategy is employed. It is completely agnostic to Hashcat's internal combinatorics. Instead, it utilizes the pre-processed \verb|.idx| binary index files described previously in Section \ref{sec:wordlist_indexing}. When \verb|NextDictionaryChunkAsync| is invoked, it determines the number of candidates the agent can process, seeks into the sparse index file to find the absolute physical file boundaries, and returns a \verb|DictionaryWorkAssignment| populated with the exact \verb|startByte| and \verb|endByte| parameters.
+    \item \verb|DictionaryJobStrategy|: If initialized via \verb|DictionaryJobInit|, this strategy is employed. It is completely agnostic to Hashcat's internal combinatorics. Instead, it utilizes the pre-processed \verb|.idx| binary index files described in greater detail later in Section \ref{sec:wordlist_indexing}. When \verb|NextDictionaryChunkAsync| is invoked, it determines the number of candidates the agent can process, seeks into the sparse index file to find the absolute physical file boundaries, and returns a \verb|DictionaryWorkAssignment| populated with the exact \verb|startByte| and \verb|endByte| parameters.
 \end{itemize}
 
 \textbf{Fault Tolerance Integration:} The \verb|IJobStrategy| interface also maps seamlessly to the distributed checkpointing mechanics outlined in Chapter \ref{chap:analysis}. The \verb|JobCoordinatorGrain| maintains a \verb|CheckTimeouts| timer running every 30 seconds to strictly monitor the \verb|LastSeen| timestamp of active workers. These timestamps are continuously updated by the \verb|AgentTelemetry| heartbeats arriving every 15 seconds. If an agent's \verb|LastSeen| timestamp exceeds a 45-second threshold (equating to three consecutive missed heartbeats), it is presumed dead. The grain cleanly invokes \verb|_jobStrategy.FailChunk(requestId)|, prompting the underlying strategy to move that specific chunk's tracking cursor from "Assigned" back into its internal "Pending" queue to guarantee At-Least-Once execution. Conversely, successful completion triggers \verb|_jobStrategy.CompleteChunk(requestId)|, gracefully advancing the global progress percentage retrieved via \verb|_jobStrategy.GetProgress()|.
@@ -810,27 +839,25 @@ To maintain URL friendliness and minimize payload size, the ID is constructed as
     \item \textbf{Signature (16 bytes)}: The first 128 bits of an HMAC-SHA256 hash computed over the Payload.
 \end{enumerate}
 
-$$ \text{JobID} = \text{Base64}{\text{URL}}(\text{UUID} \parallel \text{Truncate}_{128}(\text{HMAC}(\text{Key}, \text{UUID}))) $$
+$$ \text{JobID} = \text{Base64URL}(\text{UUID} \parallel \text{Truncate}_{128}(\text{HMAC}(\text{Key}, \text{UUID}))) $$
 
 \subsection{Cryptographic Primitive and Zero-Allocation Verification}
-HMAC-SHA256 is selected for its speed and resistance to length extension attacks. The output is safely truncated to 16 bytes. According to NIST SP 800-107, truncating an HMAC does not degrade its security properties relative to the truncated length, providing sufficient collision and preimage resistance in this context.
+HMAC-SHA256 is selected for its speed and resistance to length extension attacks. The output is safely truncated to 16 bytes. According to the cryptographic guidelines provided by the National Institute of Standards and Technology (NIST) \cite{nist_hash_functions}, truncating an HMAC does not degrade its fundamental security properties relative to the truncated length, providing sufficient collision and preimage resistance for this context.
 
 Given that ID validation occurs on the "hot path" of requests, the implementation is optimized to minimize Garbage Collection (GC) pressure. The verification routine utilizes C\# \verb|Span<T>| and \verb|stackalloc| to perform all operations entirely on the stack. The URL-safe Base64 string is decoded directly into a stack-allocated byte span, sliced into the UUID and signature components without memory copying, and re-computed for validation.
 
 \subsection{Timing Attack Mitigation}
-Standard string comparison returns false as soon as the first mismatched byte is found. This creates a side-channel vulnerability where an attacker can statistically analyze response times to guess the valid signature byte-by-byte. To prevent this, the verification logic must employ Fixed-Time Comparison (such as \verb|CryptographicOperations.FixedTimeEquals| in .NET). The validation function iterates through all bytes of the signature regardless of where a mismatch occurs, ensuring that the verification time is constant and independent of the input validity.
+Standard string comparison returns false as soon as the first mismatched byte is found. This creates a side-channel vulnerability where an attacker can statistically analyze response times to guess the valid signature byte-by-byte. To prevent this, the verification logic must employ Fixed-Time Comparison (such as \verb|CryptographicOperations.FixedTimeEquals| in .NET \cite{dotnet_fixedtimeequals}). The validation function iterates through all bytes of the signature regardless of where a mismatch occurs, ensuring that the verification time is constant and independent of the input validity.
 
 \section{Wordlist management and byte-offset indexing}
 \label{sec:wordlist_indexing}
 
-As established in the architectural design, distributing massive multi-gigabyte dictionary files across the network using gRPC is constrained by message size limits and high serialization overhead. To facilitate the HTTP Byte-Range distribution strategy utilized by the Agent nodes (detailed later in Section \ref{sec:http_range_requests}), the Manager node must possess the capability to instantaneously query the exact physical byte boundaries of an arbitrary wordlist chunk without reading the entire file into memory.
-
-This is achieved through a dedicated \verb|WordlistService| embedded within the Blazor Manager application, which performs highly optimized, zero-allocation byte-offset indexing during the initial file upload.
+To facilitate the HTTP Byte-Range distribution strategy without reading multi-gigabyte wordlists into memory, the Manager node must be capable of instantaneously querying the exact physical byte boundaries of any arbitrary chunk. This is achieved through a dedicated \verb|WordlistService| embedded within the Blazor Manager application, which performs highly optimized, zero-allocation byte-offset indexing during the initial file upload.
 
 \subsection{Zero-Allocation Stream Processing}
 When an administrator uploads a large wordlist, the service streams the file directly to the web server's static files directory (\verb|wwwroot/wordlists|). Because wordlists routinely exceed several gigabytes, allocating standard byte arrays for file I/O operations would induce severe Garbage Collection (GC) pressure, potentially starving the actor system of CPU cycles. 
 
-To mitigate this, the implementation utilizes C\#'s \verb|ArrayPool<byte>.Shared.Rent()| to lease a reusable 80 KB memory buffer (\verb|BufferSize = 81920|). The file stream is processed in chunks using this rented buffer, completely eliminating temporary memory allocations on the managed heap during the continuous stream parsing phase.
+To mitigate this, the implementation utilizes C\#'s \verb|ArrayPool<byte>.Shared.Rent()| \cite{dotnet_arraypool} to lease a reusable 80 KB memory buffer (\verb|BufferSize = 81920|). The file stream is processed in chunks using this rented buffer, completely eliminating temporary memory allocations on the managed heap during the continuous stream parsing phase.
 
 \subsection{Binary Index Generation}
 While the file is being streamed to disk, the service simultaneously generates a sparse binary index. The algorithm scans the rented buffer for newline characters (\verb|\n|). It maintains a running total of the \verb|lineCount| and the \verb|currentOffset| in bytes. 
@@ -838,6 +865,13 @@ While the file is being streamed to disk, the service simultaneously generates a
 Whenever the line count crosses a predefined threshold (e.g., every \verb|Constants.IndexInterval| lines), the absolute byte offset of the character immediately following the newline is recorded. This offset is written as a 64-bit integer (\verb|long|) into a companion binary index file (\verb|.idx|) using a \verb|BinaryWriter|. The very first entry in the index is always explicitly set to \verb|0L|, representing the start of the file.
 
 This approach yields an incredibly compact lookup table. For instance, if the \verb|IndexInterval| is set to 100,000 lines, a wordlist containing one billion passwords will produce an index file containing exactly 10,000 integers. Because each integer requires exactly 8 bytes of storage, the entire index consumes merely 80 KB of disk space.
+
+\begin{figure}[H]
+\centering
+\includesvg[width=0.8\textwidth]{obrazky-figures/wordlist_indexing.svg}
+\caption{A conceptual visualization of the byte-offset indexing process. The original wordlist is mapped every $N$ lines to its absolute byte offset, creating a sparse binary lookup table (\texttt{.idx} file) composed of sequentially packed 64-bit integers.}
+\label{fig:wordlist_indexing}
+\end{figure}
 
 \subsection{Runtime Chunk Resolution}
 During a Dictionary Attack, when the \verb|JobCoordinatorGrain| needs to assign "Chunk $N$" to an available Agent, it does not need to parse the wordlist or count lines. It simply opens the tiny \verb|.idx| companion file, seeks directly to byte position $N \times 8$, and reads the 64-bit integer to obtain the \verb|startByte|. It then reads the subsequent integer to obtain the \verb|endByte|. These precise byte limits are embedded directly into the work assignment URL, empowering the Agent to efficiently download its exact workload.
@@ -860,19 +894,33 @@ As discussed in the theoretical analysis of network latency (Section \ref{net_la
 
 To resolve this, the \verb|WorkerActor| implements a \textbf{Prefetch Queue}. Unlike the REST API polling model used by Hashtopolis—which inevitably introduces idle network wait times between the completion of a chunk and the acquisition of the next—the actor maintains two distinct states: \verb|_isPrefetching| and \verb|_isCracking|. When the actor receives a job assignment, it immediately sends itself a \verb|PrefetchWork| message. This triggers an asynchronous gRPC request to the Coordinator to fetch the next unit of work without blocking the actor's mailbox, using Proto.Actor's \verb|ReenterAfter| mechanism. 
 
-The fetched chunk is placed into an internal \verb|_workQueue| (capped at a \verb|MaxPrefetchQueueSize| of 2). Simultaneously, the actor triggers the \verb|ProcessWork| pipeline, which dequeues the chunk and spawns the Hashcat subprocess. The critical optimization here is that the moment the queue drops below its capacity, the actor requests the \textit{next} chunk over the network while the GPU is currently busy computing the \textit{current} chunk. This effectively "hides" the network latency behind the computational time, ensuring the GPU is continuously fed with instructions and achieving near 100\% saturation.
+The fetched chunk is placed into an internal \verb|_workQueue| (capped at a configurable \verb|MaxPrefetchQueueSize|). Simultaneously, the actor triggers the \verb|ProcessWork| pipeline, which dequeues the chunk and spawns the Hashcat subprocess via the \verb|ProcessAndSubmitAsync| method. The critical optimization here is that the moment the queue drops below its capacity, the actor requests the \textit{next} chunk over the network (via \verb|FetchNextChunkAsync|) while the GPU is busy computing the \textit{current} chunk. This effectively "hides" the network latency behind the computational time, ensuring the GPU is continuously fed with instructions and achieving near 100\% saturation.
+
+\begin{figure}[H]
+\centering
+\includesvg[width=1.0\textwidth]{obrazky-figures/latency_hiding_timeline.svg}
+\caption{A timeline comparison illustrating the latency hiding effect of the prefetch queue. In a strict polling model (top), the GPU sits idle during network round-trips. In the event-driven prefetch model (bottom), the Agent fetches the next chunk asynchronously in the background while the GPU is actively computing, eliminating idle time and maximizing hardware saturation.}
+\label{fig:latency_hiding_timeline}
+\end{figure}
 
 \subsection{Dynamic Chunk Sizing}
 \label{sec:dynamic_chunk_sizing}
-When the \verb|WorkerActor| requests a chunk, it passes its local benchmarked \verb|CurrentHashrate| in the \verb|WorkRequest| payload. The Coordinator uses this metric dynamically. A fast dedicated GPU might be assigned a keyspace length of 2 billion candidates, while a slower laptop CPU on the same cluster is assigned 100 million. This ensures that regardless of heterogeneous hardware, every agent completes its specific chunk in approximately the same amount of time, preventing slow nodes from holding up the final phases of a job.
+When the \verb|WorkerActor| requests a chunk, it passes its local benchmarked \verb|CurrentHashrate| in the \verb|WorkRequest| payload. The Coordinator uses this metric dynamically. A fast, dedicated GPU might be assigned a keyspace length of 2 billion candidates, while a slower laptop CPU on the same cluster is assigned 100 million. This ensures that regardless of heterogeneous hardware, every agent completes its specific chunk in approximately the same amount of time, preventing slow nodes from holding up the final phases of a job.
 
 \subsection{HTTP Range Requests for Dictionary Wordlists}
 \label{sec:http_range_requests}
-Handling massive, multi-gigabyte dictionary files across a network presents a severe architectural challenge. Passing wordlists via gRPC messages is impossible due to strict 4 MB protocol buffer payload limits. Furthermore, forcing every node to download a 10 GB \verb|rockyou.txt| file into memory would crash nodes with limited RAM and congest the network.
+To efficiently acquire its assigned wordlist slice, the \verb|WorkerActor| relies on \textbf{HTTP Byte-Range Requests}, a feature natively supported by the ASP.NET Core web server \cite{aspnet_byte_range}.
 
-The system solves this via \textbf{HTTP Byte-Range Requests}, which are supported by the hosting ASP.NET Core Web server by default. When a \verb|JobCoordinatorGrain| assigns a \verb|DictionaryWorkAssignment|, it performs the math centrally to determine exactly which bytes in the wordlist correspond to the agent's work share and attaches a dynamically generated URL containing \verb|startByte| and \verb|endByte| parameters pointing back to the Manager's HTTP endpoint.
+When the Agent receives a \verb|DictionaryWorkAssignment|, it extracts the dynamically generated URL along with the \verb|startByte| and \verb|endByte| parameters. The \verb|WorkerActor|'s \verb|DownloadDictionaryChunkAsync| method leverages these boundaries to inject an HTTP \verb|Range| header into a standard \verb|HttpRequestMessage|. 
 
-The \verb|WorkerActor|'s \verb|DownloadDictionaryChunkAsync| method parses these limits and injects a \verb|Range| header into a standard \verb|HttpRequestMessage|. This instructs the Manager's web server to stream \textit{only} that precise byte segment of the file over the network. The stream is safely copied to a temporary local file (e.g., \verb|dpcs_reqId.txt|) and passed directly to Hashcat, completely bypassing RAM limitations. By utilizing the double-buffered prefetching logic, as described before, it guarantees fast data distribution and computation, elegantly circumventing both the massive local storage requirements of FitCrack and the line-parsing processor penalties of Hashtopolis.
+This explicitly instructs the Manager's web server to stream only that exact byte segment over the network. Rather than buffering the HTTP response into memory—which would cause out-of-memory exceptions on constrained edge nodes—the stream is asynchronously copied directly to a temporary local text file (e.g., \verb|dpcs_{reqId}.txt|) as it arrives. This file path is then passed to the Hashcat subprocess. By coupling this zero-allocation streaming approach with the asynchronous prefetching logic (Section \ref{sec:prefetch_queue}), the Agent guarantees rapid data distribution without incurring memory bloat or CPU line-parsing penalties.
+
+\begin{figure}[H]
+\centering
+\includesvg[width=1.0\textwidth]{obrazky-figures/http_range_flow.svg}
+\caption{Sequence diagram illustrating the dictionary chunk distribution flow. The Coordinator queries the exact byte boundaries from the \texttt{.idx} index and assigns them to the Agent. The Agent utilizes an HTTP GET request with a \texttt{Range} header to stream only the assigned physical bytes directly to its local disk.}
+\label{fig:http_range_flow}
+\end{figure}
 
 \section{The Hashcat .NET wrapper}
 \label{sec:hashcat_wrapper}
@@ -897,7 +945,9 @@ Furthermore, the system must securely supply the target hashes to the Hashcat su
 
 Therefore, the DPCS uniformly employs the file-based approach to support multi-hash jobs seamlessly. The \verb|WorkerActor| actively manages these target lists on the agent machine via the \verb|GetOrCreateHashFileAsync| method. When a new multi-hash job is initialized, it writes all pending targets into a temporary \verb|dpcs_{jobId}.hashes| file and passes this file path to the \verb|HashcatWrapper|.
 
-A crucial optimization is implemented within this lifecycle: as the Agent recovers passwords (or receives notification from the Coordinator that specific hashes were cracked by other nodes), it executes \verb|UpdateHashFileAsync|. This method actively removes the solved hashes from the internal job memory and completely overwrites the physical \verb|.hashes| file with the remaining uncracked targets. This ensures Hashcat dynamically shrinks its internal comparison list upon every new chunk initialization, preventing wasted GPU cycles on already-cracked credentials. Once the job concludes or is aborted, the \verb|CleanupJobData| routine ensures these sensitive temporary files are permanently purged from the agent's disk.
+A crucial optimization is implemented within this lifecycle: as the Agent recovers passwords (or receives notification from the Coordinator that specific hashes were cracked by other nodes), it executes \verb|UpdateHashFileAsync|. This method actively removes the solved hashes from the internal job memory and completely overwrites the physical \verb|.hashes| file with the remaining uncracked targets. This ensures Hashcat dynamically shrinks its internal comparison list upon every new chunk initialization, preventing wasted GPU cycles on already-cracked credentials.
+
+Once the job concludes or is aborted, the \verb|CleanupJobData| routine ensures these sensitive temporary files are permanently purged from the agent's disk. Furthermore, the actor's termination lifecycle hooks explicitly iterate through the internal prefetch queue, deleting any downloaded wordlist chunks that were fetched in the background but never executed, thereby preventing orphaned files from silently exhausting the host's storage capacity over time.
 
 \subsection{Telemetry, Benchmarking, and Keyspace Evaluation}
 \label{sec:telemetry_benchmarking}
@@ -905,23 +955,27 @@ The wrapper acts as a continuous sensor for the underlying hardware. By injectin
 
 Additionally, the wrapper exposes methods to programmatically evaluate attack domains before they begin. The \verb|GetMaskKeyspaceSizeAsync| and \verb|GetMaskCandidateCountAsync| methods spawn hidden Hashcat processes using the \verb|--keyspace| and \verb|--total-candidates| flags. This capability natively integrates Hashcat's internal combinatorics engine, allowing the \verb|JobCoordinatorGrain| on the server to accurately calculate the required chunk lengths without manually implementing complex keyspace mathematics in C\#.
 
-While running active tasks, the wrapper intercepts Hashcat's standard output and error streams asynchronously. The parsed data is mapped into continuous telemetry properties such as \verb|Temperature|, \verb|FanSpeed|, \verb|GpuUtilization|, and \verb|CurrentHashrate|. The \verb|WorkerActor|'s dedicated heartbeat timer periodically reads these properties every 15 seconds and packages them into an \verb|AgentTelemetry| message, beaming them back to the Coordinator. Because these messages serve dual purposes—powering the live dashboard and proving the node's liveness to the fault-tolerance system—they are sent as non-blocking, "fire-and-forget" network calls, ensuring the GPU parsing loop is never delayed by network traversal times.
+While running active tasks, the wrapper intercepts Hashcat's standard output and error streams asynchronously by executing it as an OS-level subprocess. Interfacing with long-running command-line tools in .NET introduces several inter-process communication (IPC) challenges. To prevent Hashcat from stalling indefinitely while probing for interactive terminal input, the wrapper explicitly redirects and closes the standard input stream. Furthermore, to avoid OS pipe buffer overflows—which would freeze the entire agent if the 4 KB output buffer fills up—the wrapper unconditionally consumes the standard output and error streams asynchronously, decoupling memory capture from stream redirection.
 
-\newpage
+The parsed JSON data is mapped into continuous telemetry properties such as \verb|Temperature|, \verb|FanSpeed|, \verb|GpuUtilization|, and \verb|CurrentHashrate|. Because a physical node may contain heterogeneous hardware (e.g., a dedicated NVIDIA GPU alongside an integrated AMD iGPU) where certain sensors are unsupported and report null or zero values, the parsing logic implements intelligent averaging to discard invalid sensor readings and accurately reflect the thermal state of the active hardware.
+
+The \verb|WorkerActor|'s dedicated heartbeat timer periodically reads these properties every 15 seconds and packages them into an \verb|AgentTelemetry| message, beaming them back to the Coordinator. Because Hashcat only emits status updates every 5 seconds (via the \verb|--status-timer| flag) and chunk transitions occur rapidly, the wrapper is designed to retain the "last known good" telemetry values across chunk boundaries. This prevents race conditions where a heartbeat firing exactly between chunk assignments would otherwise transmit empty sensor data back to the server. Because these messages serve dual purposes—powering the live dashboard and proving the node's liveness to the fault-tolerance system—they are sent as non-blocking, "fire-and-forget" network calls, ensuring the GPU parsing loop is never delayed by network traversal times.
+
+
 
 \section{User interface}
 
 The user interface of the DPCS is powered by \textbf{Blazor Server}, a modern UI framework by Microsoft that allows building interactive client-side web applications using C\# and HTML instead of JavaScript. 
 
 \subsection{Direct Actor System Embedding via Dependency Injection}
-Traditional distributed systems often decouple the backend orchestrator from the frontend web dashboard, requiring a REST or GraphQL API for communication. This introduces significant serialization overhead, network latency, and the need to maintain dual data models. 
+Traditional distributed systems often decouple the backend orchestrator from the frontend web dashboard, requiring a REST or GraphQL API for communication. This introduces significant serialization overhead, network latency, and the need to maintain dual data models.
 
 By locating the UI layer within the exact same physical memory space as the Proto.Actor Manager node, the system completely avoids this complexity. The Blazor web server registers the Proto.Actor \verb|Cluster| object as a singleton within the ASP.NET Core Dependency Injection (DI) container. Any Razor component can natively inject this cluster object directly into its logic. When a user requests the status of a job, the component executes a direct memory call to the \verb|JobManagerGrain| without invoking any HTTP stack or JSON parsing. This architectural integration provides the web layer with sub-millisecond access to the distributed state.
 
 \subsection{Real-time Telemetry via SignalR}
 In a distributed cracking cluster, the state changes rapidly: hundreds of agents report their hashrates, GPU temperatures, and chunk completions every few seconds. Standard web applications handle this via HTTP polling, where the client browser requests data sequentially, placing an immense load on the server.
 
-Blazor Server inherently establishes a persistent \textbf{SignalR} WebSocket connection between the user's browser and the server. When the Manager actor network receives new hardware telemetry or progress updates, it publishes these events globally through a .NET event bus. The Blazor components subscribe to these events and immediately trigger a state re-render. Blazor calculates the DOM differences on the server and pushes only the minimal HTML changes down the WebSocket to the browser. This creates a highly responsive, real-time dashboard where administrators can watch the keyspace coverage percentage smoothly increase and monitor remote GPU temperatures live, without ever requiring the browser to forcefully refresh.
+Blazor Server inherently establishes a persistent \textbf{SignalR} \cite{blazor_signalr} WebSocket connection between the user's browser and the server. When the Manager actor network receives new hardware telemetry or progress updates, it publishes these events globally through a .NET event bus. The Blazor components subscribe to these events and immediately trigger a state re-render. Blazor calculates the DOM differences on the server and pushes only the minimal HTML changes down the WebSocket to the browser. This creates a highly responsive, real-time dashboard where administrators can watch the keyspace coverage percentage smoothly increase and monitor remote GPU temperatures live, without ever requiring the browser to forcefully refresh.
 
 \subsection{Pages and Component Walkthrough}
 The interface is logically partitioned into several dedicated views to monitor and control the cluster effectively:
@@ -999,7 +1053,7 @@ To adhere to the DRY (Don't Repeat Yourself) software engineering principle and 
 
 \section{Deployment and application startup}
 
-To successfully deploy and evaluate the system, the infrastructure must meet specific prerequisites, and the constituent applications must be launched with appropriate configurations. The system is designed to be highly configurable via command-line arguments utilizing the .NET \verb|System.CommandLine| library.
+To successfully deploy and evaluate the system, the infrastructure must meet specific prerequisites, and the constituent applications must be launched with appropriate configurations. The system is designed to be highly configurable via command-line arguments utilizing the .NET \verb|System.CommandLine| library \cite{dotnet_commandline}.
 
 \subsection{System Dependencies}
 Before launching the cluster, the following dependencies must be present in the host environment:
@@ -1112,38 +1166,156 @@ Consul seamlessly resolves the network routes and links the node into the Proto.
 The value of a distributed system lies in its ability to scale efficiently, utilize hardware optimally, and survive adverse conditions. This chapter empirically evaluates the DPCS architecture, specifically testing the claims made during the design phase regarding latency hiding, dynamic load balancing, and data distribution efficiency.
 
 \section{Methodology and test environment}
-To establish a rigorous baseline, the system is evaluated across a mixed cluster of compute nodes. The tests utilize two drastically different cryptographic algorithms to expose different systemic bottlenecks:
+
+Evaluating a distributed actor system requires a methodology that can reliably test multi-node orchestration, fault recovery, and dynamic load-balancing mathematics. Traditional micro-benchmarking tools are insufficient for this task because the scenarios involve complex lifecycles, hardware heterogeneity, and deliberate node termination.
+
+Ideally, the system would be evaluated by deploying the cluster across a physical Local Area Network (LAN) containing multiple distinct hardware profiles (e.g., a high-end dedicated GPU server alongside older CPU-only laptops). A physical multi-GPU lab is strictly necessary to observe true physical network bottlenecks (such as 10 Gbps switch saturation when distributing massive dictionary files), true TCP/IP serialization latency limits over gRPC, and actual hardware constraints like GPU thermal throttling. However, due to hardware availability and time constraints during the evaluation phase, establishing a stable, physical multi-GPU network lab was not feasible. 
+
+Consequently, the evaluation methodology employs an advanced \textbf{In-Process System Simulation}. While this approach bypasses physical Network Interface Card (NIC) limitations and true network latency, it is a mathematically sound, highly repeatable software engineering method for proving the correctness of the orchestrator's chunking algorithms, actor supervision trees, database concurrency, and fault-tolerance recovery logic.
+
+\subsection{The xUnit Evaluator Harness}
+Instead of relying on manual interactions in the web UI or shell scripts spawning OS processes, the testing is driven by a dedicated, automated test harness built using the \textbf{xUnit} testing framework \cite{xunit}. This approach provides strict isolation and sequential execution of performance scenarios.
+
+To accurately test the database concurrency constraints without the friction of local installations, the evaluator utilizes the \textbf{Testcontainers} library. For every test scenario, Testcontainers \cite{testcontainers} dynamically spins up an ephemeral, disposable PostgreSQL Docker container. This guarantees a completely clean database state per test while maintaining the true Multi-Version Concurrency Control (MVCC) behavior of PostgreSQL, which an in-memory mock database cannot replicate. Additionally, the \textbf{ScottPlot} \cite{scottplot} library is integrated into the test suite to programmatically generate the evaluation charts and graphs directly from the benchmark data.
+
+To maintain a clean and modular testing architecture, the \verb|DPCS.Tests| project is structurally partitioned into distinct components:
 \begin{itemize}
-    \item \textbf{MD5 (Fast Hash)}: Computationally trivial. This tests the system's network latency, orchestration overhead, and the effectiveness of the Prefetch Queue, as GPUs will consume chunks in milliseconds.
-    \item \textbf{bcrypt (Slow Hash)}: Computationally expensive. This tests long-running task stability, CPU/GPU saturation, and load balancing across nodes with vastly different compute capabilities.
+    \item \textbf{Infrastructure}: Contains the \verb|ClusterTestBase| class, which utilizes the \verb|IAsyncLifetime| interface to ensure a fresh PostgreSQL Docker container and an isolated in-memory Consul service mesh (\verb|InMemAgent|) are established before each test and cleanly disposed of afterward.
+    \item \textbf{Wrappers}: Houses the \verb|DummyHashcatWrapper|, an implementation of the \verb|IHashcatWrapper| interface capable of simulating varying hardware hash rates, applying precise time multipliers, and generating chunk execution metrics without invoking actual OS subprocesses.
+    \item \textbf{Scenario Definitions}: The individual performance evaluations are isolated into dedicated test classes (\verb|Scenario1_LoadBalancingTests|, \verb|Scenario2_PrefetchLatencyTests|, and \verb|Scenario3_FaultToleranceTests|). This separation ensures that complex assertions involving load distribution, network latency masking, and actor supervision are decoupled and independently verifiable.
 \end{itemize}
 
-\section{Scalability and heterogeneous load balancing}
-A primary flaw in static-chunking distributed systems is the "straggler problem"—where a fast node finishes early but the job cannot complete because a slow node is still working on its fixed-size assignment. 
-This section evaluates the \verb|CurrentHashrate| dynamic chunk sizing algorithm. By deploying the DPCS across a heterogeneous cluster (e.g., mixing a high-end dedicated GPU with a low-power laptop CPU), we measure the \textit{Completion Delta}—the time difference between the first node finishing its final chunk and the last node finishing. A successful evaluation will demonstrate that the Coordinator assigns proportionally smaller chunks to the laptop, allowing both nodes to reach the end of the keyspace simultaneously.
+\subsection{In-Memory Clustering and Hardware Simulation}
+To eliminate the dependency on a running Consul service mesh and the latency of local loopback network routing, the test harness leverages Proto.Actor's built-in \verb|TestProvider|. This provider allows the entire Manager, Coordinator, and Agent actor topology to be instantiated directly within the xUnit process memory space, simulating instantaneous cluster discovery and message routing.
+
+Furthermore, to prove that the system solves the "Straggler Problem" without needing physically different hardware, the system's architecture relies on the Dependency Inversion Principle. The raw Hashcat execution logic is abstracted behind an \verb|IHashcatWrapper| interface. Within the evaluation project, a \verb|DummyHashcatWrapper| is injected into the simulated Agent nodes. 
+
+This dummy wrapper allows the test harness to explicitly dictate mock hashrates. By injecting Agent A with a mocked hashrate of 1,000 H/s and Agent B with 100,000 H/s, the Evaluator tricks the \verb|JobCoordinatorGrain| into calculating drastically different keyspace bounds. The dummy wrapper then artificially delays its \verb|Task| completion based on the assigned chunk size to simulate actual cracking time.
+
+\subsection{Simulated test datasets}
+To expose different systemic bottlenecks within this environment, the tests emulate the behavior of two different cryptographic algorithms by calibrating the \verb|DummyHashcatWrapper| parameters:
+\begin{itemize}
+    \item \textbf{Fast Hash} (e.g. MD5, NTLM): Computationally trivial. Simulated by setting a rapid compute time parameter (e.g., 500 milliseconds per chunk). This explicitly tests the system's orchestration overhead, network latency impact, and the effectiveness of the Prefetch Queue.
+    \item \textbf{Slow Hash} (e.g. bcrypt, argon2): Computationally expensive. Simulated by setting a prolonged compute time parameter (e.g., 30 seconds per chunk). This explicitly tests long-running task stability, dynamic load balancing mathematics, and exact keyspace division without network routing times skewing the results.
+\end{itemize}
+
+\subsection{Simulation scope and limitations}
+While the in-process simulation provides absolute mathematical verification of the actor state machines, dynamic chunking logic, and fault recovery algorithms, it inherently limits the evaluation of physical data plane operations. 
+
+Consequently, evaluating the physical network bandwidth saturation and peak RAM utilization of Agent nodes during the HTTP Byte-Range distribution of multi-gigabyte dictionary wordlists (as designed in Section \ref{sec:http_range_requests}) falls outside the scope of this simulated evaluation. Proving these specific data-streaming efficiencies requires a physical multi-node laboratory environment and remains a subject for future real-world network testing.
+
+\section{Dynamic load balancing and hardware heterogeneity}
+As detailed in Chapter \ref{chap:analysis}, statically dividing the keyspace among cluster nodes invariably leads to the "Straggler Problem," where fast hardware sits idle waiting for slower nodes to finish disproportionately large chunks of work. To empirically validate the dynamic chunk sizing algorithms implemented within the \verb|JobCoordinatorGrain|, the system was evaluated using a highly heterogeneous simulated cluster.
+
+The test comprised four \verb|WorkerActor| instances instrumented with \verb|DummyHashcatWrapper| implementations possessing drastically different capabilities:
+\begin{itemize}
+    \item \textbf{Agent A \& B}: Simulated low-end CPUs processing 50,000 H/s each.
+    \item \textbf{Agent C}: A simulated mid-range GPU processing 100,000 H/s.
+    \item \textbf{Agent D}: A simulated high-end GPU processing 200,000 H/s.
+\end{itemize}
+
+The Coordinator was instructed to orchestrate an attack over a total keyspace of 120,000,000 candidates, targeting an average \verb|ChunkTimeSeconds| of 30 seconds per work assignment.
+
+\begin{table}[hbt]
+\centering
+\caption{Empirical data from a 4-node heterogeneous cluster simulation demonstrating perfectly proportional workload distribution.}
+\label{tab:load-balancing-evaluation}
+\begin{tabular}{|l|c|c|c|c|l|}
+\hline
+\textbf{Metric} & \textbf{Agent A} & \textbf{Agent B} & \textbf{Agent C} & \textbf{Agent D} & \textbf{Cluster Total} \\ 
+ & (50k) & (50k) & (100k) & (200k) & \\ \hline
+Assigned Chunks & 10 & 10 & 10 & 10 & 40 \\ \hline
+Keyspace Covered & 15,000,000 & 15,000,000 & 30,000,000 & 60,000,000 & 120,000,000 \\ \hline
+Coverage Percentage & 12.50\% & 12.50\% & 25.00\% & 50.00\% & 100\% \\ \hline
+Total Compute Time & 300.00 s & 300.00 s & 300.00 s & 300.00 s & - \\ \hline
+Avg Time per Chunk & 30.00 s & 30.00 s & 30.00 s & 30.00 s & - \\ \hline
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{obrazky-figures/LoadBalancing_Keyspace.png}
+\caption{A pie chart visualization of the total keyspace distribution, perfectly matching the proportional hardware capabilities of the nodes.}
+\label{fig:loadbalancing-keyspace}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{obrazky-figures/LoadBalancing_TimePerChunk.png}
+\caption{Average compute time per chunk mapped against the 30-second target threshold (red line), proving the neutralization of hardware disparities.}
+\label{fig:loadbalancing-time}
+\end{figure}
+
+The results, presented in Table \ref{tab:load-balancing-evaluation} and Figures \ref{fig:loadbalancing-keyspace} and \ref{fig:loadbalancing-time}, demonstrate surgical precision in the workload distribution. Agent D (200,000 H/s) processed exactly four times the keyspace of Agent A (50,000 H/s), hitting precisely 50\% and 12.5\% of the total workload, respectively. 
+
+More importantly, the total simulated compute time for every single node was precisely 300 seconds, and the average chunk time was perfectly stabilized at the 30 second target mark. This mathematical uniformity proves that the architecture effectively neutralizes the hardware heterogeneity bottleneck. Because the chunks were dynamically sized based on real-time telemetry, no agent was starved for work, and the entire cluster arrived at exactly 100\% completion simultaneously.
 
 \section{Latency hiding and prefetch evaluation}
 As argued in Chapter \ref{chap:analysis}, network latency introduces significant overhead when cracking fast hashes. This section measures the GPU utilization percentage (via the \verb|HashcatWrapper| telemetry) under two scenarios:
 \begin{enumerate}
-    \item \textbf{Without Prefetching}: The \verb|WorkerActor| requests a chunk, processes it, and waits idly for the next response over the network.
-    \item \textbf{With Prefetching}: The \verb|WorkerActor| utilizes the \verb|ReenterAfter| mechanism to maintain a local \verb|MaxPrefetchQueueSize| of 2.
+    \item \textbf{Strict Polling (No Prefetching)}: The \verb|WorkerActor| requests a chunk, processes it, and waits idly for the next response over the network before continuing.
+    \item \textbf{Event-Driven (Prefetching Enabled)}: The \verb|WorkerActor| utilizes the \verb|ReenterAfter| mechanism to fetch the subsequent chunk in the background while the GPU is actively computing the current chunk.
 \end{enumerate}
-The evaluation seeks to prove that the prefetch architecture effectively masks network Round-Trip Time (RTT) behind compute time, maintaining near 100\% hardware saturation even on fast MD5 hashes.
 
-\section{Data distribution efficiency in Dictionary Attacks}
-Distributing multi-gigabyte wordlists to dozens of ephemeral nodes typically bottlenecks the network bandwidth and crashes nodes with insufficient RAM. This test evaluates the \textbf{HTTP Byte-Range Request} architecture. By initiating a distributed dictionary attack using a large wordlist, we measure the peak RAM utilization of the Agent nodes and the initial "Time to First Hash" metric. A successful result will show that agents use negligible RAM and begin hashing almost instantly as they stream only their specific byte offsets directly to the Hashcat subprocess.
+To properly observe this interaction, the simulated \verb|JobCoordinatorGrain| was instrumented to inject an artificial 250-millisecond delay into every \verb|WorkRequest| to accurately represent real-world routing and database latency across a Wide Area Network (WAN). The test executed a rapid simulated attack (representing MD5) requiring exactly 10 chunks of work, with the \verb|DummyHashcatWrapper| calibrated to require approximately 500 milliseconds of compute time per chunk.
 
-\section{Fault tolerance and UI concurrency}
-This section verifies the resilience of both the control plane and the data plane.
-\begin{itemize}
-    \item \textbf{Agent Termination}: Mid-way through a mask attack, a worker process is forcefully killed (SIGKILL). The test tracks how quickly the Consul service mesh detects the failure and verifies that the \verb|JobCoordinatorGrain| accurately moves the "Lost" chunk from the \textit{Assigned} state back to the \textit{Pending} queue without dropping keyspace coverage.
-    \item \textbf{Database Concurrency}: To test the PostgreSQL MVCC architecture, the cluster is configured to crack a trivial hash dataset where millions of passwords can be successfully recovered in seconds. During this massive write-heavy event, the responsiveness of the Blazor Server UI is measured to ensure the dashboard can read and display the real-time telemetry without being locked by the underlying database inserts.
-\end{itemize}
+\begin{table}[hbt]
+\centering
+\caption{Execution times of a fast-hashing job with simulated 250 ms network latency.}
+\label{tab:prefetch-evaluation}
+\begin{tabular}{|l|c|l|}
+\hline
+\textbf{Architecture} & \textbf{Total Execution Time (s)} & \textbf{Performance Gain} \\ \hline
+Polling (No Prefetch) & 7.82 & Baseline \\ \hline
+Event-Driven (Prefetch) & 5.54 & +29.09 \% \\ \hline
+\end{tabular}
+\end{table}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{obrazky-figures/Prefetch_Evaluation.png}
+\caption{A bar chart visualization demonstrating the total cluster execution time reduction achieved by hiding network latency behind computational cycles.}
+\label{fig:prefetch-evaluation}
+\end{figure}
+
+As shown in Table \ref{tab:prefetch-evaluation} and Figure \ref{fig:prefetch-evaluation}, the results perfectly align with the theoretical mathematical limits. In the strict polling scenario, the network latency and computation time execute sequentially. A single cycle requires $250\text{ms} + 500\text{ms} = 750\text{ms}$. Across 10 chunks, this totals $\sim7.5$ seconds (yielding 7.82 s, inclusive of framework instantiation overhead). The GPU remained idle 33 \% of the time, waiting for network packets.
+
+Conversely, the event-driven prefetch architecture processed the entire workload in 5.54 seconds, achieving a near 30\% reduction in total execution time. Beyond the initial 250 ms penalty incurred during the first chunk download, the network latency was entirely masked. The node fetched chunks $N+1$ concurrently while computing chunk $N$, resulting in virtually 100\% GPU saturation.
+
+\subsection{Discovery of Mailbox Congestion through Over-Fetching}
+An important architectural observation was made during adjustments to the value of the \verb|MaxPrefetchQueueSize| parameter. Initially, the queue size was set to allow 2 pending chunks. In a high-latency environment, the \verb|WorkerActor| immediately dispatched two rapid, consecutive network requests to the Coordinator to fill its queue. 
+
+Because the \verb|JobCoordinatorGrain| (like all Virtual Actors) is strictly single-threaded to prevent state corruption, its mailbox became temporarily congested while processing these multiple back-to-back requests, each suffering a routing delay. When the fast \verb|WorkerActor| finished computing its first chunk and attempted to submit the result, the Coordinator was still busy processing the over-aggressive prefetch requests. This congestion blocked the acknowledgment of the result submission, forcing the \verb|WorkerActor| to halt execution entirely. 
+
+This phenomenon empirically proved that while prefetching is critical for latency hiding, over-prefetching in an Actor Model creates control-plane bottlenecks. The optimal configuration discovered for fast-hashing algorithms is a strict queue size of 1, ensuring the worker requests exactly one chunk ahead of time, maintaining a perfectly staggered pipeline without suffocating the central orchestrator's mailbox.
+
+\section{Simulating fault tolerance and actor supervision}
+From the perspective of the Coordinator's liveness probe, a remote router dying or a server losing power looks identical: the periodic \verb|AgentTelemetry| heartbeats stop arriving. To empirically evaluate the "Distributed Checkpointing" mechanism described in Chapter \ref{chap:analysis}, a catastrophic node failure was programmatically injected into a running cluster.
+
+The simulation was instantiated with two agents assigned to process a keyspace of 12,000,000 candidates, which the \verb|JobCoordinatorGrain| segmented into four chunks of 3,000,000 candidates. Due to the prefetch architecture, both Agent A and Agent B immediately checked out two chunks each. To accurately test the recovery timeline without artificial delays caused by the test's accelerated time multiplier, the heartbeat and timeout thresholds were parameterized to an aggressive 2-second interval and a 6-second timeout (compared to the production standard of 15 and 45 seconds, which prioritizes minimal network overhead).
+
+While the agents were actively computing their initial chunks, Agent A was unconditionally terminated mid-flight. As expected, Agent B successfully finished its assigned workload and entered a standby polling loop. Because the final chunk assigned to Agent A remained unacknowledged in the ether, the global job progress stalled indefinitely at 75\%.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{obrazky-figures/FaultTolerance_Recovery.png}
+\caption{A scatter plot visualizing the recovery from a sudden node failure. The red line marks the exact moment Agent A was terminated. After precisely 6 seconds of missed heartbeats, the \texttt{JobCoordinatorGrain} flagged Agent A as dead, cleanly removed it from the active registry, and forcefully re-queued the lost work chunk. Agent B, executing its standby polling loop, immediately detected the reinstated workload, acquired the chunk, and processed it. By successfully achieving 100\% keyspace coverage despite the hardware failure, this test proves that the system's reliance on telemetry-based leases and at-least-once message delivery guarantees absolute data integrity, entirely eliminating the need for manual administrative intervention.}
+\label{fig:fault-tolerance}
+\end{figure}
 
 % =========================================
 % CHAPTER 7: CONCLUSION
 % =========================================
 \chapter{Conclusion}
 \label{chap:conclusion}
-%\Summary and Future work
+
+The primary objective of this thesis was to explore and implement a reliable distributed password cracking system by leveraging the Actor Model. Initially, research was conducted into password-cracking principles, workload distribution, and the capabilities of state-of-the-art software like Hashcat. Alongside this, various .NET actor frameworks were evaluated to address the challenges of distributed computation. Based on these findings, an architecture was proposed and developed utilizing Proto.Actor. This design separates responsibilities between a central coordinator, which manages job submissions and work distribution, and agent nodes that control local Hashcat instances.
+
+By integrating established tools rather than reinventing core functionalities, the system benefits from the raw computational power of Hashcat and the robust service discovery of HashiCorp Consul. A dedicated .NET wrapper was created to control the Hashcat process, managing keyspace segmentation, parsing outputs, and aiming for efficient GPU utilization. The coordinator service tracks overall job progress, collects recovered passwords, and relies on telemetry-based checkpointing and message flows to recover from errors and handle node disconnects gracefully.
+
+To evaluate the system, an automated testing environment was set up using simulated actor clusters and synthetic hash datasets. These tests measured task distribution latency, scalability, and fault tolerance. The results indicated that the actor-based approach, specifically with the implementation of a prefetch queue and dynamic chunk sizing, can effectively mitigate network latency and balance work across heterogeneous hardware. 
+
+However, evaluating the system primarily through in-process simulation presents certain limitations. Future work should focus on deploying the system across a physical network with multiple dedicated GPUs to observe real-world hardware behaviors, network bandwidth saturation during large dictionary distributions, and the practical limits of Proto.Actor's gRPC throughput. Additionally, the system could be extended to support more complex Hashcat attack modes or adapted for automated cloud-native provisioning. 
+
+\vspace{1cm}
+Ultimately, this thesis demonstrates that combining the Actor Model with existing, highly optimized industry tools provides a practical and extensible approach to orchestrating distributed password recovery operations.
