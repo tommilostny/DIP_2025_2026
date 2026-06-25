@@ -1,6 +1,5 @@
 using DPCS.DAL;
 using Microsoft.EntityFrameworkCore;
-using Proto.Cluster.Testing;
 using Testcontainers.PostgreSql;
 
 namespace DPCS.Tests.Infrastructure;

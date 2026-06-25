@@ -2,8 +2,8 @@ namespace DPCS.Shared;
 
 // =================== AGENT WORKER ACTOR MESSAGES ===================
 
-public record StartLoop;
-public record StopWork;
-public record PrefetchWork;
-public record ProcessWork;
-public record HeartbeatTick;
+public sealed record StartLoop;
+public sealed record StopWork;
+public sealed record PrefetchWork;
+public sealed record ProcessWork;
+public sealed record HeartbeatTick;

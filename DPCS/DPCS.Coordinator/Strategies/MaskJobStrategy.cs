@@ -122,4 +122,3 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
         }
     }
 }
-//52108C136A6D4821580455628FD355A2

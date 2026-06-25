@@ -1,6 +1,0 @@
-@DPCS.Coordinator_HostAddress = http://localhost:5227
-
-GET {{DPCS.Coordinator_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

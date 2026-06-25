@@ -17,7 +17,6 @@ public class Scenario3_FaultToleranceTests : ClusterTestBase
             .WithCluster(ClusterConfig
                 .Setup($"dpcs-test-{Guid.NewGuid()}", new TestProvider(new TestProviderOptions(), ConsulMock), new PartitionIdentityLookup())
                 .WithClusterKind(JobManagerGrainActor.GetClusterKind((ctx, id) => new JobManagerGrain(ctx, id)))
-                // Inject a highly aggressive 6-second timeout for rapid testing
                 .WithClusterKind(JobCoordinatorGrainActor.GetClusterKind((ctx, id) => new JobCoordinatorGrain(ctx, id, wrapper, "http://localhost", TimeSpan.FromSeconds(6))))
                 .WithClusterKind(ResultCollectorGrainActor.GetClusterKind((ctx, id) => new ResultCollectorGrain(ctx, id, dbContextFactory)))
             );
