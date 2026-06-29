@@ -22,13 +22,14 @@ message JobAssignment {
   int32 mode_id = 2;
   int32 hash_type = 3;
   repeated string hashes = 4;
+  repeated string masks = 5;
 }
 
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
 message HashcatMaskJobSpecs {
   repeated string hashes = 1;
   uint32 chunk_time_seconds = 2;
-  string mask = 3;
+  repeated string masks = 3;
   int32 min_length = 4;
   int32 max_length = 5;
   int32 hash_type = 6;
@@ -58,7 +59,6 @@ message WorkRequest {
 message MaskWorkAssignment {
   string job_id = 1;
   string request_id = 2; // Unique ID for deduplication
-  
   string mask = 3;
   uint64 keyspace_start = 4;
   uint64 keyspace_length = 5;

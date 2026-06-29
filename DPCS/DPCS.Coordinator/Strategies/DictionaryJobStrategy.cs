@@ -156,4 +156,9 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         _currentWordlistIndexData = MemoryMarshal.Cast<byte, long>(bytes).ToArray();
         _totalIntervals[_currentWordlistIndex] = Math.Max(1, _currentWordlistIndexData.Length - 1);
     }
+
+    public Task InitializeAsync()
+    {
+        return Task.CompletedTask;
+    }
 }

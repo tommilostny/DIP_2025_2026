@@ -65,7 +65,7 @@ public class Scenario2_PrefetchLatencyTests : ClusterTestBase
         var request = new HashcatMaskJobSpecs
         {
             Hashes = { "5d41402abc4b2a76b9719d911017c592" },
-            Mask = "?l?l?l?l?l",
+            Masks = { "?l?l?l?l?l" },
             HashType = 0,
             ChunkTimeSeconds = 10 // Generates exactly 10 chunks of work
         };

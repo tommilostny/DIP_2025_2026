@@ -14,7 +14,7 @@ public class SubmitJobViewModel : IValidatableObject
     [Required(ErrorMessage = "Hash type must be specified.")]
     public string HashType { get; set; } = "0";
 
-    public string? Mask { get; set; } = "";
+    public string? Masks { get; set; } = "";
     public int MinLength { get; set; } = -1;
     public int MaxLength { get; set; } = -1;
     public string? CustomCharset1 { get; set; } = "";
@@ -33,9 +33,9 @@ public class SubmitJobViewModel : IValidatableObject
             yield return new ValidationResult("At least one hash must be provided.", [nameof(Hashes)]);
         }
 
-        if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Mask))
+        if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Masks))
         {
-            yield return new ValidationResult("A mask must be provided.", [nameof(Mask)]);
+            yield return new ValidationResult("At least one mask must be provided.", [nameof(Masks)]);
         }
 
         if (AttackMode == AttackMode.Dictionary)

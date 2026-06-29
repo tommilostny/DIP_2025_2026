@@ -164,24 +164,30 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         return incMinLen > 0 && incMaxLen > 0 && incMinLen <= incMaxLen;
     }
 
-    public async Task<ulong> GetMaskKeyspaceSizeAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
+    public static async Task<string> CreateTemporaryMaskFileAsync(IEnumerable<string> masks, CancellationToken cancellationToken = default)
+    {
+        var tempFilePath = Path.Combine(Path.GetTempPath(), $"dpcs_masks_{Guid.NewGuid():N}.hcmask");
+        await File.WriteAllLinesAsync(tempFilePath, masks, cancellationToken);
+        return tempFilePath;
+    }
+
+    public async Task<ulong> GetMaskKeyspaceSizeAsync(HashcatMaskJobSpecs maskJobSpecs, string mask, CancellationToken cancellationToken = default)
     {
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Mask} --keyspace ");
-        if (IsIncrementMode(incMinLen, incMaxLen))
+        if (IsIncrementMode(maskJobSpecs.MinLength, maskJobSpecs.MaxLength))
         {
-            argumentsBuilder.Append($"--increment --increment-min={incMinLen} --increment-max={incMaxLen} ");
+            argumentsBuilder.Append($"--increment --increment-min={maskJobSpecs.MinLength} --increment-max={maskJobSpecs.MaxLength} ");
         }
 
-        if (!string.IsNullOrEmpty(customCharset1)) argumentsBuilder.Append($"-1 \"{customCharset1}\" ");
-        if (!string.IsNullOrEmpty(customCharset2)) argumentsBuilder.Append($"-2 \"{customCharset2}\" ");
-        if (!string.IsNullOrEmpty(customCharset3)) argumentsBuilder.Append($"-3 \"{customCharset3}\" ");
-        if (!string.IsNullOrEmpty(customCharset4)) argumentsBuilder.Append($"-4 \"{customCharset4}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset1)) argumentsBuilder.Append($"-1 \"{maskJobSpecs.CustomCharset1}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset2)) argumentsBuilder.Append($"-2 \"{maskJobSpecs.CustomCharset2}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset3)) argumentsBuilder.Append($"-3 \"{maskJobSpecs.CustomCharset3}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset4)) argumentsBuilder.Append($"-4 \"{maskJobSpecs.CustomCharset4}\" ");
         
         argumentsBuilder.Append($"\"{mask}\"");
 
         var arguments = argumentsBuilder.ToString();
-
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
         if (output.Contains("Integer overflow detected", StringComparison.OrdinalIgnoreCase))
@@ -200,24 +206,23 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         throw new Exception($"Failed to parse keyspace size from Hashcat output.\n\nOutput was:\n{output}\n\nThe command: {hashcatPath} {arguments}\n\n");
     }
 
-    public async Task<ulong> GetMaskCandidateCountAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
+    public async Task<ulong> GetMaskCandidateCountAsync(HashcatMaskJobSpecs maskJobSpecs, string mask, CancellationToken cancellationToken = default)
     {
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Mask} --total-candidates ");
-        if (IsIncrementMode(incMinLen, incMaxLen))
+        if (IsIncrementMode(maskJobSpecs.MinLength, maskJobSpecs.MaxLength))
         {
-            argumentsBuilder.Append($"--increment --increment-min={incMinLen} --increment-max={incMaxLen} ");
+            argumentsBuilder.Append($"--increment --increment-min={maskJobSpecs.MinLength} --increment-max={maskJobSpecs.MaxLength} ");
         }
 
-        if (!string.IsNullOrEmpty(customCharset1)) argumentsBuilder.Append($"-1 \"{customCharset1}\" ");
-        if (!string.IsNullOrEmpty(customCharset2)) argumentsBuilder.Append($"-2 \"{customCharset2}\" ");
-        if (!string.IsNullOrEmpty(customCharset3)) argumentsBuilder.Append($"-3 \"{customCharset3}\" ");
-        if (!string.IsNullOrEmpty(customCharset4)) argumentsBuilder.Append($"-4 \"{customCharset4}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset1)) argumentsBuilder.Append($"-1 \"{maskJobSpecs.CustomCharset1}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset2)) argumentsBuilder.Append($"-2 \"{maskJobSpecs.CustomCharset2}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset3)) argumentsBuilder.Append($"-3 \"{maskJobSpecs.CustomCharset3}\" ");
+        if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset4)) argumentsBuilder.Append($"-4 \"{maskJobSpecs.CustomCharset4}\" ");
         
         argumentsBuilder.Append($"\"{mask}\"");
 
         var arguments = argumentsBuilder.ToString();
-
         var output = await ExecuteHashcatInternalAsync(arguments, captureOutput: true, cancellationToken);
 
         if (output.Contains("Integer overflow detected", StringComparison.OrdinalIgnoreCase))

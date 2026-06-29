@@ -56,9 +56,15 @@ else
                         (@( _dbJob?.AttackMode == (int)AttackMode.Mask ? "Mask" : "Dictionary" ))
                     </p>
                     
-                    @if (_maskJobSpecs is not null && !string.IsNullOrEmpty(_maskJobSpecs.Mask))
+                    @if (_maskJobSpecs is not null && _maskJobSpecs.Masks.Count > 0)
                     {
-                        <p><strong>Mask: </strong> @_maskJobSpecs.Mask</p>
+                        <p><strong>Masks: </strong></p>
+                        <ul>
+                            @foreach (var mask in _maskJobSpecs.Masks)
+                            {
+                                <li>@mask</li>
+                            }
+                        </ul>
                         @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset1))
                         {
                             <p class="mb-1"><strong>Charset 1 (?1): </strong> @_maskJobSpecs.CustomCharset1</p>
@@ -261,7 +267,7 @@ else
             if (mode == (int)AttackMode.Mask)
             {
                 _maskJobSpecs = await jobCoordinator.GetMaskJobSpecs(CancellationToken.None);
-                if (_maskJobSpecs != null && _maskJobSpecs.Hashes.Any())
+                if (_hashes.Count == 0 && _maskJobSpecs is { Hashes: { Count: > 0 } })
                 {
                     _hashes = _maskJobSpecs.Hashes.ToList();
                 }
@@ -269,7 +275,7 @@ else
             else if (mode == (int)AttackMode.Dictionary)
             {
                 _dictionaryJobSpecs = await jobCoordinator.GetDictionaryJobSpecs(CancellationToken.None);
-                if (_dictionaryJobSpecs != null && _dictionaryJobSpecs.Hashes.Any())
+                if (_hashes.Count == 0 && _dictionaryJobSpecs is { Hashes: { Count: > 0 } })
                 {
                     _hashes = _dictionaryJobSpecs.Hashes.ToList();
                 }

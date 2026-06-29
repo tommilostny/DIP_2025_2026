@@ -40,7 +40,7 @@ public class Scenario1_LoadBalancingTests : ClusterTestBase
         var request = new HashcatMaskJobSpecs
         {
             Hashes = { "5d41402abc4b2a76b9719d911017c592" },
-            Mask = "?l?l?l?l?l",
+            Masks = { "?l?l?l?l?l" },
             HashType = 0,
             ChunkTimeSeconds = 30 // Target each chunk taking 30 seconds
         };

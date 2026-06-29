@@ -18,6 +18,10 @@
                 <InputSelect @bind-Value="Model!.AttackMode" class="form-select">
                     <option value="@AttackMode.Mask">Mask Attack</option>
                     <option value="@AttackMode.Dictionary">Dictionary Attack</option>
+                    <option value="@AttackMode.Combinator">Combinator Attack</option>
+                    <option value="@AttackMode.Hybrid_WordlistMask">Hybrid Wordlist + Mask</option>
+                    <option value="@AttackMode.Hybrid_MaskWordlist">Hybrid Mask + Wordlist</option>
+                    <option value="@AttackMode.Association">Association Attack</option>
                 </InputSelect>
             </div>
 
@@ -49,7 +53,6 @@
         </div>
 
         <div class="col-md-6">
-
             @if (Model.AttackMode == AttackMode.Mask)
             {
                 <div class="card mb-3">
@@ -57,13 +60,13 @@
                     <div class="card-body">
                         <div class="mb-3">
                             <label class="form-label">
-                                Mask
+                                Masks
                                 <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-decoration-none" @onclick="() => _showMaskHelp = true" title="Show Mask Help">
                                     &#x24D8;
                                 </button>
                             </label>
-                            <InputText @bind-Value="Model.Mask" class="form-control" placeholder="?u?l?d?s?a" />
-                            <ValidationMessage For="() => Model.Mask" />
+                            <InputTextArea @bind-Value="Model.Masks" class="form-control" placeholder="?u?l?d?s?a" />
+                            <ValidationMessage For="() => Model.Masks" />
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -235,7 +238,12 @@
                 var request = new HashcatMaskJobSpecs
                 {
                     Hashes = { hashes },
-                    Mask = Model.Mask,
+                    Masks =
+                    {
+                        Model.Masks!.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                                    .Select(m => m.Trim())
+                                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    },
                     MinLength = Model.MinLength,
                     MaxLength = Model.MaxLength,
                     HashType = int.Parse(Model.HashType),

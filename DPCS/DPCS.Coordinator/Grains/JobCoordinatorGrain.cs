@@ -66,7 +66,10 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
     public override async Task MaskJobInit(HashcatMaskJobSpecs request)
     {
         _chunkAttackSeconds = request.ChunkTimeSeconds > 0 ? request.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds;
+        
         _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _chunkAttackSeconds);
+        await _jobStrategy.InitializeAsync();
+        
         _jobStartTime = DateTime.UtcNow;
 
         var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);

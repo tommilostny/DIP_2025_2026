@@ -30,12 +30,12 @@ public sealed class DummyHashcatWrapper(long simulatedHashrate) : IHashcatWrappe
         return Task.FromResult((ulong)CurrentHashrate);
     }
 
-    public Task<ulong> GetMaskCandidateCountAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
+    public Task<ulong> GetMaskCandidateCountAsync(HashcatMaskJobSpecs maskJobSpecs, string mask, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(MockKeyspaceSize);
     }
 
-    public Task<ulong> GetMaskKeyspaceSizeAsync(string mask, int incMinLen, int incMaxLen, string? customCharset1 = null, string? customCharset2 = null, string? customCharset3 = null, string? customCharset4 = null, CancellationToken cancellationToken = default)
+    public Task<ulong> GetMaskKeyspaceSizeAsync(HashcatMaskJobSpecs maskJobSpecs, string mask, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(MockKeyspaceSize);
     }
