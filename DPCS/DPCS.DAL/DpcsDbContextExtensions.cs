@@ -10,7 +10,11 @@ public static class DpcsDbContextExtensions
         public void AddDpcsDbContextFactory(string host, int port, string database, string username, string password)
         {
             var connectionString = $"Host={host};Port={port};Database={database};Username={username};Password={password}";
+            services.AddDpcsDbContextFactory(connectionString);
+        }
 
+        public void AddDpcsDbContextFactory(string connectionString)
+        {
             services.AddDbContextFactory<DpcsDbContext>(options =>
                 options.UseNpgsql(connectionString));
         }

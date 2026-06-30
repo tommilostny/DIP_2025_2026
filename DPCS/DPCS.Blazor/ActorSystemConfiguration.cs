@@ -14,7 +14,15 @@ public static class ActorSystemConfiguration
 
             var config = provider.GetRequiredService<IConfiguration>();
 
-            var consulAddress = config["ProtoActor:Consul"] ?? throw new InvalidOperationException("Consul address must be provided in configuration under 'ProtoActor:Consul'");
+            foreach (var kv in config.AsEnumerable())
+                Console.WriteLine($"{kv.Key}={kv.Value}");
+
+            // Aspire injects the endpoint for the 'consul-http' endpoint of the 'consul' resource.
+            var consulAddress = config.GetConnectionString("consul-http")
+                                ?? config["CONSUL:CONSUL_HTTP"]
+                                ?? config["services:consul:consul-http:0"]
+                                ?? config["ProtoActor:Consul"] 
+                                ?? throw new InvalidOperationException("Consul address must be provided in configuration.");
             var host = _EmptyStringToNull(config["ProtoActor:Host"]) ?? "127.0.0.1";
             var port = _TryParseInt(config["ProtoActor:Port"]) ?? 0;
 

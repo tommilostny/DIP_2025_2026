@@ -13,7 +13,6 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     private static readonly HttpClient _httpClient = new();
     private Timer? _heartbeatTimer;
     private readonly TimeSpan _heartbeatInterval = heartbeatInterval ?? TimeSpan.FromSeconds(15);
-    private string? _maskFilePath;
 
     public Task ReceiveAsync(IContext context) => context.Message switch
     {

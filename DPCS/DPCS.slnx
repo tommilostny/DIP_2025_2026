@@ -1,8 +1,10 @@
 <Solution>
   <Project Path="DPCS.Agent/DPCS.Agent.csproj" />
+  <Project Path="DPCS.AppHost/DPCS.AppHost.csproj" Id="61890589-557d-452c-8c88-02024b27df30" />
   <Project Path="DPCS.Blazor/DPCS.Blazor.csproj" Id="13c57a41-8068-48f8-8492-6af98d8347e6" />
   <Project Path="DPCS.Coordinator/DPCS.Coordinator.csproj" />
   <Project Path="DPCS.DAL/DPCS.DAL.csproj" Id="bfb13d36-a024-4fde-ae7d-c108c95d91f3" />
+  <Project Path="DPCS.ServiceDefaults/DPCS.ServiceDefaults.csproj" />
   <Project Path="DPCS.Shared/DPCS.Shared.csproj" />
   <Project Path="DPCS.Tests/DPCS.Tests.csproj" Id="0acfcad5-6d4b-4a6b-84c3-3d98855898e9" />
 </Solution>

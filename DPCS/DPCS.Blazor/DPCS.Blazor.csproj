@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Grpc.Tools" Version="2.80.0">
+    <PackageReference Include="Grpc.Tools" Version="2.81.1">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -19,12 +19,13 @@
     <PackageReference Include="Proto.Cluster" Version="1.8.0" />
     <PackageReference Include="Proto.Cluster.CodeGen" Version="1.8.0" />
     <PackageReference Include="Proto.Cluster.Consul" Version="1.8.0" />
+    <PackageReference Include="Proto.OpenTelemetry" Version="1.8.0" />
     <PackageReference Include="Proto.Remote" Version="1.8.0" />
-    <PackageReference Include="System.CommandLine" Version="2.0.5" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\DPCS.DAL\DPCS.DAL.csproj" />
+    <ProjectReference Include="..\DPCS.ServiceDefaults\DPCS.ServiceDefaults.csproj" />
     <ProjectReference Include="..\DPCS.Shared\DPCS.Shared.csproj" />
   </ItemGroup>
 </Project>
