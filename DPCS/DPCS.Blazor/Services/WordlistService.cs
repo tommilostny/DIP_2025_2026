@@ -8,8 +8,12 @@ public class WordlistService
 
     private const int BufferSize = 81920; // 80 kB, a common buffer size for file I/O.
 
-    public WordlistService(IConfiguration configuration)
+    private readonly ActorSystem _actorSystem;
+
+    public WordlistService(IConfiguration configuration, ActorSystem actorSystem)
     {
+        _actorSystem = actorSystem;
+
         // Save wordlists in wwwroot/wordlists so they can be natively served via HTTP later
         _storagePath = configuration.GetValue<string>("WordlistStoragePath")
             ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "wordlists");
@@ -20,10 +24,32 @@ public class WordlistService
         }
     }
 
-    public async Task UploadWordlistAsync(string fileName, Stream fileStream)
+    public async Task UploadWordlistAsync(string fileName, Stream fileStream, bool canOverwrite)
     {
         var filePath = Path.Combine(_storagePath, fileName);
         var indexPath = Path.Combine(_storagePath, $"{fileName}.idx");
+
+        if (File.Exists(filePath))
+        {
+            if (canOverwrite)
+            {
+                var _jobManager = _actorSystem.Cluster().GetJobManagerGrain("root");
+                var response = await _jobManager.IsWordlistInUse(new WordlistQuery { WordlistName = fileName }, CancellationToken.None);
+                if (response is null or { IsInUse: true })
+                {
+                    throw new InvalidOperationException($"Wordlist '{fileName}' is currently in use by an active job and cannot be overwritten.");
+                }
+                File.Delete(filePath);
+                if (File.Exists(indexPath))
+                {
+                    File.Delete(indexPath);
+                }
+            }
+            else
+            {
+                throw new InvalidOperationException($"Wordlist '{fileName}' already exists. To overwrite, set the checkbox above and try again.");
+            }
+        }
 
         // Rent a buffer instead of allocating a new one to prevent GC pressure.
         // Note: The rented array might be slightly larger than requested.

@@ -12,6 +12,10 @@
             <div class="card-header">Upload New Wordlist</div>
             <div class="card-body">
                 <div class="mb-3">
+                    <InputCheckbox @bind-Value="_allowOverwrite" class="form-check-input" id="overwriteCheckbox" />
+                    <label class="form-check-label" for="overwriteCheckbox">Allow overwriting existing wordlists</label>
+                </div>
+                <div class="mb-3">
                     <label class="form-label">Select Wordlist File (.txt)</label>
                     <InputFile OnChange="LoadFiles" class="form-control" accept=".txt" />
                 </div>
@@ -63,9 +67,10 @@
     private bool _isUploading;
     private string? _uploadMessage;
     private List<string> _availableWordlists = [];
+    private bool _allowOverwrite = false; // Flag to allow overwriting existing wordlists
 
-    // Allow up to 50 GB file uploads (adjust as needed)
-    private const long MaxAllowedSize = 50L * 1024 * 1024 * 1024;
+    // Allow up to 100 GB file uploads (adjust as needed)
+    private const long MaxAllowedSize = 100L * 1024 * 1024 * 1024;
 
     protected override void OnInitialized() => RefreshWordlists();
 
@@ -84,8 +89,7 @@
         {
             // OpenReadStream streams the file to the server in small chunks safely over SignalR
             using var stream = file.OpenReadStream(MaxAllowedSize);
-
-            await WordlistService.UploadWordlistAsync(file.Name, stream);
+            await WordlistService.UploadWordlistAsync(file.Name, stream, _allowOverwrite);
 
             _uploadMessage = $"Successfully uploaded and indexed '{file.Name}'.";
             RefreshWordlists();

@@ -22,6 +22,7 @@ service JobManagerGrain {
   rpc FinishAck (JobId) returns (google.protobuf.Empty);
 
   rpc ListJobs (google.protobuf.Empty) returns (JobsCollection);
+  rpc IsWordlistInUse (WordlistQuery) returns (WordlistUsageResponse);
 }
 
 service JobCoordinatorGrain {

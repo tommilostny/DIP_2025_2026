@@ -23,6 +23,7 @@ message JobAssignment {
   int32 hash_type = 3;
   repeated string hashes = 4;
   repeated string masks = 5;
+  repeated string wordlists = 6;
 }
 
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
@@ -137,4 +138,12 @@ message JobProgressUpdate {
     string JobId = 1;
     float ProgressPercentage = 2;
     string Status = 3; // e.g., "Running", "Completed", "Cancelled"
+}
+
+message WordlistQuery {
+    string WordlistName = 1;
+}
+
+message WordlistUsageResponse {
+    bool IsInUse = 1;
 }

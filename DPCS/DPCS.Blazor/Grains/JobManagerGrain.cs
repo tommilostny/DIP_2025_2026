@@ -10,6 +10,8 @@ public sealed class JobManagerGrain : JobManagerGrainBase
 
     private readonly Dictionary<string, JobAssignment> _unfinishedJobs = [];
 
+    private readonly Dictionary<string, int> _wordlistsInUse = [];
+
     public JobManagerGrain(IContext context, ClusterIdentity clusterIdentity) : base(context)
     {
         _clusterIdentity = clusterIdentity;
@@ -64,22 +66,49 @@ public sealed class JobManagerGrain : JobManagerGrainBase
             ModeId = (int)AttackMode.Dictionary,
             HashType = request.HashType,
             Hashes = { request.Hashes },
+            Wordlists = { request.Wordlists },
         };
         _unfinishedJobs[signedJobId] = assignment;
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received dictionary job submission, assigned job id {signedJobId}");
 
+        foreach (var wl in assignment.Wordlists)
+        {
+            _wordlistsInUse[wl] = _wordlistsInUse.TryGetValue(wl, out int value)
+                ? ++value : 1;
+            
+            Console.WriteLine($"{_clusterIdentity.Identity}: wordlist '{wl}' usage count is now {_wordlistsInUse[wl]}");
+        }
+
         await System.Cluster()
             .GetJobCoordinatorGrain(assignment.JobId)
             .DictionaryJobInit(request, CancellationToken.None);
 
-        return await Task.FromResult(assignment);
+        return assignment;
     }
 
     public override async Task CancelJob(JobId jobId)
     {
-        if (_unfinishedJobs.Remove(jobId.Id))
+        if (_unfinishedJobs.TryGetValue(jobId.Id, out JobAssignment? assignment))
         {
+            _unfinishedJobs.Remove(jobId.Id);
+            
+            if (assignment is { ModeId: (int)AttackMode.Dictionary })
+            {
+                foreach (var wl in assignment.Wordlists)
+                {
+                    if (_wordlistsInUse.TryGetValue(wl, out int count))
+                    {
+                        if (count <= 1)
+                        {
+                            _wordlistsInUse.Remove(wl);
+                            continue;
+                        }
+                        _wordlistsInUse[wl] = --count;
+                    }
+                }
+            }
+
             await System.Cluster()
                 .GetJobCoordinatorGrain(jobId.Id)
                 .CancelJob(CancellationToken.None);
@@ -90,15 +119,36 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         {
             Console.WriteLine($"{_clusterIdentity.Identity}: received cancel request with invalid job id {jobId}");
         }
-
-        await Task.CompletedTask;
     }
 
     public override async Task FinishAck(JobId jobId)
     {
-        if (_unfinishedJobs.Remove(jobId.Id))
+        Console.WriteLine($"{_clusterIdentity.Identity}: job {jobId} finished");
+
+        if (_unfinishedJobs.TryGetValue(jobId.Id, out JobAssignment? assignment))
         {
-            Console.WriteLine($"{_clusterIdentity.Identity}: job {jobId} finished");
+            _unfinishedJobs.Remove(jobId.Id);
+            Console.WriteLine($"{_clusterIdentity.Identity}: removed job {jobId} from unfinished jobs, mode {(AttackMode)assignment.ModeId}");
+
+            if (assignment is { ModeId: (int)AttackMode.Dictionary })
+            {
+                Console.WriteLine($"{_clusterIdentity.Identity}: cleaning up wordlist usage for job {jobId}");
+                foreach (var wl in assignment.Wordlists)
+                {
+                    Console.WriteLine($"{_clusterIdentity.Identity}: decrementing usage count for wordlist '{wl}'");
+                    if (_wordlistsInUse.TryGetValue(wl, out int count))
+                    {
+                        if (count <= 1)
+                        {
+                            Console.WriteLine($"{_clusterIdentity.Identity}: wordlist '{wl}' is no longer in use, removing from tracking");
+                            _wordlistsInUse.Remove(wl);
+                            continue;
+                        }
+                        Console.WriteLine($"{_clusterIdentity.Identity}: wordlist '{wl}' usage count decremented to {count - 1}");
+                        _wordlistsInUse[wl] = --count;
+                    }
+                }
+            }
         }
     }
 
@@ -107,6 +157,14 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         return await Task.FromResult(new JobsCollection
         {
            Jobs = { _unfinishedJobs.Values }
+        });
+    }
+
+    public override async Task<WordlistUsageResponse> IsWordlistInUse(WordlistQuery request)
+    {
+        return await Task.FromResult(new WordlistUsageResponse
+        {
+            IsInUse = _wordlistsInUse.ContainsKey(request.WordlistName)
         });
     }
 }
