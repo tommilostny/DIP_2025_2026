@@ -26,7 +26,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
     private readonly string _serverBaseUrl;
 
     private readonly HashSet<RecoveredPassword> _recoveredPasswords = [];
-    private readonly Dictionary<PID, AgentTelemetry> _agentTelemetries = [];
+    private readonly Dictionary<PID, AgentStatus> _agentStatuses = [];
 
     private readonly TimeSpan _livenessTimeout;
 
@@ -53,7 +53,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             foreach (var (pid, workerState) in deadWorkers)
             {
                 _activeWorkers.Remove(pid);
-                _agentTelemetries.Remove(pid);
+                _agentStatuses.Remove(pid);
                 foreach (var reqId in workerState.AssignedChunks)
                 {
                     _jobStrategy?.FailChunk(reqId);
@@ -135,20 +135,40 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 _activeWorkers[workerPid] = state;
             }
             state.AssignedChunks.Add(nextChunk.RequestId);
-            if (!_agentTelemetries.ContainsKey(workerPid))
+            if (_agentStatuses.TryGetValue(workerPid, out AgentStatus? value))
             {
-                _agentTelemetries[workerPid] = new AgentTelemetry
+                value.AssignedChunks.Add(new AssignedChunk
                 {
-                    AgentId = request.AgentId,
-                    CurrentHashrate = -1,
-                    Temperature = -1,
-                    FanSpeed = -1,
-                    GpuUtilization = -1,
-                    RejectRate = float.NaN
+                    RequestId = nextChunk.RequestId,
+                    Mask = nextChunk.Mask,
+                    KeyspaceStart = nextChunk.KeyspaceStart,
+                    KeyspaceEnd = nextChunk.KeyspaceStart + nextChunk.KeyspaceLength - 1,
+                    TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(nextChunk.Mask) ?? 0
+                });
+            }
+            else
+            {
+                _agentStatuses[workerPid] = new AgentStatus
+                {
+                    Telemetry = new AgentTelemetry
+                    {
+                        AgentId = request.AgentId,
+                        CurrentHashrate = -1,
+                        Temperature = -1,
+                        FanSpeed = -1,
+                        GpuUtilization = -1,
+                        RejectRate = float.NaN
+                    },
+                    AssignedChunks = { new AssignedChunk {
+                        RequestId = nextChunk.RequestId,
+                        Mask = nextChunk.Mask,
+                        KeyspaceStart = nextChunk.KeyspaceStart,
+                        KeyspaceEnd = nextChunk.KeyspaceStart + nextChunk.KeyspaceLength - 1,
+                        TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(nextChunk.Mask) ?? 0
+                    }}
                 };
             }
         }
-
         return nextChunk;
     }
 
@@ -189,20 +209,51 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 _activeWorkers[workerPid] = state;
             }
             state.AssignedChunks.Add(nextChunk.RequestId);
-            if (!_agentTelemetries.ContainsKey(workerPid))
+            var dictUri = new Uri(nextChunk.DictionaryChunkUrl);
+            var parsedQuery = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(dictUri.Query);
+            
+            if (_agentStatuses.TryGetValue(workerPid, out AgentStatus? value))
             {
-                _agentTelemetries[workerPid] = new AgentTelemetry
+                value.AssignedChunks.Add(new AssignedChunk
                 {
-                    AgentId = request.AgentId,
-                    CurrentHashrate = -1,
-                    Temperature = -1,
-                    FanSpeed = -1,
-                    GpuUtilization = -1,
-                    RejectRate = float.NaN
+                    RequestId = nextChunk.RequestId,
+                    WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
+                    ByteStart = dictUri.Query.Contains("startByte=")
+                        ? long.Parse(parsedQuery["startByte"].FirstOrDefault() ?? "0")
+                        : 0,
+                    ByteEnd = dictUri.Query.Contains("endByte=")
+                        ? long.Parse(parsedQuery["endByte"].FirstOrDefault() ?? "0")
+                        : 0,
+                });
+            }
+            else
+            {
+                _agentStatuses[workerPid] = new AgentStatus
+                {
+                    Telemetry = new AgentTelemetry
+                    {
+                        AgentId = request.AgentId,
+                        CurrentHashrate = -1,
+                        Temperature = -1,
+                        FanSpeed = -1,
+                        GpuUtilization = -1,
+                        RejectRate = float.NaN
+                    },
+                    AssignedChunks = { new AssignedChunk {
+                        RequestId = nextChunk.RequestId,
+                        WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
+                        ByteStart = dictUri.Query.Contains("startByte=")
+                            ? long.TryParse(parsedQuery["startByte"].FirstOrDefault() ?? "0", out var startByte)
+                                ? startByte : 0
+                            : 0,
+                        ByteEnd = dictUri.Query.Contains("endByte=")
+                            ? long.TryParse(parsedQuery["endByte"].FirstOrDefault() ?? "0", out var endByte)
+                                ? endByte : 0
+                            : 0,
+                    }}
                 };
             }
         }
-
         return nextChunk;
     }
 
@@ -220,7 +271,15 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 if (state.AssignedChunks.Count == 0)
                 {
                     _activeWorkers.Remove(workerPid);
-                    _agentTelemetries.Remove(workerPid);
+                    _agentStatuses.Remove(workerPid);
+                }
+                else if (_agentStatuses.TryGetValue(workerPid, out var agentStatus))
+                {
+                    _agentStatuses[workerPid] = new AgentStatus
+                    {
+                        Telemetry = agentStatus.Telemetry,
+                        AssignedChunks = { agentStatus.AssignedChunks.Where(c => c.RequestId != requestId) }
+                    };
                 }
             }
         }
@@ -294,7 +353,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             if (_activeWorkers.TryGetValue(workerPid, out var state))
             {
                 state.LastSeen = DateTime.UtcNow;
-                _agentTelemetries[workerPid] = request;
+                _agentStatuses[workerPid].Telemetry = request;
             }
         }
         return Task.CompletedTask;
@@ -322,7 +381,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             JobId = _clusterIdentity.Identity,
             Status = progress < 100 ? "In Progress" : "Completed",
             ProgressPercentage = progress,
-            Agents = { _agentTelemetries.Values },
+            Agents = { _agentStatuses.Values },
             ChunkAttackSeconds = _chunkAttackSeconds,
             RecoveredPasswords = { _recoveredPasswords },
         };
@@ -351,7 +410,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         {
             workersToStop = [.. _activeWorkers.Keys];
             _activeWorkers.Clear();
-            _agentTelemetries.Clear();
+            _agentStatuses.Clear();
         }
         foreach (var worker in workersToStop)
         {

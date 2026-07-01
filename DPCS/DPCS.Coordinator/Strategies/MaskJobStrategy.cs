@@ -15,8 +15,8 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
     private readonly Queue<(int MaskIndex, ulong Start, ulong Length)> _retryQueue = [];
 
     public AttackMode Mode => AttackMode.Mask;
-
     public HashcatMaskJobSpecs Specs => specs;
+    private readonly HashSet<ulong> _keyspaceSizeCache = [];
 
     public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate)
     {
@@ -40,7 +40,7 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
             // If we are starting a new mask, calculate its specific keyspace.
             if (_currentMaskKeyspace is null)
             {
-                await CalculateKeyspaceForMaskAsync(_currentMaskIndex);
+                await CalculateKeyspaceAndCandidatesCountAsync(_currentMaskIndex);
             }
 
             // If the current mask is fully assigned, move to the next one.
@@ -100,19 +100,22 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
     public async Task InitializeAsync()
     {
         // This is now only for calculating total progress.
-        foreach (var mask in specs.Masks)
+        for (int i = 0; i < specs.Masks.Count; i++)
         {
-            _totalJobKeyspace += await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs, mask, CancellationToken.None);
+            var mask = specs.Masks[i];
+            var keyspace = await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs, mask, CancellationToken.None);
+            _totalJobKeyspace += keyspace;
+            _keyspaceSizeCache.Add(keyspace);
         }
         Console.WriteLine($"{jobId}: Total calculated job keyspace for {specs.Masks.Count} masks: {_totalJobKeyspace}");
     }
 
-    private async Task CalculateKeyspaceForMaskAsync(int maskIndex)
+    private async Task CalculateKeyspaceAndCandidatesCountAsync(int maskIndex)
     {
         var mask = specs.Masks[maskIndex];
-        _currentMaskKeyspace = await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs, mask, CancellationToken.None);
+        _currentMaskKeyspace = _keyspaceSizeCache.ElementAt(maskIndex);
         _currentMaskCandidates = await hashcatWrapper.GetMaskCandidateCountAsync(specs, mask, CancellationToken.None);
-        Console.WriteLine($"{jobId}: Calculated keyspace for mask '{mask}': {_currentMaskKeyspace}");
+        Console.WriteLine($"{jobId}: Calculated keyspace for mask '{mask}': {_currentMaskKeyspace}, Candidates: {_currentMaskCandidates}");
     }
 
     // This method is part of the interface but not used by this strategy.
@@ -160,5 +163,15 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
             _currentMaskIndex = specs.Masks.Count; // Force completion
             _completedKeyspace = _totalJobKeyspace;
         }
+    }
+
+    public ulong GetStoredKeyspaceForMask(string mask)
+    {
+        var index = specs.Masks.IndexOf(mask);
+        if (index >= 0 && index < _keyspaceSizeCache.Count)
+        {
+            return _keyspaceSizeCache.ElementAt(index);
+        }
+        return 0;
     }
 }

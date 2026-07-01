@@ -1,0 +1,16 @@
+.agent-block {
+    margin-bottom: .5rem;
+}
+
+/* Agent TDs use a CSS variable for base background color so it can be set on the tbody. */
+.agent-block td {
+    background-color: var(--agent-bg, transparent);
+    transition: filter .12s ease, background-color .14s ease, color .12s ease;
+    filter: none;
+}
+
+/* Brighten the cells via CSS filter on hover so it works regardless of where
+   the base background is specified (CSS var, inline style, or other rules). */
+.agent-block:hover td {
+    filter: brightness(1.03);
+}

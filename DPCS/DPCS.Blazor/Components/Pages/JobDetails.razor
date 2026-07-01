@@ -6,6 +6,7 @@
 @using Microsoft.EntityFrameworkCore
 @inject ActorSystem ActorSystem
 @inject IDbContextFactory<DpcsDbContext> DbFactory
+@inject WordlistService WordlistService
 @implements IDisposable
 
 <PageTitle>Job Details</PageTitle>
@@ -62,7 +63,7 @@ else
                         <ul>
                             @foreach (var mask in _maskJobSpecs.Masks)
                             {
-                                <li>@mask</li>
+                                <li class="font-monospace">@mask</li>
                             }
                         </ul>
                         @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset1))
@@ -160,26 +161,83 @@ else
                                         <th>Reject</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    @foreach (var agentTelemetry in _jobStatus.Agents)
+                                @foreach (var agentStatus in _jobStatus.Agents)
+                                {
+                                <tbody class="agent-block" style="--agent-bg:@GetAgentColor(agentStatus.Telemetry.AgentId.Id); border-left:4px solid @GetAgentAccentColor(agentStatus.Telemetry.AgentId.Id);">
+                                    <tr>
+                                        <td class="font-monospace small align-middle" rowspan="@GetAgentRowspan(agentStatus.AssignedChunks)">
+                                            @agentStatus.Telemetry.AgentId.Address/@agentStatus.Telemetry.AgentId.Id
+                                        </td>
+                                        @if (!float.IsNaN(agentStatus.Telemetry.RejectRate))
+                                        {
+                                            <td class="align-middle">
+                                                @agentStatus.Telemetry.CurrentHashrate.ToString("N0") H/s
+                                            </td>
+                                            <td class="align-middle">
+                                                @agentStatus.Telemetry.Temperature °C
+                                            </td>
+                                            <td class="align-middle">
+                                                @agentStatus.Telemetry.FanSpeed %
+                                            </td>
+                                            <td class="align-middle">
+                                                @agentStatus.Telemetry.GpuUtilization %
+                                            </td>
+                                            <td class="align-middle">
+                                                @(agentStatus.Telemetry.RejectRate * 100) %
+                                            </td>
+                                        }
+                                        else
+                                        {
+                                            <td colspan="5" class="text-muted text-center align-middle">
+                                                Waiting for telemetry...
+                                            </td>
+                                        }
+                                    </tr>
+                                    @foreach (var chunk in agentStatus.AssignedChunks)
                                     {
-                                        <tr>
-                                            <td class="font-monospace small align-middle">@agentTelemetry.AgentId.Address/@agentTelemetry.AgentId.Id</td>
-                                            @if (!float.IsNaN(agentTelemetry.RejectRate))
-                                            {
-                                                <td class="align-middle">@agentTelemetry.CurrentHashrate H/s</td>
-                                                <td class="align-middle">@agentTelemetry.Temperature °C</td>
-                                                <td class="align-middle">@agentTelemetry.FanSpeed %</td>
-                                                <td class="align-middle">@agentTelemetry.GpuUtilization %</td>
-                                                <td class="align-middle">@(agentTelemetry.RejectRate * 100)%</td>
-                                            }
-                                            else
-                                            {
-                                                <td colspan="5" class="text-muted text-center align-middle">Waiting for telemetry...</td>
-                                            }
-                                        </tr>
+                                        @if (_dictionaryJobSpecs is not null && _dictionaryJobSpecs.Wordlists.Count > 0)
+                                        {
+                                            <tr class="assignment-row">
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-primary text-white me-2">Dictionary</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.WordlistName</span>
+                                                </td>
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-info text-dark me-2">Bytes</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.ByteStart - @(chunk.ByteEnd == -1 ? "EOF" : chunk.ByteEnd.ToString())</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge rounded-pill bg-warning text-dark me-2">Size</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.WordlistName)</span>
+                                                </td>
+                                            </tr>
+                                        }
+                                        @if (_maskJobSpecs is not null && _maskJobSpecs.Masks.Count > 0)
+                                        {
+                                            <tr class="assignment-row">
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-success text-white me-2">Mask</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark font-monospace">@chunk.Mask</span>
+                                                </td>
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-info text-dark me-2">Range</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.KeyspaceStart.ToString("N0") - @chunk.KeyspaceEnd.ToString("N0")</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge rounded-pill bg-warning text-dark me-2">Total</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@FormatMaskKeyspace(chunk.TotalKeyspace)</span>
+                                                </td>
+                                            </tr>
+                                        }
                                     }
                                 </tbody>
+                                }
                             </table>
                         </div>
                     }
@@ -221,7 +279,7 @@ else
     private HashcatMaskJobSpecs? _maskJobSpecs;
     private HashcatDictionaryJobSpecs? _dictionaryJobSpecs;
     private List<string> _hashes = [];
-    
+
     private readonly CancellationTokenSource _cts = new();
     private bool _isAgentsExpanded = true;
     private bool _isRecoveredPasswordsExpanded = true;
@@ -311,5 +369,69 @@ else
     {
         _cts.Cancel();
         _cts.Dispose();
+    }
+
+    private string GetAgentColor(string id)
+    {
+        // deterministic hash to H (0..360)
+        var h = Math.Abs(id.GetHashCode()) % 360;
+        return $"hsl({h}, 70%, 95%)";
+    }
+
+    private string GetAgentAccentColor(string id)
+    {
+        var h = Math.Abs(id.GetHashCode()) % 360;
+        return $"hsl({h}, 70%, 45%)";
+    }
+
+    private int GetAgentRowspan(IList<AssignedChunk> chunks) => 1 + chunks.Count;
+
+    private string GetWordlistSizeLabel(string? wordlistName)
+    {
+        if (string.IsNullOrWhiteSpace(wordlistName))
+        {
+            return "Unknown";
+        }
+
+        try
+        {
+            var size = WordlistService.GetWordlistFileSize(wordlistName);
+            return FormatBytes(size);
+        }
+        catch
+        {
+            return "Unavailable";
+        }
+    }
+
+    private string FormatMaskKeyspace(ulong keyspace)
+    {
+        return keyspace == 0 ? "Unknown" : keyspace.ToString("N0");
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 0)
+        {
+            return "Unknown";
+        }
+
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+
+        var value = (double)bytes;
+        if (bytes < 1024 * 1024)
+        {
+            return $"{value / 1024.0:F1} KiB";
+        }
+
+        if (bytes < 1024L * 1024L * 1024L)
+        {
+            return $"{value / (1024.0 * 1024.0):F1} MiB";
+        }
+
+        return $"{value / (1024.0 * 1024.0 * 1024.0):F1} GiB";
     }
 }

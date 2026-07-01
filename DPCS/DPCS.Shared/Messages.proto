@@ -113,13 +113,29 @@ message AgentTelemetry {
   float reject_rate = 6;
 }
 
+message AssignedChunk {
+  string request_id = 1;
+  string mask = 2;
+  uint64 keyspace_start = 3;
+  uint64 keyspace_end = 4;
+  uint64 total_keyspace = 5;
+  string wordlist_name = 6;
+  int64 byte_start = 7;
+  int64 byte_end = 8;
+}
+
+message AgentStatus {
+  AgentTelemetry telemetry = 2;
+  repeated AssignedChunk assigned_chunks = 3;
+}
+
 // Message for reporting job status in response to GetJobStatus RPC
 message JobStatus {
   string job_id = 1;
   string status = 2; // e.g. "In Progress", "Completed", "Cancelled"
   float progress_percentage = 3; // e.g. 75.5 for 75.5% completed
   uint64 chunk_attack_seconds = 4;
-  repeated AgentTelemetry agents = 5;
+  repeated AgentStatus agents = 5;
   repeated RecoveredPassword recovered_passwords = 6;
 }
 
@@ -128,22 +144,22 @@ message JobsCollection {
 }
 
 message JobRegistration {
-    string JobId = 1;
-    int32 AttackMode = 2;
-    int32 HashType = 3;
-    google.protobuf.Timestamp StartTime = 4;
+    string job_id = 1;
+    int32 attack_mode = 2;
+    int32 hash_type = 3;
+    google.protobuf.Timestamp start_time = 4;
 }
 
 message JobProgressUpdate {
-    string JobId = 1;
-    float ProgressPercentage = 2;
-    string Status = 3; // e.g., "Running", "Completed", "Cancelled"
+    string job_id = 1;
+    float progress_percentage = 2;
+    string status = 3; // e.g., "Running", "Completed", "Cancelled"
 }
 
 message WordlistQuery {
-    string WordlistName = 1;
+    string wordlist_name = 1;
 }
 
 message WordlistUsageResponse {
-    bool IsInUse = 1;
+    bool is_in_use = 1;
 }

@@ -110,4 +110,17 @@ public class WordlistService
             File.Delete(indexPath);
         }
     }
+
+    public long GetWordlistFileSize(string fileName)
+    {
+        var safeFileName = Path.GetFileName(fileName);
+        var filePath = Path.Combine(_storagePath, safeFileName);
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Wordlist '{fileName}' not found.");
+        }
+
+        return new FileInfo(filePath).Length;
+    }
 }
