@@ -70,3 +70,4 @@ nunit-*.xml
 *.txt
 
 wordlists/
+*masks.json

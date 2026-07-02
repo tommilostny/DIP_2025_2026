@@ -19,7 +19,7 @@
                     <label class="form-label">Select Wordlist File (.txt)</label>
                     <InputFile OnChange="LoadFiles" class="form-control" accept=".txt" />
                 </div>
-                
+
                 @if (_isUploading)
                 {
                     <div class="d-flex align-items-center text-primary mt-3">
@@ -79,7 +79,7 @@
     private async Task LoadFiles(InputFileChangeEventArgs e)
     {
         var file = e.File;
-        if (file == null) return;
+        if (file is null) return;
 
         _isUploading = true;
         _uploadMessage = null;

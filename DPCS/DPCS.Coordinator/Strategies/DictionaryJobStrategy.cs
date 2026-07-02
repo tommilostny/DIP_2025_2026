@@ -39,7 +39,7 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         }
         else
         {
-            if (_currentWordlistIndexData == null)
+            if (_currentWordlistIndexData is null)
             {
                 await LoadCurrentWordlistIndexAsync();
             }

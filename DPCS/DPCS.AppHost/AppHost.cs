@@ -16,9 +16,9 @@ var consul = builder.AddContainer("consul", "consul", "1.15.4")
 
 // Add the Blazor UI project, injecting references to the database and Consul
 var blazor = builder.AddProject<Projects.DPCS_Blazor>("dpcs-blazor")
-    .WithReference(database)
-    .WithReference(consul.GetEndpoint("consul-http")) // Reference the specific Consul HTTP endpoint
-    .WithExternalHttpEndpoints(); // Makes the UI accessible from your local network
+                    .WithExternalHttpEndpoints() // Makes the UI accessible from local network
+                    .WithReference(database)
+                    .WithReference(consul.GetEndpoint("consul-http"));
 
 // Add the Coordinator project, also with references to the database and Consul
 var coordinator = builder.AddProject<Projects.DPCS_Coordinator>("dpcs-coordinator")
@@ -27,7 +27,7 @@ var coordinator = builder.AddProject<Projects.DPCS_Coordinator>("dpcs-coordinato
 
 // Add the Agent project, with a reference to Consul.
 // The 'WithReplicas(3)' will launch 3 instances of the agent for testing.
-builder.AddProject<Projects.DPCS_Agent>("dpcs-agent")
-       .WithReference(consul.GetEndpoint("consul-http"));
+var agent = builder.AddProject<Projects.DPCS_Agent>("dpcs-agent")
+                   .WithReference(consul.GetEndpoint("consul-http"));
 
 builder.Build().Run();

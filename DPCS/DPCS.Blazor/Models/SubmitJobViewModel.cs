@@ -33,18 +33,36 @@ public class SubmitJobViewModel : IValidatableObject
             yield return new ValidationResult("At least one hash must be provided.", [nameof(Hashes)]);
         }
 
-        if (AttackMode == AttackMode.Mask && string.IsNullOrWhiteSpace(Masks))
+        switch (AttackMode)
         {
-            yield return new ValidationResult("At least one mask must be provided.", [nameof(Masks)]);
-        }
+        case AttackMode.Mask:
+            if (string.IsNullOrWhiteSpace(Masks))
+            {
+                yield return new ValidationResult("At least one mask must be provided.", [nameof(Masks)]);
+            }
+            var maskService = validationContext.GetService<MaskService>();
+            if (maskService is not null)
+            {
+                var customCharsets = new[] { CustomCharset1, CustomCharset2, CustomCharset3, CustomCharset4 };
+                var masksList = Masks?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(m => m.Trim())
+                    .Where(m => !string.IsNullOrWhiteSpace(m)) ?? [];
 
-        if (AttackMode == AttackMode.Dictionary)
-        {
+                foreach (var mask in masksList)
+                {
+                    if (!maskService.IsMaskValid(mask, customCharsets!))
+                        yield return new ValidationResult($"The mask '{mask}' is invalid. It contains unknown placeholders.", [nameof(Masks)]);
+                }
+            }
+            break;
+
+        case AttackMode.Dictionary:
             var wordlistsList = Wordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
             if (wordlistsList.Length == 0)
             {
                 yield return new ValidationResult("At least one wordlist must be provided.", [nameof(Wordlists)]);
             }
+            break;
         }
     }
 }

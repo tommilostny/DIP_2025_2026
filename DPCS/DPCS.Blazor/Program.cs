@@ -19,6 +19,7 @@ builder.Services.AddDpcsDbContextFactory(builder.Configuration.GetConnectionStri
 builder.Services.AddActorSystem();
 builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 
+builder.Services.AddSingleton<MaskService>();
 builder.Services.AddSingleton<WordlistService>();
 
 var app = builder.Build();

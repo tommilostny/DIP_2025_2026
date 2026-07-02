@@ -3,6 +3,7 @@
 @inject ActorSystem ActorSystem
 @inject NavigationManager NavigationManager
 @inject WordlistService WordlistService
+@inject MaskService MaskService
 
 <PageTitle>Submit Job</PageTitle>
 
@@ -29,6 +30,11 @@
                 <label class="form-label">Hashes (one per line)</label>
                 <InputTextArea @bind-Value="Model.Hashes" class="form-control" rows="4" />
                 <ValidationMessage For="() => Model.Hashes" />
+
+                <div class="mt-2">
+                    <label class="form-label small text-muted">Load hashes from file (.txt, .hashes)</label>
+                    <InputFile OnChange="@(e => LoadContentFromFileAsync(e, () => Model.Hashes, val => Model.Hashes = val))" class="form-control form-control-sm" accept=".txt,.hashes" />
+                </div>
             </div>
 
             <div class="mb-3">
@@ -67,6 +73,37 @@
                             </label>
                             <InputTextArea @bind-Value="Model.Masks" class="form-control font-monospace" placeholder="?u?l?d?s?a" />
                             <ValidationMessage For="() => Model.Masks" />
+
+                            <div class="mt-2">
+                                <label class="form-label small text-muted">Load masks from file (.txt, .hcmask)</label>
+                                <InputFile OnChange="@(e => LoadContentFromFileAsync(e, () => Model.Masks, val => Model.Masks = val))" class="form-control form-control-sm" accept=".txt,.hcmask" />
+                            </div>
+                            
+                            @if (_savedMasks.Count > 0)
+                            {
+                                <div class="mt-2">
+                                    <small class="text-muted">Recently used masks (click to add):</small>
+                                    <div class="d-flex flex-wrap gap-1 mt-1">
+                                        @foreach (var savedMask in _savedMasks.Take(_showAllMasks ? _savedMasks.Count : 5))
+                                        {
+                                            <div class="btn-group" role="group">
+                                                <button type="button" class="btn btn-sm btn-outline-secondary font-monospace" @onclick="() => AddMaskToInput(savedMask)">
+                                                    @savedMask
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => DeleteSavedMask(savedMask)" title="Delete this saved mask">
+                                                    &times;
+                                                </button>
+                                            </div>
+                                        }
+                                        @if (_savedMasks.Count > 5)
+                                        {
+                                            <button type="button" class="btn btn-sm btn-link text-decoration-none" @onclick="() => _showAllMasks = !_showAllMasks">
+                                                @(_showAllMasks ? "Show less..." : $"Show all {_savedMasks.Count}...")
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+                            }
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
@@ -198,11 +235,14 @@
     private bool _isSubmitting;
     private bool _showMaskHelp;
     private List<string> _availableWordlists = [];
+    private bool _showAllMasks = false;
+    private IReadOnlyList<string> _savedMasks = [];
     private HashSet<string> _selectedWordlists = [];
 
     protected override void OnInitialized()
     {
         Model ??= new();
+        _savedMasks = MaskService.GetSavedMasks();
         _availableWordlists = WordlistService.GetAvailableWordlists().ToList();
         
         // Pre-populate selections if Model.Wordlists has existing data (e.g. page reload on validation fail)
@@ -222,6 +262,59 @@
         // correctly evaluates whether the user has selected at least one wordlist.
         Model!.Wordlists = string.Join('\n', _selectedWordlists);
     }
+    
+    private async Task LoadContentFromFileAsync(InputFileChangeEventArgs e, Func<string?> getter, Action<string> setter)
+    {
+        var file = e.File;
+        if (file is null) return;
+
+        // Set a reasonable file size limit to prevent browser issues (e.g., 10MB)
+        const long maxFileSize = 10 * 1024 * 1024;
+
+        try
+        {
+            await using var stream = file.OpenReadStream(maxFileSize);
+            using var reader = new StreamReader(stream);
+            var fileContent = await reader.ReadToEndAsync(CancellationToken.None);
+
+            if (!string.IsNullOrWhiteSpace(fileContent))
+            {
+                var currentValue = getter();
+                setter(string.IsNullOrWhiteSpace(currentValue) ? fileContent : $"{currentValue.TrimEnd()}\n{fileContent}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error reading file: {ex.Message}");
+        }
+    }
+
+    private void AddMaskToInput(string mask)
+    {
+        if (string.IsNullOrWhiteSpace(Model!.Masks))
+        {
+            Model.Masks = mask;
+        }
+        else
+        {
+            // Append on a new line
+            Model.Masks += $"\n{mask}";
+        }
+    }
+
+    private void DeleteSavedMask(string mask)
+    {
+        try
+        {
+            MaskService.DeleteMask(mask);
+            _savedMasks = MaskService.GetSavedMasks(); // Refresh the list
+        }
+        catch (Exception ex)
+        {
+            // In a real app, you might show a toast notification for the error.
+            Console.WriteLine($"Error deleting mask: {ex.Message}");
+        }
+    }
 
     private async Task HandleValidSubmit()
     {
@@ -230,20 +323,25 @@
         _isSubmitting = true;
         try
         {
-            var hashes = Model.Hashes?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+            var hashes = Model.Hashes?
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(h => h.Trim())
+                .Where(h => !string.IsNullOrWhiteSpace(h))
+                .ToHashSet();
             var jobManager = ActorSystem.Cluster().GetJobManagerGrain("root");
 
             if (Model.AttackMode == AttackMode.Mask)
             {
+                var masks = Model.Masks!
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(m => m.Trim())
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    .ToHashSet();
+
                 var request = new HashcatMaskJobSpecs
                 {
                     Hashes = { hashes },
-                    Masks =
-                    {
-                        Model.Masks!.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-                                    .Select(m => m.Trim())
-                                    .Where(m => !string.IsNullOrWhiteSpace(m))
-                    },
+                    Masks = { masks },
                     MinLength = Model.MinLength,
                     MaxLength = Model.MaxLength,
                     HashType = int.Parse(Model.HashType),
@@ -254,6 +352,9 @@
                     ChunkTimeSeconds = (uint)(Model.ChunkTimeSeconds > 0 ? Model.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds)
                 };
                 await jobManager.MaskJobSubmission(request, CancellationToken.None);
+                
+                // Save the valid masks for future use
+                MaskService.SaveMasks(masks);
             }
             else if (Model.AttackMode == AttackMode.Dictionary)
             {

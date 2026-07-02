@@ -39,7 +39,7 @@
         <span class="visually-hidden">Loading...</span>
     </div>
 }
-else if (_dbJob == null && _jobStatus == null)
+else if (_dbJob is null && _jobStatus is null)
 {
     <div class="alert alert-warning">Job not found.</div>
 }
@@ -97,7 +97,7 @@ else
                     <p class="mt-3">
                         <strong>Hash type:</strong> @(_dbJob?.HashType ?? 0) (@HashTypeMap.GetHashTypeName(_dbJob?.HashType ?? 0))
                     </p>
-                    
+
                     <strong style="cursor: pointer;" @onclick="ToggleHashes" class="d-block mb-2">
                         Hashes (@(_hashes.Count))
                         <span class="float-end">@(_isHashesExpanded ? "▼" : "▶")</span>
