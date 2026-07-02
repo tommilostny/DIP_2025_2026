@@ -368,4 +368,13 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
 
         return outputBuilder?.ToString() ?? string.Empty;
     }
+
+    public void ResetMetrics()
+    {
+        Temperature = 0;
+        FanSpeed = 0;
+        GpuUtilization = 0;
+        RejectRate = 0.0f;
+        CurrentHashrate = 0;
+    }
 }

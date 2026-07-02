@@ -5,10 +5,17 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Proto.OpenTelemetry;
 
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.AddServiceDefaults();
+
+//builder.Services.AddOpenTelemetry()
+//    .WithMetrics(metrics =>
+//    {
+//        metrics.AddProtoActorInstrumentation();
+//    });
 
 // Aspire injects the connection string named "postgres" from the AppHost
 builder.Services.AddDpcsDbContextFactory(builder.Configuration.GetConnectionString("dpcs")

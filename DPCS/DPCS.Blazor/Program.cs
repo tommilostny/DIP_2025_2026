@@ -1,6 +1,7 @@
 using DPCS.Blazor.Components;
 using DPCS.DAL;
 using DPCS.ServiceDefaults;
+using Proto.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,12 @@ builder.AddServiceDefaults();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+//builder.Services.AddOpenTelemetry()
+//    .WithMetrics(metrics =>
+//    {
+//        metrics.AddProtoActorInstrumentation();
+//    });
 
 // Aspire injects the connection string named "postgres" from the AppHost
 builder.Services.AddDpcsDbContextFactory(builder.Configuration.GetConnectionString("dpcs")

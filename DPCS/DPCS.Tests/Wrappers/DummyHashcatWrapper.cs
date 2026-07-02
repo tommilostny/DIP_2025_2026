@@ -4,8 +4,15 @@ namespace DPCS.Tests.Wrappers;
 
 public record ChunkExecutionRecord(ulong KeyspaceStart, ulong KeyspaceLength, double SimulatedSeconds, double RealWaitSeconds);
 
-public sealed class DummyHashcatWrapper(long simulatedHashrate) : IHashcatWrapper
+public sealed class DummyHashcatWrapper : IHashcatWrapper
 {
+    private readonly long _defaultSimulatedHashrate;
+
+    public DummyHashcatWrapper(long simulatedHashrate)
+    {
+        CurrentHashrate = _defaultSimulatedHashrate = simulatedHashrate;
+    }
+
     public int Temperature { get; private set; } = 65;
 
     public int FanSpeed { get; private set; } = 50;
@@ -14,7 +21,7 @@ public sealed class DummyHashcatWrapper(long simulatedHashrate) : IHashcatWrappe
 
     public float RejectRate { get; private set; } = 0.0f;
 
-    public long CurrentHashrate { get; private set; } = simulatedHashrate;
+    public long CurrentHashrate { get; private set; }
 
     // Allows tests to explicitly dictate the fake keyspace size for testing dynamic chunking math
     public ulong MockKeyspaceSize { get; set; } = 10_000_000UL; 
@@ -67,5 +74,15 @@ public sealed class DummyHashcatWrapper(long simulatedHashrate) : IHashcatWrappe
             ExecutedChunks.Add(record);
         }
         return [];
+    }
+
+    public void ResetMetrics()
+    {
+        // Reset metrics to default values
+        Temperature = 65;
+        FanSpeed = 50;
+        GpuUtilization = 99;
+        RejectRate = 0.0f;
+        CurrentHashrate = _defaultSimulatedHashrate;
     }
 }

@@ -1,3 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
+using Proto.OpenTelemetry;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 #if DEBUG

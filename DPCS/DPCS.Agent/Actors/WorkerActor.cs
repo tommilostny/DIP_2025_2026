@@ -71,6 +71,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
 
     private async Task FindJob(IContext context)
     {
+        hashcatWrapper.ResetMetrics(); // Reset metrics when starting a new job (or when returning to discovery after a job completes)
         try
         {
             var assignment = await cluster
