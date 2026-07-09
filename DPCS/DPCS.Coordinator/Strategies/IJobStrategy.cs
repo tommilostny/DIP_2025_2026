@@ -8,9 +8,9 @@ namespace DPCS.Coordinator.Strategies;
 public interface IJobStrategy
 {
     AttackMode Mode { get; }
+    JobSpecsEnvelope Specs { get; }
     Task InitializeAsync();
-    Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate);
-    Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate);
+    Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate);
     void CompleteChunk(string requestId);
     void FailChunk(string requestId);
     float GetProgress();

@@ -37,19 +37,22 @@ public class Scenario1_LoadBalancingTests : ClusterTestBase
 
         // 4. Submit a Mask Job
         var jobManager = serverSystem.Cluster().GetJobManagerGrain("root");
-        var request = new HashcatMaskJobSpecs
+        var request = new JobSpecsEnvelope
         {
             Hashes = { "5d41402abc4b2a76b9719d911017c592" },
-            Masks = { "?l?l?l?l?l" },
+            ChunkTimeSeconds = 30,
             HashType = 0,
-            ChunkTimeSeconds = 30 // Target each chunk taking 30 seconds
+            MaskJobSpecs = new HashcatMaskJobSpecs
+            {
+                Masks = { "?l?l?l?l?l" }
+            }
         };
-        
-        var jobId = await jobManager.MaskJobSubmission(request, CancellationToken.None);
-        Console.WriteLine($"Job {jobId?.JobId} submitted. Simulating cluster execution...");
+
+        var jobAssignment = await jobManager.JobSubmission(request, CancellationToken.None);
+        Console.WriteLine($"Job {jobAssignment?.JobId} submitted. Simulating cluster execution...");
 
         // 5. Wait for Job Completion
-        var coordinator = serverSystem.Cluster().GetJobCoordinatorGrain(jobId?.JobId ?? string.Empty);
+        var coordinator = serverSystem.Cluster().GetJobCoordinatorGrain(jobAssignment?.JobId ?? string.Empty);
         var stopwatch = Stopwatch.StartNew();
 
         while (true)

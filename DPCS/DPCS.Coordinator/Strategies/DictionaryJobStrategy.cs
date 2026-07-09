@@ -2,14 +2,14 @@ using System.Runtime.InteropServices;
 
 namespace DPCS.Coordinator.Strategies;
 
-public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpecs specs, ulong chunkAttackSeconds, string serverBaseUrl) : IJobStrategy
+public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, string serverBaseUrl) : IJobStrategy
 {
     private int _currentWordlistIndex = 0;
     private int _currentIntervalIndex = 0;
     private long[]? _currentWordlistIndexData;
     
-    private readonly int[] _completedIntervals = new int[specs.Wordlists.Count];
-    private readonly int[] _totalIntervals = new int[specs.Wordlists.Count];
+    private readonly int[] _completedIntervals = new int[specs.DictionaryJobSpecs.Wordlists.Count];
+    private readonly int[] _totalIntervals = new int[specs.DictionaryJobSpecs.Wordlists.Count];
 
     private static readonly HttpClient HttpClient = new();
 
@@ -20,13 +20,11 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
 
     public AttackMode Mode => AttackMode.Dictionary;
 
-    public HashcatDictionaryJobSpecs Specs => specs;
+    public JobSpecsEnvelope Specs => specs;
 
-    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate) => null;
-
-    public async Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate)
+    public async Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate)
     {
-        if (_currentWordlistIndex >= specs.Wordlists.Count && _retryQueue.Count == 0)
+        if (_currentWordlistIndex >= specs.DictionaryJobSpecs.Wordlists.Count && _retryQueue.Count == 0)
         {
             return null;
         }
@@ -45,7 +43,7 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
             }
 
             // Calculate how many intervals we need based on Hashrate.
-            ulong linesNeeded = hashRate * chunkAttackSeconds;
+            ulong linesNeeded = hashRate * specs.ChunkTimeSeconds;
             int intervalsNeeded = (int)Math.Max(1, linesNeeded / Constants.IndexInterval);
 
             int startInterval = _currentIntervalIndex;
@@ -73,30 +71,29 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         }
 
         var requestId = Guid.NewGuid().ToString();
-        var assignment = new DictionaryWorkAssignment
+        _activeChunks[requestId] = nextChunk;
+
+        Console.WriteLine($"{jobId}: Assigning dictionary chunk - Wordlist: {specs.DictionaryJobSpecs.Wordlists[nextChunk.WordlistIndex]}, Bytes: {nextChunk.StartByte} to {(nextChunk.EndByte == -1 ? "EOF" : nextChunk.EndByte)}");
+
+        return new WorkAssignmentEnvelope
         {
             JobId = jobId,
             RequestId = requestId,
-            ExtraArgs = string.Empty, // Placeholder for any extra args
-            
-            // Pass the byte bounds via query string so the Agent knows what Range to request
-            DictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{specs.Wordlists[nextChunk.WordlistIndex]}?startByte={nextChunk.StartByte}&endByte={nextChunk.EndByte}",
-            DictionaryChunkChecksum = string.Empty, 
-            //RuleFileContent = specs.Rules, // Assuming rules are provided as content
+            DictionaryAssignment = new DictionaryWorkAssignment
+            {
+                // Pass the byte bounds via query string so the Agent knows what Range to request
+                DictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{specs.DictionaryJobSpecs.Wordlists[nextChunk.WordlistIndex]}?startByte={nextChunk.StartByte}&endByte={nextChunk.EndByte}",
+                DictionaryChunkChecksum = string.Empty, 
+                //RuleFileContent = specs.Rules, // Assuming rules are provided as content
+            },
         };
-
-        _activeChunks[requestId] = nextChunk;
-
-        Console.WriteLine($"{jobId}: Assigning dictionary chunk - Wordlist: {specs.Wordlists[nextChunk.WordlistIndex]}, Bytes: {nextChunk.StartByte} to {(nextChunk.EndByte == -1 ? "EOF" : nextChunk.EndByte)}");
-
-        return assignment;
     }
 
     public void CompleteChunk(string requestId)
     {
         if (_activeChunks.Remove(requestId, out var chunkInfo))
         {
-            _completedIntervals[chunkInfo.WordlistIndex] += (chunkInfo.EndInterval - chunkInfo.StartInterval);
+            _completedIntervals[chunkInfo.WordlistIndex] += chunkInfo.EndInterval - chunkInfo.StartInterval;
             Console.WriteLine($"Chunk completed: RequestId: {requestId}");
         }
     }
@@ -112,12 +109,12 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
     public float GetProgress()
     {
         if (specs.Hashes.Count == 0) return 100.0f;
-        if (specs.Wordlists.Count == 0) return 0.0f;
+        if (specs.DictionaryJobSpecs.Wordlists.Count == 0) return 0.0f;
 
         float progress = 0f;
-        float slice = 100.0f / specs.Wordlists.Count;
+        float slice = 100.0f / specs.DictionaryJobSpecs.Wordlists.Count;
 
-        for (int i = 0; i < specs.Wordlists.Count; i++)
+        for (int i = 0; i < specs.DictionaryJobSpecs.Wordlists.Count; i++)
         {
             if (_totalIntervals[i] > 0)
             {
@@ -141,13 +138,13 @@ public sealed class DictionaryJobStrategy(string jobId, HashcatDictionaryJobSpec
         if (specs.Hashes.Count == 0)
         {
             Console.WriteLine($"All hashes have been cracked for job {jobId}. Marking job as complete.");
-            _currentWordlistIndex = specs.Wordlists.Count; // Force completion
+            _currentWordlistIndex = specs.DictionaryJobSpecs.Wordlists.Count; // Force completion
         }
     }
 
     private async Task LoadCurrentWordlistIndexAsync()
     {
-        var wordlistName = specs.Wordlists[_currentWordlistIndex];
+        var wordlistName = specs.DictionaryJobSpecs.Wordlists[_currentWordlistIndex];
         var idxUrl = $"{serverBaseUrl}/wordlists/{wordlistName}.idx";
 
         var bytes = await HttpClient.GetByteArrayAsync(idxUrl);

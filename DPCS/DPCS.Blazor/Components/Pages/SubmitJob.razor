@@ -330,44 +330,48 @@
                 .ToHashSet();
             var jobManager = ActorSystem.Cluster().GetJobManagerGrain("root");
 
-            if (Model.AttackMode == AttackMode.Mask)
+            var jobSpecs = new JobSpecsEnvelope
             {
+                Hashes = { hashes },
+                HashType = int.Parse(Model.HashType),
+                ChunkTimeSeconds = (uint)(Model.ChunkTimeSeconds > 0 ? Model.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds)
+            };
+
+            switch (Model.AttackMode)
+            {
+            case AttackMode.Mask:
                 var masks = Model.Masks!
                     .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                     .Select(m => m.Trim())
                     .Where(m => !string.IsNullOrWhiteSpace(m))
                     .ToHashSet();
 
-                var request = new HashcatMaskJobSpecs
+                jobSpecs.MaskJobSpecs = new HashcatMaskJobSpecs
                 {
-                    Hashes = { hashes },
                     Masks = { masks },
                     MinLength = Model.MinLength,
                     MaxLength = Model.MaxLength,
-                    HashType = int.Parse(Model.HashType),
                     CustomCharset1 = Model.CustomCharset1 ?? "",
                     CustomCharset2 = Model.CustomCharset2 ?? "",
                     CustomCharset3 = Model.CustomCharset3 ?? "",
                     CustomCharset4 = Model.CustomCharset4 ?? "",
-                    ChunkTimeSeconds = (uint)(Model.ChunkTimeSeconds > 0 ? Model.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds)
                 };
-                await jobManager.MaskJobSubmission(request, CancellationToken.None);
+                await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
                 
                 // Save the valid masks for future use
                 MaskService.SaveMasks(masks);
-            }
-            else if (Model.AttackMode == AttackMode.Dictionary)
-            {
+                break;
+        
+            case AttackMode.Dictionary:
                 var wordlists = Model.Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
 
-                var request = new HashcatDictionaryJobSpecs
+                jobSpecs.DictionaryJobSpecs = new HashcatDictionaryJobSpecs
                 {
-                    Hashes = { hashes },
                     Wordlists = { wordlists },
-                    HashType = int.Parse(Model.HashType),
-                    ChunkTimeSeconds = (uint)(Model.ChunkTimeSeconds > 0 ? Model.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds)
+                    RuleFiles = { } // TODO
                 };
-                await jobManager.DictionaryJobSubmission(request, CancellationToken.None);
+                await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
+                break;
             }
 
             NavigationManager.NavigateTo("/");

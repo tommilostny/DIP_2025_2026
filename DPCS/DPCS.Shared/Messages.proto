@@ -28,25 +28,32 @@ message JobAssignment {
 
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
 message HashcatMaskJobSpecs {
-  repeated string hashes = 1;
-  uint32 chunk_time_seconds = 2;
-  repeated string masks = 3;
-  int32 min_length = 4;
-  int32 max_length = 5;
-  int32 hash_type = 6;
-  string custom_charset1 = 7;
-  string custom_charset2 = 8;
-  string custom_charset3 = 9;
-  string custom_charset4 = 10;
+  repeated string masks = 1;
+  int32 min_length = 2;
+  int32 max_length = 3;
+  string custom_charset1 = 4;
+  string custom_charset2 = 5;
+  string custom_charset3 = 6;
+  string custom_charset4 = 7;
 }
 
 // Parameters for submitting a Hashcat dictionary attack job by user in the web interface
 message HashcatDictionaryJobSpecs {
+  repeated string wordlists = 1;
+  repeated string rule_files = 2;
+}
+
+message JobSpecsEnvelope {
+  // Common fields for all attack jobs
   repeated string hashes = 1;
   uint32 chunk_time_seconds = 2;
-  repeated string wordlists = 3;
-  int32 hash_type = 4;
-  repeated string rule_files = 5;
+  int32 hash_type = 3;
+
+  // Oneof to hold specific job specs
+  oneof payload {
+    HashcatMaskJobSpecs mask_job_specs = 4;
+    HashcatDictionaryJobSpecs dictionary_job_specs = 5;
+  }
 }
 
 // Message sent by agent to request more work
@@ -58,26 +65,32 @@ message WorkRequest {
 
 // Message for Attack Mode 3 (Stateless) - JobCoordinator provides mask and keyspace info
 message MaskWorkAssignment {
-  string job_id = 1;
-  string request_id = 2; // Unique ID for deduplication
-  string mask = 3;
-  uint64 keyspace_start = 4;
-  uint64 keyspace_length = 5;
-  string custom_charset1 = 6;
-  string custom_charset2 = 7;
-  string custom_charset3 = 8;
-  string custom_charset4 = 9;
+  string mask = 1;
+  uint64 keyspace_start = 2;
+  uint64 keyspace_length = 3;
+  string custom_charset1 = 4;
+  string custom_charset2 = 5;
+  string custom_charset3 = 6;
+  string custom_charset4 = 7;
 }
 
 // Message for Attack Mode 0 (Stateful) - JobCoordinator provides dictionary chunk info
 message DictionaryWorkAssignment {
+  string dictionary_chunk_url = 1; // HTTP URL to download the chunk
+  string dictionary_chunk_checksum = 2; // SHA256 to verify integrity
+  string rule_file_content = 3; // Optional rules to apply
+}
+
+message WorkAssignmentEnvelope {
+  // Common fields for all work assignments
   string job_id = 1;
   string request_id = 2; // Unique ID for deduplication
-  string extra_args = 3; // e.g. "--optimized-kernel"
 
-  string dictionary_chunk_url = 4; // HTTP URL to download the chunk
-  string dictionary_chunk_checksum = 5; // SHA256 to verify integrity
-  string rule_file_content = 6; // Optional rules to apply
+  // Oneof to hold specific work assignment
+  oneof payload {
+    MaskWorkAssignment mask_assignment = 3;
+    DictionaryWorkAssignment dictionary_assignment = 4;
+  }
 }
 
 message RecoveredPassword {

@@ -6,7 +6,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     private JobAssignment? _currentJob;
     private readonly Dictionary<string, string> _jobHashFilePaths = [];
 
-    private readonly Queue<object> _workQueue = new();
+    private readonly Queue<WorkAssignmentEnvelope> _workQueue = new();
     private bool _isPrefetching;
     private bool _isCracking;
     private bool _noMoreWork;
@@ -48,9 +48,11 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         // Cleanup any prefetched wordlists hanging out in the queue
         foreach (var chunk in _workQueue)
         {
-            if (chunk is DictionaryWorkAssignment dChunk && File.Exists(dChunk.DictionaryChunkUrl))
+            if (chunk is { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }
+                && File.Exists(chunk.DictionaryAssignment.DictionaryChunkUrl))
             {
-                try { File.Delete(dChunk.DictionaryChunkUrl); } catch { }
+                try { File.Delete(chunk.DictionaryAssignment.DictionaryChunkUrl); }
+                catch { }
             }
         }
         _workQueue.Clear();
@@ -220,7 +222,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         return Task.CompletedTask;
     }
 
-    private async Task ProcessAndSubmitAsync(object chunk, IContext context)
+    private async Task ProcessAndSubmitAsync(WorkAssignmentEnvelope chunk, IContext context)
     {
         //Console.WriteLine("Starting ProcessAndSubmitAsync for chunk...");
 
@@ -240,9 +242,11 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         finally
         {
             // Ensure the temporary dictionary file is deleted
-            if (chunk is DictionaryWorkAssignment dChunk && File.Exists(dChunk.DictionaryChunkUrl))
+            if (chunk is { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }
+                && File.Exists(chunk.DictionaryAssignment.DictionaryChunkUrl))
             {
-                try { File.Delete(dChunk.DictionaryChunkUrl); } catch { }
+                try { File.Delete(chunk.DictionaryAssignment.DictionaryChunkUrl); }
+                catch { }
             }
         }
 
@@ -251,11 +255,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             AgentId = new AgentId { Address = context.Self.Address, Id = context.Self.Id },
             Success = !isFaulted && recovered.Count > 0,
             RecoveredPasswords = { recovered },
-            RequestId = chunk switch {
-                MaskWorkAssignment m => m.RequestId,
-                DictionaryWorkAssignment d => d.RequestId,
-                _ => ""
-            },
+            RequestId = chunk.RequestId,
         };
 
         try
@@ -274,12 +274,11 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         }
     }
 
-    private async Task<object?> FetchNextChunkAsync(IContext context)
+    private async Task<WorkAssignmentEnvelope?> FetchNextChunkAsync(IContext context)
     {
         //Console.WriteLine("Starting FetchNextChunkAsync...");
 
         var hashrate = await hashcatWrapper.GetBenchmarkHashrateAsync(_currentJob!.HashType);
-        var coordinator = cluster.GetJobCoordinatorGrain(_currentJob!.JobId);
         var workRequest = new WorkRequest
         {
             AgentId = new AgentId { Address = context.Self.Address, Id = context.Self.Id },
@@ -289,28 +288,32 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
 
         //Console.WriteLine("Sending work request to coordinator...");
 
-        if (_currentJob!.ModeId == (int)AttackMode.Mask)
+        var coordinator = cluster.GetJobCoordinatorGrain(_currentJob!.JobId);
+        var envelope = await coordinator.WorkRequest(workRequest, CancellationToken.None);
+
+        switch (envelope)
         {
-            var chunk = await coordinator.MaskWorkRequest(workRequest, CancellationToken.None);
-            return string.IsNullOrEmpty(chunk?.RequestId) ? null : chunk;
-        }
-        else if (_currentJob!.ModeId == (int)AttackMode.Dictionary)
-        {
-            var chunk = await coordinator.DictionaryWorkRequest(workRequest, CancellationToken.None);
-            if (string.IsNullOrEmpty(chunk?.RequestId))
+            case null:
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.None }:
                 return null;
 
-            chunk.DictionaryChunkUrl = await DownloadDictionaryChunkAsync(chunk);
-            return chunk;
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment }:
+                return envelope;
+
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }:
+                envelope.DictionaryAssignment.DictionaryChunkUrl = await DownloadDictionaryChunkAsync(envelope);
+                return envelope;
+
+            default:
+                Console.WriteLine("Received unknown work assignment type.");
+                return null;
         }
-        
-        return null;
     }
 
-    private static async Task<string> DownloadDictionaryChunkAsync(DictionaryWorkAssignment chunk)
+    private static async Task<string> DownloadDictionaryChunkAsync(WorkAssignmentEnvelope chunk)
     {
         // Parse the start and end bytes from the dynamically generated coordinator URL
-        var uri = new Uri(chunk.DictionaryChunkUrl);
+        var uri = new Uri(chunk.DictionaryAssignment.DictionaryChunkUrl);
         var queryParams = uri.Query.TrimStart('?').Split('&')
             .Select(p => p.Split('='))
             .ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
@@ -336,19 +339,19 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         return wordlistPath;
     }
 
-    private async Task<List<RecoveredPassword>> ProcessChunkAsync(object chunk)
+    private async Task<List<RecoveredPassword>> ProcessChunkAsync(WorkAssignmentEnvelope chunk)
     {
         var hashFilePath = await GetOrCreateHashFileAsync(_currentJob!.JobId, _currentJob!.Hashes);
 
-        if (chunk is MaskWorkAssignment maskChunk)
+        switch (chunk)
         {
-            Console.WriteLine($"Cracking mask chunk: {maskChunk.RequestId} ({maskChunk.KeyspaceStart} - {maskChunk.KeyspaceStart + maskChunk.KeyspaceLength})");
-            return await hashcatWrapper.RunHashcatMaskAttackAsync(maskChunk, _currentJob!.HashType, hashFilePath, _currentWorkCts!.Token);
-        }
-        else if (chunk is DictionaryWorkAssignment dictChunk)
-        {
-            Console.WriteLine($"Cracking dictionary chunk: {dictChunk.RequestId}");
-            return await hashcatWrapper.RunHashcatDictionaryAttackAsync(dictChunk, _currentJob!.HashType, hashFilePath, _currentWorkCts!.Token);
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment }:
+                Console.WriteLine($"Cracking mask chunk: {chunk.RequestId} ({chunk.MaskAssignment.KeyspaceStart} - {chunk.MaskAssignment.KeyspaceStart + chunk.MaskAssignment.KeyspaceLength})");
+                return await hashcatWrapper.RunHashcatMaskAttackAsync(chunk.MaskAssignment, _currentJob!.HashType, hashFilePath, _currentWorkCts!.Token);
+            
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }:
+                Console.WriteLine($"Cracking dictionary chunk: {chunk.RequestId}");
+                return await hashcatWrapper.RunHashcatDictionaryAttackAsync(chunk.DictionaryAssignment, _currentJob!.HashType, hashFilePath, _currentWorkCts!.Token);
         }
 
         return [];

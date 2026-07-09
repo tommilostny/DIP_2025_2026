@@ -63,70 +63,66 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         }
     }
 
-    public override async Task MaskJobInit(HashcatMaskJobSpecs request)
+    public override async Task JobInit(JobSpecsEnvelope request)
     {
         _chunkAttackSeconds = request.ChunkTimeSeconds > 0 ? request.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds;
         
-        _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _chunkAttackSeconds);
+        _jobStartTime = DateTime.UtcNow;
+        var registratrion = new JobRegistration
+        {
+            JobId = _clusterIdentity.Identity,
+            HashType = request.HashType,
+            StartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(_jobStartTime)
+        };
+
+        switch (request.PayloadCase)
+        {
+        case JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs:
+            _jobStrategy = new MaskJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper);
+            registratrion.AttackMode = (int)AttackMode.Mask;
+            break;
+
+        case JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs:
+            _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _serverBaseUrl);
+            registratrion.AttackMode = (int)AttackMode.Dictionary;
+            break;
+
+        default:
+            throw new InvalidOperationException("Invalid job specs payload");
+        }
         await _jobStrategy.InitializeAsync();
-        
-        _jobStartTime = DateTime.UtcNow;
 
         var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);
-        await collector.RegisterJob(new JobRegistration
-        {
-            JobId = _clusterIdentity.Identity,
-            AttackMode = (int)AttackMode.Mask,
-            HashType = request.HashType,
-            StartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(_jobStartTime)
-        }, CancellationToken.None);
+        await collector.RegisterJob(registratrion, CancellationToken.None);
     }
 
-    public override async Task DictionaryJobInit(HashcatDictionaryJobSpecs request)
+    public override async Task<WorkAssignmentEnvelope> WorkRequest(WorkRequest request)
     {
-        _chunkAttackSeconds = request.ChunkTimeSeconds > 0 ? request.ChunkTimeSeconds : Constants.DefaultChunkTimeSeconds;
-        _jobStrategy = new DictionaryJobStrategy(_clusterIdentity.Identity, request, _chunkAttackSeconds, _serverBaseUrl);
-        _jobStartTime = DateTime.UtcNow;
-
-        var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);
-        await collector.RegisterJob(new JobRegistration
+        if (_jobStrategy is null)
         {
-            JobId = _clusterIdentity.Identity,
-            AttackMode = (int)AttackMode.Dictionary,
-            HashType = request.HashType,
-            StartTime = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(_jobStartTime)
-        }, CancellationToken.None);
-    }
-
-    public override async Task<MaskWorkAssignment> MaskWorkRequest(WorkRequest request)
-    {
-        if (_jobStrategy is not MaskJobStrategy)
-        {
-            return new MaskWorkAssignment(); // Or handle error
+            return new WorkAssignmentEnvelope();
         }
 
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        MaskWorkAssignment? nextChunk;
+        WorkAssignmentEnvelope? nextChunk;
         try
         {
-            nextChunk = await _jobStrategy.NextMaskChunkAsync(request.CurrentHashrate);
+            nextChunk = await _jobStrategy.NextChunkAsync(request.CurrentHashrate);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"{_clusterIdentity.Identity}: Failed to generate next mask chunk. Cancelling job. Error: {ex.Message}");
+            Console.WriteLine($"{_clusterIdentity.Identity}: Failed to generate next chunk. Cancelling job. Error: {ex.Message}");
             var manager = System.Cluster().GetJobManagerGrain("root");
             await manager.FinishAck(new JobId { Id = request.JobId }, CancellationToken.None);
             await CancelJob();
-            return new MaskWorkAssignment();
-        }
-        if (nextChunk is null)
-        {
-            // We have reached the end of the keyspace, but other workers might still be computing.
-            // Do NOT call FinishAck here. It is handled in WorkResultSubmission when Progress == 100.
-            return new MaskWorkAssignment();
+            return new WorkAssignmentEnvelope();
         }
 
-        // Track the worker
+        if (nextChunk is null)
+        {
+            return new WorkAssignmentEnvelope();
+        }
+
         lock (_workersLock)
         {
             if (!_activeWorkers.TryGetValue(workerPid, out var state))
@@ -134,17 +130,16 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 state = new WorkerState { LastSeen = DateTime.UtcNow };
                 _activeWorkers[workerPid] = state;
             }
-            state.AssignedChunks.Add(nextChunk.RequestId);
+
+            var requestId = nextChunk.RequestId;
+            if (!string.IsNullOrWhiteSpace(requestId))
+            {
+                state.AssignedChunks.Add(requestId);
+            }
+
             if (_agentStatuses.TryGetValue(workerPid, out AgentStatus? value))
             {
-                value.AssignedChunks.Add(new AssignedChunk
-                {
-                    RequestId = nextChunk.RequestId,
-                    Mask = nextChunk.Mask,
-                    KeyspaceStart = nextChunk.KeyspaceStart,
-                    KeyspaceEnd = nextChunk.KeyspaceStart + nextChunk.KeyspaceLength - 1,
-                    TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(nextChunk.Mask) ?? 0
-                });
+                value.AssignedChunks.Add(CreateAssignedChunk(nextChunk));
             }
             else
             {
@@ -159,102 +154,48 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                         GpuUtilization = -1,
                         RejectRate = float.NaN
                     },
-                    AssignedChunks = { new AssignedChunk {
-                        RequestId = nextChunk.RequestId,
-                        Mask = nextChunk.Mask,
-                        KeyspaceStart = nextChunk.KeyspaceStart,
-                        KeyspaceEnd = nextChunk.KeyspaceStart + nextChunk.KeyspaceLength - 1,
-                        TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(nextChunk.Mask) ?? 0
-                    }}
+                    AssignedChunks = { CreateAssignedChunk(nextChunk) }
                 };
             }
         }
+
         return nextChunk;
     }
 
-    public override async Task<DictionaryWorkAssignment> DictionaryWorkRequest(WorkRequest request)
+    private AssignedChunk CreateAssignedChunk(WorkAssignmentEnvelope assignment)
     {
-        if (_jobStrategy is not DictionaryJobStrategy)
+        switch (assignment.PayloadCase)
         {
-            return new DictionaryWorkAssignment(); // Or handle error
-        }
-
-        var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
-        DictionaryWorkAssignment? nextChunk;
-        try
-        {
-            nextChunk = await _jobStrategy.NextDictionaryChunkAsync(request.CurrentHashrate);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"{_clusterIdentity.Identity}: Failed to generate next dictionary chunk. Cancelling job. Error: {ex.Message}");
-            var manager = System.Cluster().GetJobManagerGrain("root");
-            await manager.FinishAck(new JobId { Id = request.JobId }, CancellationToken.None);
-            await CancelJob();
-            return new DictionaryWorkAssignment();
-        }
-
-        if (nextChunk is null)
-        {
-            // We have reached the end of the wordlists, but other workers might still be computing.
-            return new DictionaryWorkAssignment();
-        }
-
-        // Track the worker
-        lock (_workersLock)
-        {
-            if (!_activeWorkers.TryGetValue(workerPid, out var state))
-            {
-                state = new WorkerState { LastSeen = DateTime.UtcNow };
-                _activeWorkers[workerPid] = state;
-            }
-            state.AssignedChunks.Add(nextChunk.RequestId);
-            var dictUri = new Uri(nextChunk.DictionaryChunkUrl);
-            var parsedQuery = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(dictUri.Query);
-            
-            if (_agentStatuses.TryGetValue(workerPid, out AgentStatus? value))
-            {
-                value.AssignedChunks.Add(new AssignedChunk
+            case WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment:
+                return new AssignedChunk
                 {
-                    RequestId = nextChunk.RequestId,
+                    RequestId = assignment.RequestId,
+                    Mask = assignment.MaskAssignment.Mask,
+                    KeyspaceStart = assignment.MaskAssignment.KeyspaceStart,
+                    KeyspaceEnd = assignment.MaskAssignment.KeyspaceStart + assignment.MaskAssignment.KeyspaceLength - 1,
+                    TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(assignment.MaskAssignment.Mask) ?? 0
+                };
+            case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
+            {
+                var dictUri = new Uri(assignment.DictionaryAssignment.DictionaryChunkUrl);
+                var parsedQuery = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(dictUri.Query);
+                return new AssignedChunk
+                {
+                    RequestId = assignment.RequestId,
                     WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
                     ByteStart = dictUri.Query.Contains("startByte=")
-                        ? long.Parse(parsedQuery["startByte"].FirstOrDefault() ?? "0")
+                        ? long.TryParse(parsedQuery["startByte"].FirstOrDefault() ?? "0", out var startByte)
+                            ? startByte : 0
                         : 0,
                     ByteEnd = dictUri.Query.Contains("endByte=")
-                        ? long.Parse(parsedQuery["endByte"].FirstOrDefault() ?? "0")
+                        ? long.TryParse(parsedQuery["endByte"].FirstOrDefault() ?? "0", out var endByte)
+                            ? endByte : 0
                         : 0,
-                });
-            }
-            else
-            {
-                _agentStatuses[workerPid] = new AgentStatus
-                {
-                    Telemetry = new AgentTelemetry
-                    {
-                        AgentId = request.AgentId,
-                        CurrentHashrate = -1,
-                        Temperature = -1,
-                        FanSpeed = -1,
-                        GpuUtilization = -1,
-                        RejectRate = float.NaN
-                    },
-                    AssignedChunks = { new AssignedChunk {
-                        RequestId = nextChunk.RequestId,
-                        WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
-                        ByteStart = dictUri.Query.Contains("startByte=")
-                            ? long.TryParse(parsedQuery["startByte"].FirstOrDefault() ?? "0", out var startByte)
-                                ? startByte : 0
-                            : 0,
-                        ByteEnd = dictUri.Query.Contains("endByte=")
-                            ? long.TryParse(parsedQuery["endByte"].FirstOrDefault() ?? "0", out var endByte)
-                                ? endByte : 0
-                            : 0,
-                    }}
                 };
             }
+            default:
+                return new AssignedChunk();
         }
-        return nextChunk;
     }
 
     public override async Task WorkResultSubmission(WorkResult request)
@@ -310,12 +251,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             {
                 JobId = _clusterIdentity.Identity,
                 RecoveredPasswords = { request.RecoveredPasswords },
-                AttackMode = _jobStrategy switch
-                {
-                    MaskJobStrategy => (int)AttackMode.Mask,
-                    DictionaryJobStrategy => (int)AttackMode.Dictionary,
-                    _ => (int)AttackMode.Invalid
-                },
+                AttackMode = (int)(_jobStrategy?.Mode ?? AttackMode.Invalid),
                 CrackedAt = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(now),
                 TimeTaken = Google.Protobuf.WellKnownTypes.Duration.FromTimeSpan(now - _jobStartTime)
             };
@@ -421,21 +357,8 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         Context.Stop(Context.Self);
     }
 
-    public override async Task<HashcatMaskJobSpecs> GetMaskJobSpecs()
+    public override async Task<JobSpecsEnvelope> GetJobSpecs()
     {
-        if (_jobStrategy is MaskJobStrategy maskJobStrategy)
-        {
-            return await Task.FromResult(maskJobStrategy.Specs);
-        }
-        return new HashcatMaskJobSpecs();
-    }
-
-    public override async Task<HashcatDictionaryJobSpecs> GetDictionaryJobSpecs()
-    {
-        if (_jobStrategy is DictionaryJobStrategy dictionaryJobStrategy)
-        {
-            return await Task.FromResult(dictionaryJobStrategy.Specs);
-        }
-        return new HashcatDictionaryJobSpecs();
+        return await Task.FromResult(_jobStrategy?.Specs ?? new JobSpecsEnvelope());
     }
 }

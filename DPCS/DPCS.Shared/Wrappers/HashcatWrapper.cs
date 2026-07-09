@@ -51,7 +51,6 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Dictionary} ");
         argumentsBuilder.Append($"-m {hashType} ");
-        argumentsBuilder.Append(chunk.ExtraArgs);
         argumentsBuilder.Append($" \"{hashFilePath}\" ");
         argumentsBuilder.Append($"\"{chunk.DictionaryChunkUrl}\""); // Assuming this will be a local path to the downloaded wordlist chunk
 

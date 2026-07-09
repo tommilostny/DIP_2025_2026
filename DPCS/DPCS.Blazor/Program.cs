@@ -1,6 +1,9 @@
 using DPCS.Blazor.Components;
 using DPCS.DAL;
 using DPCS.ServiceDefaults;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry;
 using Proto.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,11 +15,22 @@ builder.AddServiceDefaults();
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-//builder.Services.AddOpenTelemetry()
-//    .WithMetrics(metrics =>
-//    {
-//        metrics.AddProtoActorInstrumentation();
-//    });
+/*
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics =>
+        metrics.SetResourceBuilder(ResourceBuilder
+                .CreateDefault()
+                //.AddAttributes(new KeyValuePair<string, object>[]
+                //{
+                //    new("someLabel", builder.Configuration["SomeLabel"]),
+                //    new("env", builder.Environment.EnvironmentName)
+                //})
+                //.AddService(builder.Configuration["Service:Name"])
+            )
+            .AddProtoActorInstrumentation()
+            .AddPrometheusExporter()
+        );
+*/
 
 // Aspire injects the connection string named "postgres" from the AppHost
 builder.Services.AddDpcsDbContextFactory(builder.Configuration.GetConnectionString("dpcs")
@@ -51,5 +65,7 @@ app.Services.EnsureDpcsDbCreated();
 
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 Proto.Log.SetLoggerFactory(loggerFactory);
+
+//app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 app.Run();

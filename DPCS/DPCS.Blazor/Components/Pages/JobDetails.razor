@@ -57,41 +57,43 @@ else
                         (@( _dbJob?.AttackMode == (int)AttackMode.Mask ? "Mask" : "Dictionary" ))
                     </p>
                     
-                    @if (_maskJobSpecs is not null && _maskJobSpecs.Masks.Count > 0)
+                    @switch (_jobSpecs)
                     {
+                    case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs }:
                         <p><strong>Masks: </strong></p>
                         <ul>
-                            @foreach (var mask in _maskJobSpecs.Masks)
+                            @foreach (var mask in _jobSpecs.MaskJobSpecs.Masks)
                             {
                                 <li class="font-monospace">@mask</li>
                             }
                         </ul>
-                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset1))
+                        @if (!string.IsNullOrWhiteSpace(_jobSpecs.MaskJobSpecs.CustomCharset1))
                         {
-                            <p class="mb-1"><strong>Charset 1 (?1): </strong> @_maskJobSpecs.CustomCharset1</p>
+                            <p class="mb-1"><strong>Charset 1 (?1): </strong> @_jobSpecs.MaskJobSpecs.CustomCharset1</p>
                         }
-                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset2))
+                        @if (!string.IsNullOrWhiteSpace(_jobSpecs.MaskJobSpecs.CustomCharset2))
                         {
-                            <p class="mb-1"><strong>Charset 2 (?2): </strong> @_maskJobSpecs.CustomCharset2</p>
+                            <p class="mb-1"><strong>Charset 2 (?2): </strong> @_jobSpecs.MaskJobSpecs.CustomCharset2</p>
                         }
-                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset3))
+                        @if (!string.IsNullOrWhiteSpace(_jobSpecs.MaskJobSpecs.CustomCharset3))
                         {
-                            <p class="mb-1"><strong>Charset 3 (?3): </strong> @_maskJobSpecs.CustomCharset3</p>
+                            <p class="mb-1"><strong>Charset 3 (?3): </strong> @_jobSpecs.MaskJobSpecs.CustomCharset3</p>
                         }
-                        @if (!string.IsNullOrWhiteSpace(_maskJobSpecs.CustomCharset4))
+                        @if (!string.IsNullOrWhiteSpace(_jobSpecs.MaskJobSpecs.CustomCharset4))
                         {
-                            <p class="mb-1"><strong>Charset 4 (?4): </strong> @_maskJobSpecs.CustomCharset4</p>
+                            <p class="mb-1"><strong>Charset 4 (?4): </strong> @_jobSpecs.MaskJobSpecs.CustomCharset4</p>
                         }
-                    }
-                    else if (_dictionaryJobSpecs is not null && _dictionaryJobSpecs.Wordlists.Count > 0)
-                    {
+                        break;
+
+                    case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs }:
                         <strong>Wordlists:</strong>
                         <ul>
-                            @foreach (var wordlist in _dictionaryJobSpecs.Wordlists)
+                            @foreach (var wordlist in _jobSpecs.DictionaryJobSpecs.Wordlists)
                             {
                                 <li>@wordlist</li>
                             }
                         </ul>
+                        break;
                     }
 
                     <p class="mt-3">
@@ -195,8 +197,9 @@ else
                                     </tr>
                                     @foreach (var chunk in agentStatus.AssignedChunks)
                                     {
-                                        @if (_dictionaryJobSpecs is not null && _dictionaryJobSpecs.Wordlists.Count > 0)
+                                        @switch (_jobSpecs)
                                         {
+                                        case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs }:
                                             <tr class="assignment-row">
                                                 <td colspan="2">
                                                     <span class="badge rounded-pill bg-primary text-white me-2">Dictionary</span>
@@ -214,9 +217,9 @@ else
                                                     <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.WordlistName)</span>
                                                 </td>
                                             </tr>
-                                        }
-                                        @if (_maskJobSpecs is not null && _maskJobSpecs.Masks.Count > 0)
-                                        {
+                                            break;
+
+                                        case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs }:
                                             <tr class="assignment-row">
                                                 <td colspan="2">
                                                     <span class="badge rounded-pill bg-success text-white me-2">Mask</span>
@@ -234,6 +237,7 @@ else
                                                     <span class="badge rounded-pill bg-light text-dark">@FormatMaskKeyspace(chunk.TotalKeyspace)</span>
                                                 </td>
                                             </tr>
+                                            break;
                                         }
                                     }
                                 </tbody>
@@ -276,8 +280,7 @@ else
     private bool _isLoading = true;
     private JobRecordEntity? _dbJob;
     private JobStatus? _jobStatus;
-    private HashcatMaskJobSpecs? _maskJobSpecs;
-    private HashcatDictionaryJobSpecs? _dictionaryJobSpecs;
+    private JobSpecsEnvelope? _jobSpecs;
     private List<string> _hashes = [];
 
     private readonly CancellationTokenSource _cts = new();
@@ -322,22 +325,8 @@ else
 
             // Fetch specs based on mode
             var mode = _dbJob?.AttackMode;
-            if (mode == (int)AttackMode.Mask)
-            {
-                _maskJobSpecs = await jobCoordinator.GetMaskJobSpecs(CancellationToken.None);
-                if (_hashes.Count == 0 && _maskJobSpecs is { Hashes: { Count: > 0 } })
-                {
-                    _hashes = _maskJobSpecs.Hashes.ToList();
-                }
-            }
-            else if (mode == (int)AttackMode.Dictionary)
-            {
-                _dictionaryJobSpecs = await jobCoordinator.GetDictionaryJobSpecs(CancellationToken.None);
-                if (_hashes.Count == 0 && _dictionaryJobSpecs is { Hashes: { Count: > 0 } })
-                {
-                    _hashes = _dictionaryJobSpecs.Hashes.ToList();
-                }
-            }
+            _jobSpecs = await jobCoordinator.GetJobSpecs(CancellationToken.None);
+            _hashes = _jobSpecs?.Hashes.ToList() ?? [];
         }
         catch (Exception ex)
         {

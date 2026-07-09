@@ -23,16 +23,19 @@ public class Scenario3_FaultToleranceTests : ClusterTestBase
         await serverSystem.Cluster().StartMemberAsync();
 
         var jobManager = serverSystem.Cluster().GetJobManagerGrain("root");
-        var request = new HashcatMaskJobSpecs
+        var request = new JobSpecsEnvelope
         {
             Hashes = { "5d41402abc4b2a76b9719d911017c592" },
-            Masks = { "?l?l?l?l?l" },
+            ChunkTimeSeconds = 30,
             HashType = 0,
-            ChunkTimeSeconds = 30 // Target each chunk taking 30 simulated seconds (3 real seconds)
+            MaskJobSpecs = new HashcatMaskJobSpecs
+            {
+                Masks = { "?l?l?l?l?l" }
+            }
         };
         
-        var jobId = await jobManager.MaskJobSubmission(request, CancellationToken.None);
-        var coordinator = serverSystem.Cluster().GetJobCoordinatorGrain(jobId?.JobId ?? string.Empty);
+        var jobAssignment = await jobManager.JobSubmission(request, CancellationToken.None);
+        var coordinator = serverSystem.Cluster().GetJobCoordinatorGrain(jobAssignment?.JobId ?? string.Empty);
         var stopwatch = Stopwatch.StartNew();
 
         // Spawn two workers. We use strict polling (size 1) so it's easier to reason about chunk assignments during the kill.

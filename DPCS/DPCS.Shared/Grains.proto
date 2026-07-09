@@ -12,8 +12,7 @@ service JobManagerGrain {
   rpc JobDiscovery (AgentId) returns (JobAssignment);
 
   // RPCs called by web interface to submit new jobs and query for work
-  rpc MaskJobSubmission (HashcatMaskJobSpecs) returns (JobAssignment);
-  rpc DictionaryJobSubmission (HashcatDictionaryJobSpecs) returns (JobAssignment);
+  rpc JobSubmission (JobSpecsEnvelope) returns (JobAssignment);
   
   // RPC for web interface to cancel a job
   rpc CancelJob (JobId) returns (google.protobuf.Empty);
@@ -26,18 +25,15 @@ service JobManagerGrain {
 }
 
 service JobCoordinatorGrain {
-  // Initialization RPCs for new jobs submitted by JobManagerGrain
-  rpc MaskJobInit (HashcatMaskJobSpecs) returns (google.protobuf.Empty);
-  rpc DictionaryJobInit (HashcatDictionaryJobSpecs) returns (google.protobuf.Empty);
+  // Initialization RPC for new jobs submitted by JobManagerGrain
+  rpc JobInit (JobSpecsEnvelope) returns (google.protobuf.Empty);
 
-  rpc GetMaskJobSpecs (google.protobuf.Empty) returns (HashcatMaskJobSpecs);
-  rpc GetDictionaryJobSpecs (google.protobuf.Empty) returns (HashcatDictionaryJobSpecs);
+  rpc GetJobSpecs (google.protobuf.Empty) returns (JobSpecsEnvelope);
 
-  // Work assignment RPCs called by agents to request more work
-  rpc MaskWorkRequest (WorkRequest) returns (MaskWorkAssignment);
-  rpc DictionaryWorkRequest (WorkRequest) returns (DictionaryWorkAssignment);
+  // Work unit assignment RPC called by agents to request more work
+  rpc WorkRequest (WorkRequest) returns (WorkAssignmentEnvelope);
   
-  // RPCs called by agents to submit results and report status
+  // RPC called by agents to submit results and report status
   rpc WorkResultSubmission (WorkResult) returns (google.protobuf.Empty);
   
   // RPC for agents to send periodic heartbeats with telemetry data

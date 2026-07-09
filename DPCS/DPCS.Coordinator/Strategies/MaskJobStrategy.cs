@@ -1,6 +1,6 @@
 namespace DPCS.Coordinator.Strategies;
 
-public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHashcatWrapper hashcatWrapper, ulong chunkAttackSeconds) : IJobStrategy
+public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashcatWrapper hashcatWrapper) : IJobStrategy
 {
     // State for iterating through multiple masks
     private int _currentMaskIndex = 0;
@@ -15,10 +15,10 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
     private readonly Queue<(int MaskIndex, ulong Start, ulong Length)> _retryQueue = [];
 
     public AttackMode Mode => AttackMode.Mask;
-    public HashcatMaskJobSpecs Specs => specs;
+    public JobSpecsEnvelope Specs => specs;
     private readonly HashSet<ulong> _keyspaceSizeCache = [];
 
-    public async Task<MaskWorkAssignment?> NextMaskChunkAsync(ulong hashRate)
+    public async Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate)
     {
         ulong start, length;
         int maskIndex;
@@ -26,12 +26,12 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
         if (_retryQueue.Count > 0)
         {
             (maskIndex, start, length) = _retryQueue.Dequeue();
-            Console.WriteLine($"{jobId}: Reassigning failed chunk for mask '{specs.Masks[maskIndex]}' - Start: {start}, Length: {length}");
+            Console.WriteLine($"{jobId}: Reassigning failed chunk for mask '{specs.MaskJobSpecs.Masks[maskIndex]}' - Start: {start}, Length: {length}");
         }
         else
         {
             // If we have processed all masks, the job is done.
-            if (_currentMaskIndex >= specs.Masks.Count)
+            if (_currentMaskIndex >= specs.MaskJobSpecs.Masks.Count)
             {
                 Console.WriteLine($"{jobId}: All masks processed. Job complete.");
                 return null;
@@ -51,7 +51,7 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
                 _currentMaskKeyspace = null;
                 _currentMaskCandidates = null;
                 // Recursively call to either get the next chunk or finish the job.
-                return await NextMaskChunkAsync(hashRate);
+                return await NextChunkAsync(hashRate);
             }
 
             maskIndex = _currentMaskIndex;
@@ -64,7 +64,7 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
                 amplification = Math.Max(1UL, _currentMaskCandidates.Value / _currentMaskKeyspace!.Value);
             }
 
-            ulong adjustedLength = hashRate * chunkAttackSeconds / amplification;
+            ulong adjustedLength = hashRate * specs.ChunkTimeSeconds / amplification;
             length = Math.Max(adjustedLength, 1000);
             
             // Clamp length so we don't exceed the total keyspace
@@ -73,54 +73,53 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
 
             _currentMaskOffset += length;
 
-            Console.WriteLine($"{jobId}: Assigning chunk for mask '{specs.Masks[maskIndex]}' - Start: {start}, Length: {length}");
+            Console.WriteLine($"{jobId}: Assigning chunk for mask '{specs.MaskJobSpecs.Masks[maskIndex]}' - Start: {start}, Length: {length}");
         
             //Print all calculation metrics:
-            Console.WriteLine($"{jobId}: Mask '{specs.Masks[maskIndex]}' - Total Keyspace: {_currentMaskKeyspace}, Candidates: {_currentMaskCandidates}, Amplification: {amplification}, Adjusted Length: {adjustedLength}, Remaining: {remaining}, Hashrate: {hashRate}, Chunk Attack Seconds: {chunkAttackSeconds}");
+            Console.WriteLine($"{jobId}: Mask '{specs.MaskJobSpecs.Masks[maskIndex]}' - Total Keyspace: {_currentMaskKeyspace}, Candidates: {_currentMaskCandidates}, Amplification: {amplification}, Adjusted Length: {adjustedLength}, Remaining: {remaining}, Hashrate: {hashRate}, Chunk Attack Seconds: {specs.ChunkTimeSeconds}");
         }
 
         var requestId = Guid.NewGuid().ToString();
         var assignment = new MaskWorkAssignment
         {
-            JobId = jobId,
-            RequestId = requestId,
-            Mask = specs.Masks[maskIndex],
+            Mask = specs.MaskJobSpecs.Masks[maskIndex],
             KeyspaceStart = start,
             KeyspaceLength = length,
-            CustomCharset1 = specs.CustomCharset1,
-            CustomCharset2 = specs.CustomCharset2,
-            CustomCharset3 = specs.CustomCharset3,
-            CustomCharset4 = specs.CustomCharset4,
+            CustomCharset1 = specs.MaskJobSpecs.CustomCharset1,
+            CustomCharset2 = specs.MaskJobSpecs.CustomCharset2,
+            CustomCharset3 = specs.MaskJobSpecs.CustomCharset3,
+            CustomCharset4 = specs.MaskJobSpecs.CustomCharset4,
         };
         
         _activeChunks[requestId] = (maskIndex, start, length);
-        return assignment;
+        return new WorkAssignmentEnvelope
+        {
+            JobId = jobId,
+            RequestId = requestId,
+            MaskAssignment = assignment
+        };
     }
 
     public async Task InitializeAsync()
     {
         // This is now only for calculating total progress.
-        for (int i = 0; i < specs.Masks.Count; i++)
+        for (int i = 0; i < specs.MaskJobSpecs.Masks.Count; i++)
         {
-            var mask = specs.Masks[i];
-            var keyspace = await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs, mask, CancellationToken.None);
+            var mask = specs.MaskJobSpecs.Masks[i];
+            var keyspace = await hashcatWrapper.GetMaskKeyspaceSizeAsync(specs.MaskJobSpecs, mask, CancellationToken.None);
             _totalJobKeyspace += keyspace;
             _keyspaceSizeCache.Add(keyspace);
         }
-        Console.WriteLine($"{jobId}: Total calculated job keyspace for {specs.Masks.Count} masks: {_totalJobKeyspace}");
+        Console.WriteLine($"{jobId}: Total calculated job keyspace for {specs.MaskJobSpecs.Masks.Count} masks: {_totalJobKeyspace}");
     }
 
     private async Task CalculateKeyspaceAndCandidatesCountAsync(int maskIndex)
     {
-        var mask = specs.Masks[maskIndex];
+        var mask = specs.MaskJobSpecs.Masks[maskIndex];
         _currentMaskKeyspace = _keyspaceSizeCache.ElementAt(maskIndex);
-        _currentMaskCandidates = await hashcatWrapper.GetMaskCandidateCountAsync(specs, mask, CancellationToken.None);
+        _currentMaskCandidates = await hashcatWrapper.GetMaskCandidateCountAsync(specs.MaskJobSpecs, mask, CancellationToken.None);
         Console.WriteLine($"{jobId}: Calculated keyspace for mask '{mask}': {_currentMaskKeyspace}, Candidates: {_currentMaskCandidates}");
     }
-
-    // This method is part of the interface but not used by this strategy.
-    public Task<DictionaryWorkAssignment?> NextDictionaryChunkAsync(ulong hashRate) => Task.FromResult<DictionaryWorkAssignment?>(null);
-
 
     public void CompleteChunk(string requestId)
     {
@@ -144,7 +143,7 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
         if (_totalJobKeyspace == 0)
             return 0.0f;
 
-        if (specs.Hashes.Count == 0 || (_currentMaskIndex >= specs.Masks.Count && _retryQueue.Count == 0 && _activeChunks.Count == 0))
+        if (specs.Hashes.Count == 0 || (_currentMaskIndex >= specs.MaskJobSpecs.Masks.Count && _retryQueue.Count == 0 && _activeChunks.Count == 0))
             return 100.0f;
 
         return Math.Min(100.0f, (float)_completedKeyspace / _totalJobKeyspace * 100.0f);
@@ -160,14 +159,14 @@ public sealed class MaskJobStrategy(string jobId, HashcatMaskJobSpecs specs, IHa
         {
             // All hashes have been cracked, we can consider the job complete.
             Console.WriteLine($"All hashes have been cracked for job {jobId}. Marking job as complete.");
-            _currentMaskIndex = specs.Masks.Count; // Force completion
+            _currentMaskIndex = specs.MaskJobSpecs.Masks.Count; // Force completion
             _completedKeyspace = _totalJobKeyspace;
         }
     }
 
     public ulong GetStoredKeyspaceForMask(string mask)
     {
-        var index = specs.Masks.IndexOf(mask);
+        var index = specs.MaskJobSpecs.Masks.IndexOf(mask);
         if (index >= 0 && index < _keyspaceSizeCache.Count)
         {
             return _keyspaceSizeCache.ElementAt(index);

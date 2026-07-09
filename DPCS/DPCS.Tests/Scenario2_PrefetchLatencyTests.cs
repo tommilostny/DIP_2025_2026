@@ -62,16 +62,19 @@ public class Scenario2_PrefetchLatencyTests : ClusterTestBase
         await serverSystem.Cluster().StartMemberAsync();
 
         var jobManager = serverSystem.Cluster().GetJobManagerGrain("root");
-        var request = new HashcatMaskJobSpecs
+        var request = new JobSpecsEnvelope
         {
             Hashes = { "5d41402abc4b2a76b9719d911017c592" },
-            Masks = { "?l?l?l?l?l" },
+            ChunkTimeSeconds = 10,
             HashType = 0,
-            ChunkTimeSeconds = 10 // Generates exactly 10 chunks of work
+            MaskJobSpecs = new HashcatMaskJobSpecs
+            {
+                Masks = { "?l?l?l?l?l" }
+            }
         };
         
-        var jobId = await jobManager.MaskJobSubmission(request, CancellationToken.None);
-        var coordinator = serverSystem.Cluster().GetJobCoordinatorGrain(jobId?.JobId ?? string.Empty);
+        var jobAssignment = await jobManager.JobSubmission(request, CancellationToken.None);
+        var coordinator = serverSystem.Cluster().GetJobCoordinatorGrain(jobAssignment?.JobId ?? string.Empty);
         
         var stopwatch = Stopwatch.StartNew();
 
@@ -93,10 +96,10 @@ public class Scenario2_PrefetchLatencyTests : ClusterTestBase
     private class LatencyCoordinatorGrain(IContext context, ClusterIdentity clusterIdentity, IHashcatWrapper hashcatWrapper, string serverBaseUrl) 
         : JobCoordinatorGrain(context, clusterIdentity, hashcatWrapper, serverBaseUrl)
     {
-        public override async Task<MaskWorkAssignment> MaskWorkRequest(WorkRequest request)
+        public override async Task<WorkAssignmentEnvelope> WorkRequest(WorkRequest request)
         {
             await Task.Delay(250); // Simulate 250ms of network routing and database I/O latency
-            return await base.MaskWorkRequest(request);
+            return await base.WorkRequest(request);
         }
     }
 }
