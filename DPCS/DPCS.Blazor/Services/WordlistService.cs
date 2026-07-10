@@ -10,13 +10,13 @@ public class WordlistService
 
     private readonly ActorSystem _actorSystem;
 
-    public WordlistService(IConfiguration configuration, ActorSystem actorSystem)
+    public WordlistService(IConfiguration configuration, IWebHostEnvironment environment, ActorSystem actorSystem)
     {
         _actorSystem = actorSystem;
 
-        // Save wordlists in wwwroot/wordlists so they can be natively served via HTTP later
+        // Store wordlists under the application's web root so StaticFiles can serve them at runtime.
         _storagePath = configuration.GetValue<string>("WordlistStoragePath")
-            ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "wordlists");
+            ?? Path.Combine(environment.WebRootPath ?? Path.Combine(AppContext.BaseDirectory, "wwwroot"), "wordlists");
         
         if (!Directory.Exists(_storagePath))
         {

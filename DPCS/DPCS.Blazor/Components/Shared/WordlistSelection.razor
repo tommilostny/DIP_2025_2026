@@ -1,0 +1,116 @@
+@using System.Linq.Expressions
+
+<div class="mb-3">
+    <label class="form-label">@Title</label>
+
+    @if (AllowMultiple)
+    {
+        <div class="border rounded p-2 bg-white" style="max-height: 200px; overflow-y: auto;">
+            @if (AvailableWordlists.Count == 0)
+            {
+                <span class="text-muted">No wordlists available. Please go to the Wordlists page to upload some first.</span>
+            }
+            else
+            {
+                @foreach (var wordlist in AvailableWordlists)
+                {
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="@GetCheckboxId(wordlist)"
+                               checked="@_selectedWordlists.Contains(wordlist)"
+                               @onchange="@(e => ToggleWordlist(wordlist, e.Value))" />
+                        <label class="form-check-label" for="@GetCheckboxId(wordlist)">
+                            @wordlist
+                        </label>
+                    </div>
+                }
+            }
+        </div>
+    }
+    else
+    {
+        @if (AvailableWordlists.Count == 0)
+        {
+            <div class="text-muted">No wordlists available. Please go to the Wordlists page to upload some first.</div>
+        }
+        else
+        {
+            <select class="form-select" value="@_singleSelection" @onchange="OnSingleSelectionChanged">
+                <option value="">Select a wordlist...</option>
+                @foreach (var wordlist in AvailableWordlists)
+                {
+                    <option value="@wordlist">@wordlist</option>
+                }
+            </select>
+        }
+    }
+
+    @if (ValidationFor is not null)
+    {
+        <ValidationMessage For="ValidationFor" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(HelpText))
+    {
+        <div class="form-text text-muted">@HelpText</div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Wordlists";
+    [Parameter] public IReadOnlyList<string> AvailableWordlists { get; set; } = [];
+    [Parameter] public bool AllowMultiple { get; set; } = true;
+    [Parameter] public string? HelpText { get; set; }
+    [Parameter] public string? SelectedWordlists { get; set; }
+    [Parameter] public EventCallback<string?> SelectedWordlistsChanged { get; set; }
+    [Parameter] public Expression<Func<string?>>? ValidationFor { get; set; }
+
+    private readonly HashSet<string> _selectedWordlists = [];
+    private string _singleSelection = string.Empty;
+    private readonly string _instanceId = Guid.NewGuid().ToString("N");
+
+    protected override void OnParametersSet()
+    {
+        var currentSelections = SplitSelectedWordlists(SelectedWordlists).ToList();
+
+        _selectedWordlists.Clear();
+        foreach (var item in currentSelections)
+        {
+            _selectedWordlists.Add(item);
+        }
+
+        _singleSelection = currentSelections.FirstOrDefault() ?? string.Empty;
+    }
+
+    private async Task ToggleWordlist(string wordlist, object? isChecked)
+    {
+        if (isChecked is true)
+        {
+            _selectedWordlists.Add(wordlist);
+        }
+        else
+        {
+            _selectedWordlists.Remove(wordlist);
+        }
+
+        await SelectedWordlistsChanged.InvokeAsync(SerializeSelections());
+    }
+
+    private async Task OnSingleSelectionChanged(ChangeEventArgs e)
+    {
+        _singleSelection = e.Value?.ToString() ?? string.Empty;
+        await SelectedWordlistsChanged.InvokeAsync(string.IsNullOrWhiteSpace(_singleSelection) ? string.Empty : _singleSelection);
+    }
+
+    private string GetCheckboxId(string wordlist) => $"{_instanceId}_{wordlist.GetHashCode():X}";
+
+    private static IEnumerable<string> SplitSelectedWordlists(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? []
+            : value.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(item => item.Trim())
+                .Where(item => !string.IsNullOrWhiteSpace(item));
+    }
+
+    private string SerializeSelections() => string.Join('\n', _selectedWordlists);
+}

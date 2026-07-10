@@ -1,0 +1,106 @@
+@using System.Linq.Expressions
+
+<div class="mb-3">
+    <label class="form-label">
+        Masks
+        <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-decoration-none" @onclick="() => _showMaskHelp = true" title="Show Mask Help">
+            &#x24D8;
+        </button>
+    </label>
+    <InputTextArea @bind-Value="Masks" class="form-control font-monospace" placeholder="?u?l?d?s?a" />
+    @if (ValidationFor is not null)
+    {
+        <ValidationMessage For="ValidationFor" />
+    }
+
+    <div class="mt-2">
+        <label class="form-label small text-muted">Load masks from file (.txt, .hcmask)</label>
+        <InputFile OnChange="OnLoadFile" class="form-control form-control-sm" accept=".txt,.hcmask" />
+    </div>
+
+    @if (SavedMasks.Count > 0)
+    {
+        <div class="mt-2">
+            <small class="text-muted">Recently used masks (click to add):</small>
+            <div class="d-flex flex-wrap gap-1 mt-1">
+                @foreach (var savedMask in SavedMasks.Take(_showAllMasks ? SavedMasks.Count : 5))
+                {
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary font-monospace" @onclick="() => OnAddMask.InvokeAsync(savedMask)">
+                            @savedMask
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => OnDeleteMask.InvokeAsync(savedMask)" title="Delete this saved mask">
+                            &times;
+                        </button>
+                    </div>
+                }
+                @if (SavedMasks.Count > 5)
+                {
+                    <button type="button" class="btn btn-sm btn-link text-decoration-none" @onclick="() => _showAllMasks = !_showAllMasks">
+                        @(_showAllMasks ? "Show less..." : $"Show all {SavedMasks.Count}...")
+                    </button>
+                }
+            </div>
+        </div>
+    }
+
+    @if (_showMaskHelp)
+    {
+        <Microsoft.AspNetCore.Components.Sections.SectionContent SectionName="modal-layer">
+            <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick="() => _showMaskHelp = false">
+                <div class="modal-dialog modal-dialog-centered modal-lg animate-fade-in-up" @onclick:stopPropagation="true">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Hashcat Built-in Charsets</h5>
+                            <button type="button" class="btn-close" @onclick="() => _showMaskHelp = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Placeholder</th>
+                                        <th>Characters</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td><code>?l</code></td><td>abcdefghijklmnopqrstuvwxyz</td></tr>
+                                    <tr><td><code>?u</code></td><td>ABCDEFGHIJKLMNOPQRSTUVWXYZ</td></tr>
+                                    <tr><td><code>?d</code></td><td>0123456789</td></tr>
+                                    <tr><td><code>?h</code></td><td>0123456789abcdef</td></tr>
+                                    <tr><td><code>?H</code></td><td>0123456789ABCDEF</td></tr>
+                                    <tr><td><code>?s</code></td><td>«space»!&quot;#$%&amp;'()*+,-./:;&lt;=&gt;?@@[\]^_`{|}~</td></tr>
+                                    <tr><td><code>?a</code></td><td>?l?u?d?s</td></tr>
+                                    <tr><td><code>?b</code></td><td>0x00 - 0xff</td></tr>
+                                </tbody>
+                            </table>
+
+                            <h6 class="mt-3">Custom Charsets</h6>
+                            <p class="mb-0 small">
+                                You can define up to 4 custom character sets using the fields provided. Reference them in your mask using <code>?1</code>, <code>?2</code>, <code>?3</code>, and <code>?4</code>.
+                                <br /><strong>Example:</strong> If Charset 1 is <code>?l?d</code>, a mask of <code>?1?1?1</code> will test all 3-character combinations of lowercase letters and digits.
+                            </p>
+                        </div>
+                        <div class="modal-footer" style="justify-content: flex-start;">
+                            <p class="mb-0 small">
+                                More info about mask attack submission: <a href="https://hashcat.net/wiki/doku.php?id=mask_attack" target="_blank">https://hashcat.net/wiki/doku.php?id=mask_attack</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Microsoft.AspNetCore.Components.Sections.SectionContent>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Masks { get; set; }
+    [Parameter] public EventCallback<string?> MasksChanged { get; set; }
+    [Parameter] public IReadOnlyList<string> SavedMasks { get; set; } = [];
+    [Parameter] public EventCallback<string> OnAddMask { get; set; }
+    [Parameter] public EventCallback<string> OnDeleteMask { get; set; }
+    [Parameter] public EventCallback<InputFileChangeEventArgs> OnLoadFile { get; set; }
+    [Parameter] public Expression<Func<string?>>? ValidationFor { get; set; }
+
+    private bool _showMaskHelp;
+    private bool _showAllMasks;
+}

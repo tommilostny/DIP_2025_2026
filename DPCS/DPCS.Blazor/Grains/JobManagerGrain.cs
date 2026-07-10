@@ -54,6 +54,14 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 Hashes = { request.Hashes },
                 Wordlists = { request.DictionaryJobSpecs.Wordlists },
             },
+            JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs => new()
+            {
+                JobId = signedJobId,
+                ModeId = (int)AttackMode.Combinator,
+                HashType = request.HashType,
+                Hashes = { request.Hashes },
+                Wordlists = { request.CombinatorJobSpecs.LeftWordlists, request.CombinatorJobSpecs.RightWordlists },
+            },
             _ => throw new InvalidOperationException("Invalid job specs payload")
         };
 
@@ -83,19 +91,16 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         {
             _unfinishedJobs.Remove(jobId.Id);
             
-            if (assignment is { ModeId: (int)AttackMode.Dictionary })
+            foreach (var wl in assignment.Wordlists)
             {
-                foreach (var wl in assignment.Wordlists)
+                if (_wordlistsInUse.TryGetValue(wl, out int count))
                 {
-                    if (_wordlistsInUse.TryGetValue(wl, out int count))
+                    if (count <= 1)
                     {
-                        if (count <= 1)
-                        {
-                            _wordlistsInUse.Remove(wl);
-                            continue;
-                        }
-                        _wordlistsInUse[wl] = --count;
+                        _wordlistsInUse.Remove(wl);
+                        continue;
                     }
+                    _wordlistsInUse[wl] = --count;
                 }
             }
 
@@ -120,7 +125,7 @@ public sealed class JobManagerGrain : JobManagerGrainBase
             _unfinishedJobs.Remove(jobId.Id);
             Console.WriteLine($"{_clusterIdentity.Identity}: removed job {jobId} from unfinished jobs, mode {(AttackMode)assignment.ModeId}");
 
-            if (assignment is { ModeId: (int)AttackMode.Dictionary })
+            if (assignment.Wordlists.Count > 0)
             {
                 Console.WriteLine($"{_clusterIdentity.Identity}: cleaning up wordlist usage for job {jobId}");
                 foreach (var wl in assignment.Wordlists)

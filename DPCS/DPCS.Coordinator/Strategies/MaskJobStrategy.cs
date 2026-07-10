@@ -1,5 +1,10 @@
 namespace DPCS.Coordinator.Strategies;
 
+/// <summary>
+/// Schedules mask attacks by splitting each mask keyspace into timed chunks.
+/// Chunk sizing is derived from agent hashrate and adjusted by mask amplification
+/// to keep assignment duration near the requested chunk window.
+/// </summary>
 public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashcatWrapper hashcatWrapper) : IJobStrategy
 {
     // State for iterating through multiple masks
@@ -18,7 +23,11 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
     public JobSpecsEnvelope Specs => specs;
     private readonly HashSet<ulong> _keyspaceSizeCache = [];
 
-    public async Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate)
+    /// <summary>
+    /// Produces the next mask assignment. Failed chunks are prioritized before
+    /// allocating fresh keyspace from the active mask.
+    /// </summary>
+    public async Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate, string? agentKey = null)
     {
         ulong start, length;
         int maskIndex;
@@ -30,34 +39,33 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
         }
         else
         {
-            // If we have processed all masks, the job is done.
+            // No more masks means no more chunks.
             if (_currentMaskIndex >= specs.MaskJobSpecs.Masks.Count)
             {
                 Console.WriteLine($"{jobId}: All masks processed. Job complete.");
                 return null;
             }
 
-            // If we are starting a new mask, calculate its specific keyspace.
+            // Lazily resolve keyspace/candidate stats per mask.
             if (_currentMaskKeyspace is null)
             {
                 await CalculateKeyspaceAndCandidatesCountAsync(_currentMaskIndex);
             }
 
-            // If the current mask is fully assigned, move to the next one.
+            // Move to next mask once current keyspace is fully assigned.
             if (_currentMaskOffset >= _currentMaskKeyspace!.Value)
             {
                 _currentMaskIndex++;
                 _currentMaskOffset = 0;
                 _currentMaskKeyspace = null;
                 _currentMaskCandidates = null;
-                // Recursively call to either get the next chunk or finish the job.
                 return await NextChunkAsync(hashRate);
             }
 
             maskIndex = _currentMaskIndex;
             start = _currentMaskOffset;
             
-            // Calculate Amplification (Inner Loop Size) to adjust hashrate.
+            // Amplification adjusts raw hashrate to the real effective keyspace step.
             ulong amplification = 1;
             if (_currentMaskCandidates.HasValue && _currentMaskKeyspace!.Value > 0)
             {
@@ -67,7 +75,7 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
             ulong adjustedLength = hashRate * specs.ChunkTimeSeconds / amplification;
             length = Math.Max(adjustedLength, 1000);
             
-            // Clamp length so we don't exceed the total keyspace
+            // Clamp chunk length to remaining keyspace.
             ulong remaining = _currentMaskKeyspace!.Value - _currentMaskOffset;
             if (length > remaining) length = remaining;
 
@@ -75,7 +83,6 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
 
             Console.WriteLine($"{jobId}: Assigning chunk for mask '{specs.MaskJobSpecs.Masks[maskIndex]}' - Start: {start}, Length: {length}");
         
-            //Print all calculation metrics:
             Console.WriteLine($"{jobId}: Mask '{specs.MaskJobSpecs.Masks[maskIndex]}' - Total Keyspace: {_currentMaskKeyspace}, Candidates: {_currentMaskCandidates}, Amplification: {amplification}, Adjusted Length: {adjustedLength}, Remaining: {remaining}, Hashrate: {hashRate}, Chunk Attack Seconds: {specs.ChunkTimeSeconds}");
         }
 
@@ -102,7 +109,7 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
 
     public async Task InitializeAsync()
     {
-        // This is now only for calculating total progress.
+        // Pre-calculate total job keyspace so progress is stable from the start.
         for (int i = 0; i < specs.MaskJobSpecs.Masks.Count; i++)
         {
             var mask = specs.MaskJobSpecs.Masks[i];
@@ -113,6 +120,17 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
         Console.WriteLine($"{jobId}: Total calculated job keyspace for {specs.MaskJobSpecs.Masks.Count} masks: {_totalJobKeyspace}");
     }
 
+    /// <summary>
+    /// Mask strategy does not allocate temporary external resources.
+    /// </summary>
+    public Task CleanupAsync()
+    {
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Resolves mask-level keyspace and candidate counts used for chunk sizing.
+    /// </summary>
     private async Task CalculateKeyspaceAndCandidatesCountAsync(int maskIndex)
     {
         var mask = specs.MaskJobSpecs.Masks[maskIndex];
@@ -138,6 +156,9 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
         }
     }
 
+    /// <summary>
+    /// Reports keyspace-based progress across all masks.
+    /// </summary>
     public float GetProgress() 
     {
         if (_totalJobKeyspace == 0)
@@ -157,7 +178,6 @@ public sealed class MaskJobStrategy(string jobId, JobSpecsEnvelope specs, IHashc
         }
         if (specs.Hashes.Count == 0)
         {
-            // All hashes have been cracked, we can consider the job complete.
             Console.WriteLine($"All hashes have been cracked for job {jobId}. Marking job as complete.");
             _currentMaskIndex = specs.MaskJobSpecs.Masks.Count; // Force completion
             _completedKeyspace = _totalJobKeyspace;

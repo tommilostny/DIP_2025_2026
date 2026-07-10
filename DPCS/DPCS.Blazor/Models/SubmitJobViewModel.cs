@@ -24,6 +24,8 @@ public class SubmitJobViewModel : IValidatableObject
 
 
     public string? Wordlists { get; set; } = "";
+    public string? LeftWordlists { get; set; } = "";
+    public string? RightWordlists { get; set; } = "";
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -61,6 +63,21 @@ public class SubmitJobViewModel : IValidatableObject
             if (wordlistsList.Length == 0)
             {
                 yield return new ValidationResult("At least one wordlist must be provided.", [nameof(Wordlists)]);
+            }
+            break;
+
+        case AttackMode.Combinator:
+            var leftWordlistsList = LeftWordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var rightWordlistsList = RightWordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+            if (leftWordlistsList.Length == 0)
+            {
+                yield return new ValidationResult("At least one left wordlist must be provided.", [nameof(LeftWordlists)]);
+            }
+
+            if (rightWordlistsList.Length == 0)
+            {
+                yield return new ValidationResult("At least one right wordlist must be provided.", [nameof(RightWordlists)]);
             }
             break;
         }

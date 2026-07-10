@@ -2,6 +2,11 @@ using System.Runtime.InteropServices;
 
 namespace DPCS.Coordinator.Strategies;
 
+/// <summary>
+/// Schedules dictionary attacks by slicing indexed wordlists into byte-range chunks.
+/// Chunks are sized from hashrate and target chunk duration, retried on failure,
+/// and progress is tracked per wordlist interval coverage.
+/// </summary>
 public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, string serverBaseUrl) : IJobStrategy
 {
     private int _currentWordlistIndex = 0;
@@ -15,6 +20,8 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
     private readonly Dictionary<string, ChunkState> _activeChunks = [];
     private readonly Queue<ChunkState> _retryQueue = [];
+    private readonly Dictionary<string, string> _cachedIndexFiles = [];
+    private string? _jobCacheDirectory;
 
     private record ChunkState(int WordlistIndex, int StartInterval, int EndInterval, long StartByte, long EndByte);
 
@@ -22,7 +29,11 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
     public JobSpecsEnvelope Specs => specs;
 
-    public async Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate)
+    /// <summary>
+    /// Produces the next dictionary assignment. Failed chunks are always reissued first,
+    /// then fresh chunks are produced from the current indexed wordlist.
+    /// </summary>
+    public async Task<WorkAssignmentEnvelope?> NextChunkAsync(ulong hashRate, string? agentKey = null)
     {
         if (_currentWordlistIndex >= specs.DictionaryJobSpecs.Wordlists.Count && _retryQueue.Count == 0)
         {
@@ -42,7 +53,7 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
                 await LoadCurrentWordlistIndexAsync();
             }
 
-            // Calculate how many intervals we need based on Hashrate.
+            // Convert hashrate to an interval budget for the target chunk duration.
             ulong linesNeeded = hashRate * specs.ChunkTimeSeconds;
             int intervalsNeeded = (int)Math.Max(1, linesNeeded / Constants.IndexInterval);
 
@@ -51,8 +62,7 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
             long startByte = _currentWordlistIndexData[startInterval];
             
-            // If we haven't reached the end of the index file, we know the exact end byte.
-            // If we hit the end, we pass -1 to indicate "download to the end of the file".
+            // -1 means "to EOF" so the final range consumes the remainder.
             long endByte = (endInterval < _currentWordlistIndexData.Length - 1) 
                 ? _currentWordlistIndexData[endInterval] - 1 
                 : -1;
@@ -61,7 +71,7 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
             _currentIntervalIndex = endInterval;
 
-            // If we exhausted this wordlist, advance to the next one for the subsequent request
+            // Advance to the next wordlist when this one is fully assigned.
             if (_currentIntervalIndex >= _currentWordlistIndexData.Length - 1)
             {
                 _currentWordlistIndex++;
@@ -106,6 +116,9 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
         }
     }
 
+    /// <summary>
+    /// Reports aggregate progress by averaging per-wordlist interval completion.
+    /// </summary>
     public float GetProgress()
     {
         if (specs.Hashes.Count == 0) return 100.0f;
@@ -142,20 +155,52 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
         }
     }
 
+    /// <summary>
+    /// Loads the index offsets for the current wordlist from the coordinator cache.
+    /// </summary>
     private async Task LoadCurrentWordlistIndexAsync()
     {
         var wordlistName = specs.DictionaryJobSpecs.Wordlists[_currentWordlistIndex];
-        var idxUrl = $"{serverBaseUrl}/wordlists/{wordlistName}.idx";
+        var cachePath = _cachedIndexFiles[wordlistName];
+        var bytes = await File.ReadAllBytesAsync(cachePath);
 
-        var bytes = await HttpClient.GetByteArrayAsync(idxUrl);
-
-        // Reinterpret the downloaded bytes as longs and copy directly into an array
         _currentWordlistIndexData = MemoryMarshal.Cast<byte, long>(bytes).ToArray();
         _totalIntervals[_currentWordlistIndex] = Math.Max(1, _currentWordlistIndexData.Length - 1);
     }
 
-    public Task InitializeAsync()
+    /// <summary>
+    /// Downloads and caches all index files needed by this job.
+    /// </summary>
+    public async Task InitializeAsync()
     {
+        _jobCacheDirectory = Path.Combine(Path.GetTempPath(), "dpcs-coordinator-indexes", SanitizeFileName(jobId));
+        Directory.CreateDirectory(_jobCacheDirectory);
+
+        foreach (var wordlistName in specs.DictionaryJobSpecs.Wordlists.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var cachePath = Path.Combine(_jobCacheDirectory, $"{SanitizeFileName(wordlistName)}.idx");
+            var idxUrl = $"{serverBaseUrl}/wordlists/{wordlistName}.idx";
+            using var response = await HttpClient.GetAsync(idxUrl);
+            response.EnsureSuccessStatusCode();
+            await File.WriteAllBytesAsync(cachePath, await response.Content.ReadAsByteArrayAsync());
+            _cachedIndexFiles[wordlistName] = cachePath;
+        }
+    }
+
+    /// <summary>
+    /// Deletes coordinator-side temporary index cache for this job.
+    /// </summary>
+    public Task CleanupAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(_jobCacheDirectory) && Directory.Exists(_jobCacheDirectory))
+        {
+            Directory.Delete(_jobCacheDirectory, recursive: true);
+        }
+
+        _cachedIndexFiles.Clear();
+        _currentWordlistIndexData = null;
         return Task.CompletedTask;
     }
+
+    private static string SanitizeFileName(string value) => string.Concat(value.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
 }

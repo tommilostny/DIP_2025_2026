@@ -1,3 +1,4 @@
+global using DPCS.Agent.Services;
 global using DPCS.Shared;
 global using DPCS.Shared.Wrappers;
 global using Microsoft.Extensions.DependencyInjection;

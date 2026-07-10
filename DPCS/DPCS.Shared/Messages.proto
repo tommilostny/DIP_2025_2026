@@ -43,6 +43,13 @@ message HashcatDictionaryJobSpecs {
   repeated string rule_files = 2;
 }
 
+// Parameters for submitting a Hashcat combinator attack job by user in the web interface
+message HashcatCombinatorJobSpecs {
+  repeated string left_wordlists = 1;
+  repeated string right_wordlists = 2;
+  repeated string rule_files = 3;
+}
+
 message JobSpecsEnvelope {
   // Common fields for all attack jobs
   repeated string hashes = 1;
@@ -53,6 +60,7 @@ message JobSpecsEnvelope {
   oneof payload {
     HashcatMaskJobSpecs mask_job_specs = 4;
     HashcatDictionaryJobSpecs dictionary_job_specs = 5;
+    HashcatCombinatorJobSpecs combinator_job_specs = 6;
   }
 }
 
@@ -81,6 +89,20 @@ message DictionaryWorkAssignment {
   string rule_file_content = 3; // Optional rules to apply
 }
 
+message CombinatorWorkAssignment {
+  string left_dictionary_chunk_url = 1;
+  string right_dictionary_chunk_url = 2;
+  string left_dictionary_chunk_checksum = 3;
+  string right_dictionary_chunk_checksum = 4;
+  string rule_file_content = 5;
+  string left_wordlist_name = 6;
+  string right_wordlist_name = 7;
+  int64 left_start_byte = 8;
+  int64 left_end_byte = 9;
+  int64 right_start_byte = 10;
+  int64 right_end_byte = 11;
+}
+
 message WorkAssignmentEnvelope {
   // Common fields for all work assignments
   string job_id = 1;
@@ -90,6 +112,7 @@ message WorkAssignmentEnvelope {
   oneof payload {
     MaskWorkAssignment mask_assignment = 3;
     DictionaryWorkAssignment dictionary_assignment = 4;
+    CombinatorWorkAssignment combinator_assignment = 5;
   }
 }
 

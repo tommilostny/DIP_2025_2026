@@ -1,5 +1,4 @@
 ﻿﻿using DPCS.Agent;
-using DPCS.Agent.Services;
 using DPCS.ServiceDefaults;
 using Microsoft.Extensions.Configuration;
 using Proto.OpenTelemetry;

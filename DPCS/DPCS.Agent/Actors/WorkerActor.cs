@@ -1,19 +1,30 @@
 namespace DPCS.Agent.Actors;
 
+/// <summary>
+/// Worker actor that discovers jobs, prefetches work assignments, executes Hashcat chunks,
+/// and submits results back to the coordinator.
+/// </summary>
+/// <remarks>
+/// The actor keeps prefetching and processing decoupled so network/download latency can be
+/// hidden behind chunk execution when queue size is greater than zero.
+/// </remarks>
 public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper, int maxPrefetchQueueSize = 1, TimeSpan? heartbeatInterval = null) : IActor
 {
     private CancellationTokenSource? _currentWorkCts;
     private JobAssignment? _currentJob;
-    private readonly Dictionary<string, string> _jobHashFilePaths = [];
+    private readonly HashFileStore _hashFileStore = new();
+    private readonly WorkAssignmentMaterializer _workAssignmentMaterializer = new();
 
     private readonly Queue<WorkAssignmentEnvelope> _workQueue = new();
     private bool _isPrefetching;
     private bool _isCracking;
     private bool _noMoreWork;
-    private static readonly HttpClient _httpClient = new();
     private Timer? _heartbeatTimer;
     private readonly TimeSpan _heartbeatInterval = heartbeatInterval ?? TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// Main actor message dispatcher.
+    /// </summary>
     public Task ReceiveAsync(IContext context) => context.Message switch
     {
         Started => OnStarted(context),
@@ -26,6 +37,9 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         _ => Task.CompletedTask
     };
 
+    /// <summary>
+    /// Initializes periodic heartbeat and starts job discovery loop.
+    /// </summary>
     private Task OnStarted(IContext context)
     {
         Console.WriteLine($"WorkerActor {context.Self} started.");
@@ -34,26 +48,27 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Stops periodic heartbeat timer.
+    /// </summary>
     private Task OnStopped()
     {
         _heartbeatTimer?.Dispose();
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Cancels current processing, clears prefetched work, and returns actor to discovery mode.
+    /// </summary>
     private Task OnStopWork(IContext context)
     {
         Console.WriteLine("WorkerActor received StopWork signal.");
         _currentWorkCts?.Cancel();
         
-        // Cleanup any prefetched wordlists hanging out in the queue
+        // Cleanup any prefetched temporary files hanging out in the queue.
         foreach (var chunk in _workQueue)
         {
-            if (chunk is { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }
-                && File.Exists(chunk.DictionaryAssignment.DictionaryChunkUrl))
-            {
-                try { File.Delete(chunk.DictionaryAssignment.DictionaryChunkUrl); }
-                catch { }
-            }
+            _workAssignmentMaterializer.CleanupAssignmentFiles(chunk);
         }
         _workQueue.Clear();
         _isPrefetching = false;
@@ -71,9 +86,13 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Attempts to discover a new job assignment and initialize local state for processing.
+    /// </summary>
     private async Task FindJob(IContext context)
     {
-        hashcatWrapper.ResetMetrics(); // Reset metrics when starting a new job (or when returning to discovery after a job completes)
+        // Reset metrics when entering discovery so heartbeat telemetry starts from a clean state.
+        hashcatWrapper.ResetMetrics();
         try
         {
             var assignment = await cluster
@@ -105,12 +124,8 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             _isCracking = false;
             _workQueue.Clear();
 
-            // Kick off the decoupled prefetch and process loops
-            //Console.WriteLine("Before sending PrefetchWork.");
+            // Start prefetch loop; processing is triggered as soon as first chunk arrives.
             context.Send(context.Self, new PrefetchWork());
-            //Console.WriteLine("Before sending ProcessWork.");
-            //context.Send(context.Self, new ProcessWork());
-            //Console.WriteLine("After sending ProcessWork.");
         }
         catch (Exception ex)
         {
@@ -120,11 +135,13 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         }
     }
 
+    /// <summary>
+    /// Prefetches the next chunk when queue capacity allows and schedules follow-up prefetch/process ticks.
+    /// </summary>
     private Task OnPrefetchWork(IContext context)
     {
         if (_currentJob is null || _isPrefetching || _noMoreWork)
         {
-            //Console.WriteLine("Prefetch work skipped...");
             return Task.CompletedTask;
         }
 
@@ -138,12 +155,10 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             return Task.CompletedTask;
         }
 
-        //Console.WriteLine("Prefetch work starting on next chunk...");
-
         _isPrefetching = true;
         var fetchTask = FetchNextChunkAsync(context);
 
-        // ReenterAfter executes the fetch asynchronously without blocking the actor mailbox
+        // ReenterAfter keeps mailbox responsive while asynchronous fetch is in-flight.
         context.ReenterAfter(fetchTask, task =>
         {
             _isPrefetching = false;
@@ -166,42 +181,32 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             //Console.WriteLine("Chunk prefetched and added to queue.");
             _workQueue.Enqueue(chunk);
             
-            // Re-trigger prefetch in case we are still below the MaxPrefetchQueueSize
-            //Console.WriteLine("Triggering another PrefetchWork just in case...");
+            // Keep queue warm and nudge processor in case it is currently idle.
             context.Send(context.Self, new PrefetchWork());
-            // Alert the processor that a chunk is ready just in case it was idle
-            //Console.WriteLine("Triggering ProcessWork in case processor is idle...");
             context.Send(context.Self, new ProcessWork());
         });
 
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Dequeues and executes one chunk if worker is idle, then continues processing loop.
+    /// </summary>
     private Task OnProcessWork(IContext context)
     {
-        //Console.WriteLine("WorkerActor received ProcessWork signal.");
-
-        // Don't process if we are currently cracking or if there's nothing in the queue
+        // Skip when no work is available or worker is already processing.
         if (_currentJob is null || _isCracking || _workQueue.Count == 0)
         {
-            //Console.WriteLine("Process work skipped...");
-            //Console.WriteLine($"CurrentJob: {_currentJob?.JobId}, IsCracking: {_isCracking}, QueueCount: {_workQueue.Count}");
-            //Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(_currentJob));
             return Task.CompletedTask;
         }
-
-        //Console.WriteLine("Process work starting on next chunk...");
 
         _isCracking = true;
         var chunk = _workQueue.Dequeue();
 
-        //Console.WriteLine("Process work, sending PrefetchWork to ensure queue is topped off...");
-        // Now that a spot has opened in the queue, trigger a prefetch
+        // Refill queue slot immediately when one item is consumed.
         context.Send(context.Self, new PrefetchWork());
 
         _currentWorkCts = new CancellationTokenSource();
-
-        //Console.WriteLine("Before calling ProcessAndSubmitAsync...");
         var processTask = ProcessAndSubmitAsync(chunk, context);
         
         context.ReenterAfter(processTask, task =>
@@ -209,30 +214,29 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             _isCracking = false;
             CheckJobCompletion(context);
 
-            // If we are in strict polling mode, we must trigger the next fetch now that the GPU is idle
+            // In polling mode there is no background queue fill; trigger fetch explicitly.
             if (maxPrefetchQueueSize == 0)
             {
                 context.Send(context.Self, new PrefetchWork());
             }
 
-            // Continue processing remaining queued chunks
+            // Continue draining queued chunks.
             context.Send(context.Self, new ProcessWork()); 
         });
 
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Executes chunk, reports result, and cleans up chunk-local temporary files.
+    /// </summary>
     private async Task ProcessAndSubmitAsync(WorkAssignmentEnvelope chunk, IContext context)
     {
-        //Console.WriteLine("Starting ProcessAndSubmitAsync for chunk...");
-
         List<RecoveredPassword> recovered = [];
         bool isFaulted = false;
         try
         {
-            //Console.WriteLine("Before calling ProcessChunkAsync...");
             recovered = await ProcessChunkAsync(chunk);
-            //Console.WriteLine("After calling ProcessChunkAsync...");
         }
         catch (Exception ex)
         {
@@ -241,13 +245,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         }
         finally
         {
-            // Ensure the temporary dictionary file is deleted
-            if (chunk is { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }
-                && File.Exists(chunk.DictionaryAssignment.DictionaryChunkUrl))
-            {
-                try { File.Delete(chunk.DictionaryAssignment.DictionaryChunkUrl); }
-                catch { }
-            }
+            _workAssignmentMaterializer.CleanupAssignmentFiles(chunk);
         }
 
         var workResult = new WorkResult
@@ -265,7 +263,14 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
 
             if (recovered.Count > 0)
             {
-                await UpdateHashFileAsync(_currentJob!.JobId, recovered);
+                try
+                {
+                    await _hashFileStore.UpdateHashFileAsync(_currentJob!.JobId, _currentJob!.Hashes, recovered);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error updating hash file for job {_currentJob!.JobId}: {ex.Message}");
+                }
             }
         }
         catch (Exception ex)
@@ -274,10 +279,11 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         }
     }
 
+    /// <summary>
+    /// Requests next assignment from coordinator and materializes any required local files.
+    /// </summary>
     private async Task<WorkAssignmentEnvelope?> FetchNextChunkAsync(IContext context)
     {
-        //Console.WriteLine("Starting FetchNextChunkAsync...");
-
         var hashrate = await hashcatWrapper.GetBenchmarkHashrateAsync(_currentJob!.HashType);
         var workRequest = new WorkRequest
         {
@@ -286,113 +292,49 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             CurrentHashrate = hashrate,
         };
 
-        //Console.WriteLine("Sending work request to coordinator...");
-
         var coordinator = cluster.GetJobCoordinatorGrain(_currentJob!.JobId);
         var envelope = await coordinator.WorkRequest(workRequest, CancellationToken.None);
-
-        switch (envelope)
-        {
-            case null:
-            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.None }:
-                return null;
-
-            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment }:
-                return envelope;
-
-            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }:
-                envelope.DictionaryAssignment.DictionaryChunkUrl = await DownloadDictionaryChunkAsync(envelope);
-                return envelope;
-
-            default:
-                Console.WriteLine("Received unknown work assignment type.");
-                return null;
-        }
+        return await _workAssignmentMaterializer.MaterializeAsync(envelope);
     }
 
-    private static async Task<string> DownloadDictionaryChunkAsync(WorkAssignmentEnvelope chunk)
-    {
-        // Parse the start and end bytes from the dynamically generated coordinator URL
-        var uri = new Uri(chunk.DictionaryAssignment.DictionaryChunkUrl);
-        var queryParams = uri.Query.TrimStart('?').Split('&')
-            .Select(p => p.Split('='))
-            .ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
-
-        long startByte = long.Parse(queryParams["startByte"]);
-        long endByte = long.Parse(queryParams["endByte"]);
-        var cleanUrl = uri.GetLeftPart(UriPartial.Path); // Remove the query string for the actual HTTP request
-
-        // Configure the native HTTP byte Range request
-        using var request = new HttpRequestMessage(HttpMethod.Get, cleanUrl);
-        request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte == -1 ? null : endByte);
-
-        Console.WriteLine($"Downloading Wordlist Chunk: {chunk.RequestId} (Bytes: {startByte}-{(endByte == -1 ? "EOF" : endByte)})");
-        
-        // Stream the perfectly sliced exact bytes without loading into RAM
-        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
-
-        var wordlistPath = Path.Combine(Path.GetTempPath(), $"dpcs_{chunk.RequestId}.txt");
-        using var fileStream = new FileStream(wordlistPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await response.Content.CopyToAsync(fileStream);
-
-        return wordlistPath;
-    }
-
+    /// <summary>
+    /// Runs the assignment through the matching Hashcat attack mode implementation.
+    /// </summary>
     private async Task<List<RecoveredPassword>> ProcessChunkAsync(WorkAssignmentEnvelope chunk)
     {
-        var hashFilePath = await GetOrCreateHashFileAsync(_currentJob!.JobId, _currentJob!.Hashes);
+        var hashFilePath = await _hashFileStore.GetOrCreateHashFileAsync(_currentJob!.JobId, _currentJob!.Hashes);
 
-        switch (chunk)
+        switch (chunk.PayloadCase)
         {
-            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment }:
+            case WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment:
                 Console.WriteLine($"Cracking mask chunk: {chunk.RequestId} ({chunk.MaskAssignment.KeyspaceStart} - {chunk.MaskAssignment.KeyspaceStart + chunk.MaskAssignment.KeyspaceLength})");
-                return await hashcatWrapper.RunHashcatMaskAttackAsync(chunk.MaskAssignment, _currentJob!.HashType, hashFilePath, _currentWorkCts!.Token);
-            
-            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }:
+                return await hashcatWrapper.RunHashcatMaskAttackAsync(chunk.MaskAssignment, _currentJob.HashType, hashFilePath, _currentWorkCts!.Token);
+
+            case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
                 Console.WriteLine($"Cracking dictionary chunk: {chunk.RequestId}");
-                return await hashcatWrapper.RunHashcatDictionaryAttackAsync(chunk.DictionaryAssignment, _currentJob!.HashType, hashFilePath, _currentWorkCts!.Token);
-        }
+                return await hashcatWrapper.RunHashcatDictionaryAttackAsync(chunk.DictionaryAssignment, _currentJob.HashType, hashFilePath, _currentWorkCts!.Token);
 
-        return [];
+            case WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment:
+                Console.WriteLine($"Cracking combinator chunk: {chunk.RequestId}");
+                return await hashcatWrapper.RunHashcatCombinatorAttackAsync(chunk.CombinatorAssignment, _currentJob.HashType, hashFilePath, _currentWorkCts!.Token);
+
+            default:
+                return [];
+        }
     }
 
-    private async Task<string> GetOrCreateHashFileAsync(string jobId, IEnumerable<string> hashes)
-    {
-        if (_jobHashFilePaths.TryGetValue(jobId, out var path))
-        {
-            return path;
-        }
-
-        // Using a Guid ensures the file path is unique per actor instance, preventing locking issues in local simulation.
-        var newPath = Path.Combine(Path.GetTempPath(), $"dpcs_{jobId}_{Guid.NewGuid():N}.hashes");
-        await File.WriteAllLinesAsync(newPath, hashes);
-        _jobHashFilePaths[jobId] = newPath;
-        Console.WriteLine($"Created hash file for job {jobId} at {newPath}");
-
-        return newPath;
-    }
-
+    /// <summary>
+    /// Cleans up job-level temporary files and cached combinator left chunks.
+    /// </summary>
     private void CleanupJobData(string? jobId)
     {
-        if (jobId is null || !_jobHashFilePaths.Remove(jobId, out var path))
-        {
-            return;
-        }
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-                Console.WriteLine($"Cleaned up hash file: {path}");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error cleaning up hash file {path}: {ex.Message}");
-        }
+        _hashFileStore.CleanupJobData(jobId);
+        _workAssignmentMaterializer.CleanupJobCache();
     }
 
+    /// <summary>
+    /// Returns to discovery when there is no queued, running, or available work.
+    /// </summary>
     private void CheckJobCompletion(IContext context)
     {
         if (_noMoreWork && _workQueue.Count == 0 && !_isCracking)
@@ -405,36 +347,15 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         }
     }
 
-    private async Task UpdateHashFileAsync(string jobId, IEnumerable<RecoveredPassword> recoveredPasswords)
-    {
-        if (!_jobHashFilePaths.TryGetValue(jobId, out var path))
-        {
-            Console.WriteLine($"No hash file found for job {jobId} when trying to update.");
-            return;
-        }
-        try
-        {
-            foreach (var pwd in recoveredPasswords)
-            {
-                _currentJob!.Hashes.Remove(pwd.Hash);
-            }
-            await File.WriteAllLinesAsync(path, _currentJob!.Hashes);
-            Console.WriteLine($"Updated hash file for job {jobId} with {_currentJob!.Hashes.Count} remaining hashes.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error updating hash file {path}: {ex.Message}");
-        }
-    }
-
+    /// <summary>
+    /// Sends periodic telemetry heartbeat to the job coordinator while a job is active.
+    /// </summary>
     private async Task OnHeartbeatTick(IContext context)
     {
-        //Console.WriteLine("Heartbeat tick...");
         if (_currentJob is not null)
         {
             try
             {
-                //Console.WriteLine($"Sending heartbeat to coordinator - Temp: {hashcatWrapper.Temperature}°C, Fan: {hashcatWrapper.FanSpeed}%, Utilization: {hashcatWrapper.GpuUtilization}%, Hashrate: {hashcatWrapper.CurrentHashrate} H/s");
                 var coordinator = cluster.GetJobCoordinatorGrain(_currentJob.JobId);
                 
                 await coordinator.Heartbeat(new AgentTelemetry 
@@ -450,4 +371,5 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             catch { /* Ignore heartbeat network delivery failures */ }
         }
     }
+
 }

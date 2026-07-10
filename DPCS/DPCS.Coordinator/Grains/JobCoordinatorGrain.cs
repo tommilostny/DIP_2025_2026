@@ -87,6 +87,11 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             registratrion.AttackMode = (int)AttackMode.Dictionary;
             break;
 
+        case JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs:
+            _jobStrategy = new CombinatorJobStrategy(_clusterIdentity.Identity, request, _serverBaseUrl);
+            registratrion.AttackMode = (int)AttackMode.Combinator;
+            break;
+
         default:
             throw new InvalidOperationException("Invalid job specs payload");
         }
@@ -107,7 +112,8 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         WorkAssignmentEnvelope? nextChunk;
         try
         {
-            nextChunk = await _jobStrategy.NextChunkAsync(request.CurrentHashrate);
+            var agentKey = $"{request.AgentId.Address}/{request.AgentId.Id}";
+            nextChunk = await _jobStrategy.NextChunkAsync(request.CurrentHashrate, agentKey);
         }
         catch (Exception ex)
         {
@@ -278,6 +284,9 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 ProgressPercentage = 100,
                 Status = "Completed"
             }, CancellationToken.None);
+
+            if (_jobStrategy is not null)
+                await _jobStrategy.CleanupAsync();
         }
     }
 
@@ -328,8 +337,13 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
     {
         // Placeholder implementation for job cancellation
         Console.WriteLine($"{_clusterIdentity.Identity}: received job cancellation request");
-        var finalProgress = _jobStrategy?.GetProgress() ?? 0;
-        _jobStrategy = null;
+        float finalProgress = 0;
+        if (_jobStrategy is not null)
+        {
+            finalProgress = _jobStrategy.GetProgress();
+            await _jobStrategy.CleanupAsync();
+            _jobStrategy = null;
+        }
         _timeoutTimer?.Dispose();
 
         var collector = Context.Cluster().GetResultCollectorGrain(_clusterIdentity.Identity);

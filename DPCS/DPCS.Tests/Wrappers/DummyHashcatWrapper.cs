@@ -57,6 +57,16 @@ public sealed class DummyHashcatWrapper : IHashcatWrapper
         return [];
     }
 
+    public async Task<List<RecoveredPassword>> RunHashcatCombinatorAttackAsync(CombinatorWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1 * TimeMultiplier), ct);
+        }
+        catch (TaskCanceledException) { }
+        return [];
+    }
+
     public async Task<List<RecoveredPassword>> RunHashcatMaskAttackAsync(MaskWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
     {
         // Simulated Time = Chunk Size / Simulated Hashrate
