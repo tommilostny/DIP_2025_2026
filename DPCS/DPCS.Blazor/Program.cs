@@ -58,6 +58,28 @@ app.UseStaticFiles();
 
 app.UseAntiforgery();
 
+app.MapGet("/api/wordlists/{fileName}/checksum", async (
+    string fileName,
+    long startByte,
+    long endByte,
+    WordlistService wordlistService,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var checksum = await wordlistService.GetWordlistRangeChecksumAsync(fileName, startByte, endByte, cancellationToken);
+        return Results.Text(checksum, "text/plain");
+    }
+    catch (FileNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (ArgumentOutOfRangeException ex)
+    {
+        return Results.BadRequest(ex.Message);
+    }
+});
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

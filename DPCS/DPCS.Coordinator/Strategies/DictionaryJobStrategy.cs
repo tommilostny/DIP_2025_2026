@@ -22,6 +22,9 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
     private readonly Queue<ChunkState> _retryQueue = [];
     private readonly Dictionary<string, string> _cachedIndexFiles = [];
     private string? _jobCacheDirectory;
+    private readonly int _ruleCount = Math.Max(1, specs.DictionaryJobSpecs.RuleFileContent
+        .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+        .Count(line => !string.IsNullOrWhiteSpace(line)));
 
     private record ChunkState(int WordlistIndex, int StartInterval, int EndInterval, long StartByte, long EndByte);
 
@@ -55,7 +58,11 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
             // Convert hashrate to an interval budget for the target chunk duration.
             ulong linesNeeded = hashRate * specs.ChunkTimeSeconds;
-            int intervalsNeeded = (int)Math.Max(1, linesNeeded / Constants.IndexInterval);
+
+            // Dictionary rules amplify candidates per base word, so chunk fewer base lines
+            // to keep chunk wall-time closer to the requested chunk duration.
+            ulong adjustedLinesNeeded = Math.Max(1UL, linesNeeded / (ulong)_ruleCount);
+            int intervalsNeeded = (int)Math.Max(1, adjustedLinesNeeded / Constants.IndexInterval);
 
             int startInterval = _currentIntervalIndex;
             int endInterval = Math.Min(_currentWordlistIndexData!.Length - 1, startInterval + intervalsNeeded);
@@ -85,6 +92,9 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
         Console.WriteLine($"{jobId}: Assigning dictionary chunk - Wordlist: {specs.DictionaryJobSpecs.Wordlists[nextChunk.WordlistIndex]}, Bytes: {nextChunk.StartByte} to {(nextChunk.EndByte == -1 ? "EOF" : nextChunk.EndByte)}");
 
+        var wordlistName = specs.DictionaryJobSpecs.Wordlists[nextChunk.WordlistIndex];
+        //var checksum = await ComputeChunkChecksumAsync(wordlistName, nextChunk.StartByte, nextChunk.EndByte);
+
         return new WorkAssignmentEnvelope
         {
             JobId = jobId,
@@ -92,9 +102,8 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
             DictionaryAssignment = new DictionaryWorkAssignment
             {
                 // Pass the byte bounds via query string so the Agent knows what Range to request
-                DictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{specs.DictionaryJobSpecs.Wordlists[nextChunk.WordlistIndex]}?startByte={nextChunk.StartByte}&endByte={nextChunk.EndByte}",
-                DictionaryChunkChecksum = string.Empty, 
-                //RuleFileContent = specs.Rules, // Assuming rules are provided as content
+                DictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{wordlistName}?startByte={nextChunk.StartByte}&endByte={nextChunk.EndByte}",
+                DictionaryChunkChecksum = string.Empty
             },
         };
     }
@@ -200,6 +209,16 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
         _cachedIndexFiles.Clear();
         _currentWordlistIndexData = null;
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Resolves SHA256 for the exact assigned byte range from the wordlist host checksum endpoint.
+    /// </summary>
+    private async Task<string> ComputeChunkChecksumAsync(string wordlistName, long startByte, long endByte)
+    {
+        var encodedWordlistName = Uri.EscapeDataString(wordlistName);
+        var checksumUrl = $"{serverBaseUrl}/api/wordlists/{encodedWordlistName}/checksum?startByte={startByte}&endByte={endByte}";
+        return (await HttpClient.GetStringAsync(checksumUrl)).Trim();
     }
 
     private static string SanitizeFileName(string value) => string.Concat(value.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));

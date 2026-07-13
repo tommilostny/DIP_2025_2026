@@ -47,7 +47,7 @@ public sealed class DummyHashcatWrapper : IHashcatWrapper
         return Task.FromResult(MockKeyspaceSize);
     }
 
-    public async Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    public async Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
     {
         try
         {
@@ -57,7 +57,7 @@ public sealed class DummyHashcatWrapper : IHashcatWrapper
         return [];
     }
 
-    public async Task<List<RecoveredPassword>> RunHashcatCombinatorAttackAsync(CombinatorWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    public async Task<List<RecoveredPassword>> RunHashcatCombinatorAttackAsync(CombinatorWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
     {
         try
         {

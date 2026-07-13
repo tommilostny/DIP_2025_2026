@@ -4,6 +4,8 @@ namespace DPCS.Blazor.Grains;
 
 public sealed class JobManagerGrain : JobManagerGrainBase
 {
+    private sealed record SubmissionFingerprintEntry(JobAssignment Assignment, DateTime CreatedAtUtc);
+
     private readonly ClusterIdentity _clusterIdentity;
 
     private int _globalCursor = 0;
@@ -11,6 +13,9 @@ public sealed class JobManagerGrain : JobManagerGrainBase
     private readonly Dictionary<string, JobAssignment> _unfinishedJobs = [];
 
     private readonly Dictionary<string, int> _wordlistsInUse = [];
+
+    private readonly Dictionary<string, SubmissionFingerprintEntry> _recentSubmissions = [];
+    private static readonly TimeSpan SubmissionDeduplicationWindow = TimeSpan.FromSeconds(10);
 
     public JobManagerGrain(IContext context, ClusterIdentity clusterIdentity) : base(context)
     {
@@ -33,6 +38,16 @@ public sealed class JobManagerGrain : JobManagerGrainBase
 
     public override async Task<JobAssignment> JobSubmission(JobSpecsEnvelope request)
     {
+        CleanupExpiredSubmissionFingerprints();
+
+        var requestFingerprint = BuildRequestFingerprint(request);
+        if (_recentSubmissions.TryGetValue(requestFingerprint, out var existingSubmission)
+            && DateTime.UtcNow - existingSubmission.CreatedAtUtc <= SubmissionDeduplicationWindow)
+        {
+            Console.WriteLine($"{_clusterIdentity.Identity}: duplicate job submission ignored for fingerprint {requestFingerprint}");
+            return existingSubmission.Assignment;
+        }
+
         var guid = Guid.NewGuid();
         var signedJobId = JobIdSecurity.GenerateSignedId(guid);
 
@@ -53,6 +68,7 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 HashType = request.HashType,
                 Hashes = { request.Hashes },
                 Wordlists = { request.DictionaryJobSpecs.Wordlists },
+                RuleFileContent = request.DictionaryJobSpecs.RuleFileContent,
             },
             JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs => new()
             {
@@ -61,11 +77,13 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 HashType = request.HashType,
                 Hashes = { request.Hashes },
                 Wordlists = { request.CombinatorJobSpecs.LeftWordlists, request.CombinatorJobSpecs.RightWordlists },
+                RuleFileContent = request.CombinatorJobSpecs.RuleFileContent,
             },
             _ => throw new InvalidOperationException("Invalid job specs payload")
         };
 
         _unfinishedJobs[signedJobId] = assignment;
+    _recentSubmissions[requestFingerprint] = new SubmissionFingerprintEntry(assignment, DateTime.UtcNow);
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(request)}");
 
@@ -83,6 +101,60 @@ public sealed class JobManagerGrain : JobManagerGrainBase
             .JobInit(request, CancellationToken.None);
 
         return await Task.FromResult(assignment);
+    }
+
+    private void CleanupExpiredSubmissionFingerprints()
+    {
+        var now = DateTime.UtcNow;
+        var expiredFingerprints = _recentSubmissions
+            .Where(entry => now - entry.Value.CreatedAtUtc > SubmissionDeduplicationWindow)
+            .Select(entry => entry.Key)
+            .ToList();
+
+        foreach (var fingerprint in expiredFingerprints)
+        {
+            _recentSubmissions.Remove(fingerprint);
+        }
+    }
+
+    private static string BuildRequestFingerprint(JobSpecsEnvelope request)
+    {
+        static string JoinSorted(IEnumerable<string> values) => string.Join('\n', values.OrderBy(value => value, StringComparer.Ordinal));
+
+        return request.PayloadCase switch
+        {
+            JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs => string.Join('|',
+                "mask",
+                request.HashType,
+                request.ChunkTimeSeconds,
+                JoinSorted(request.Hashes),
+                JoinSorted(request.MaskJobSpecs.Masks),
+                request.MaskJobSpecs.MinLength,
+                request.MaskJobSpecs.MaxLength,
+                request.MaskJobSpecs.CustomCharset1,
+                request.MaskJobSpecs.CustomCharset2,
+                request.MaskJobSpecs.CustomCharset3,
+                request.MaskJobSpecs.CustomCharset4),
+
+            JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs => string.Join('|',
+                "dictionary",
+                request.HashType,
+                request.ChunkTimeSeconds,
+                JoinSorted(request.Hashes),
+                JoinSorted(request.DictionaryJobSpecs.Wordlists),
+                request.DictionaryJobSpecs.RuleFileContent),
+
+            JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs => string.Join('|',
+                "combinator",
+                request.HashType,
+                request.ChunkTimeSeconds,
+                JoinSorted(request.Hashes),
+                JoinSorted(request.CombinatorJobSpecs.LeftWordlists),
+                JoinSorted(request.CombinatorJobSpecs.RightWordlists),
+                request.CombinatorJobSpecs.RuleFileContent),
+
+            _ => throw new InvalidOperationException("Invalid job specs payload")
+        };
     }
 
     public override async Task CancelJob(JobId jobId)

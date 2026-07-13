@@ -121,7 +121,7 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
             var retryRequestId = Guid.NewGuid().ToString();
             _activeChunks[retryRequestId] = retryChunk;
-            return BuildEnvelope(retryChunk, retryRequestId);
+            return await BuildEnvelopeAsync(retryChunk, retryRequestId);
         }
 
         var estimatedLines = Math.Max(1UL, hashRate * specs.ChunkTimeSeconds);
@@ -184,7 +184,7 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
         Console.WriteLine($"{jobId}: Assigning combinator chunk - Left: {specs.CombinatorJobSpecs.LeftWordlists[chunkState.LeftWordlistIndex]} ({chunkState.LeftStartByte}-{(chunkState.LeftEndByte == -1 ? "EOF" : chunkState.LeftEndByte.ToString())}), Right: {specs.CombinatorJobSpecs.RightWordlists[chunkState.RightWordlistIndex]} ({chunkState.RightStartByte}-{(chunkState.RightEndByte == -1 ? "EOF" : chunkState.RightEndByte.ToString())})");
 
-        return BuildEnvelope(chunkState, requestId);
+        return await BuildEnvelopeAsync(chunkState, requestId);
     }
 
     public void CompleteChunk(string requestId)
@@ -285,10 +285,12 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
     /// <summary>
     /// Converts internal chunk state into a wire assignment envelope.
     /// </summary>
-    private WorkAssignmentEnvelope BuildEnvelope(ChunkState chunkState, string requestId)
+    private async Task<WorkAssignmentEnvelope> BuildEnvelopeAsync(ChunkState chunkState, string requestId)
     {
         var leftWordlist = specs.CombinatorJobSpecs.LeftWordlists[chunkState.LeftWordlistIndex];
         var rightWordlist = specs.CombinatorJobSpecs.RightWordlists[chunkState.RightWordlistIndex];
+        //var leftChecksum = await ComputeChunkChecksumAsync(leftWordlist, chunkState.LeftStartByte, chunkState.LeftEndByte);
+        //var rightChecksum = await ComputeChunkChecksumAsync(rightWordlist, chunkState.RightStartByte, chunkState.RightEndByte);
 
         return new WorkAssignmentEnvelope
         {
@@ -298,15 +300,26 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
             {
                 LeftDictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{leftWordlist}?startByte={chunkState.LeftStartByte}&endByte={chunkState.LeftEndByte}",
                 RightDictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{rightWordlist}?startByte={chunkState.RightStartByte}&endByte={chunkState.RightEndByte}",
+                LeftDictionaryChunkChecksum = string.Empty,
+                RightDictionaryChunkChecksum = string.Empty,
                 LeftWordlistName = leftWordlist,
                 RightWordlistName = rightWordlist,
                 LeftStartByte = chunkState.LeftStartByte,
                 LeftEndByte = chunkState.LeftEndByte,
                 RightStartByte = chunkState.RightStartByte,
-                RightEndByte = chunkState.RightEndByte,
-                RuleFileContent = string.Join("\n", specs.CombinatorJobSpecs.RuleFiles)
+                RightEndByte = chunkState.RightEndByte
             }
         };
+    }
+
+    /// <summary>
+    /// Resolves SHA256 for the exact assigned byte range from the wordlist host checksum endpoint.
+    /// </summary>
+    private async Task<string> ComputeChunkChecksumAsync(string wordlistName, long startByte, long endByte)
+    {
+        var encodedWordlistName = Uri.EscapeDataString(wordlistName);
+        var checksumUrl = $"{serverBaseUrl}/api/wordlists/{encodedWordlistName}/checksum?startByte={startByte}&endByte={endByte}";
+        return (await _httpClient.GetStringAsync(checksumUrl)).Trim();
     }
 
     /// <summary>

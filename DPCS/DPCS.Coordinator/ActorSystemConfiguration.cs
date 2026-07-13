@@ -26,9 +26,15 @@ public static class ActorSystemConfiguration
                                 ?? throw new InvalidOperationException("Consul address must be provided in configuration.");
             var host = _EmptyStringToNull(config["ProtoActor:Host"]) ?? "127.0.0.1";
             var port = _TryParseInt(config["ProtoActor:Port"]) ?? 0;
-            var serverBaseUrl = config["DPCS:ServerBaseUrl"] ?? "http://localhost:5065";
+            var serverBaseUrl = config["DPCS:ServerBaseUrl"]
+                                ?? config["services:dpcs-blazor:http:0"]
+                                ?? config["services:dpcs-blazor:https:0"]
+                                ?? config["services__dpcs-blazor__http__0"]
+                                ?? config["services__dpcs-blazor__https__0"]
+                                ?? "http://localhost:5065";
 
             Console.WriteLine($"Configuring ActorSystem with Consul at {consulAddress}, host {host}, port {port}");
+            Console.WriteLine($"Using server base URL for wordlist serving: {serverBaseUrl}");
 
             var remoteConfig = RemoteConfig
                 .BindTo(host, port)

@@ -29,7 +29,8 @@ public sealed class WorkAssignmentMaterializer
                 envelope.DictionaryAssignment.DictionaryChunkUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
                     envelope.DictionaryAssignment.DictionaryChunkUrl,
-                    "dictionary");
+                    "dictionary",
+                    expectedChecksum: envelope.DictionaryAssignment.DictionaryChunkChecksum);
                 return envelope;
 
             case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment }:
@@ -39,12 +40,14 @@ public sealed class WorkAssignmentMaterializer
                     envelope.CombinatorAssignment.LeftDictionaryChunkUrl,
                     "left",
                     cacheKey: leftCacheKey,
-                    useCache: true);
+                    useCache: true,
+                    expectedChecksum: envelope.CombinatorAssignment.LeftDictionaryChunkChecksum);
 
                 envelope.CombinatorAssignment.RightDictionaryChunkUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
                     envelope.CombinatorAssignment.RightDictionaryChunkUrl,
-                    "right");
+                    "right",
+                    expectedChecksum: envelope.CombinatorAssignment.RightDictionaryChunkChecksum);
 
                 Console.WriteLine($"Prepared combinator assignment {envelope.RequestId} with local left/right chunk files.");
                 return envelope;
@@ -89,7 +92,13 @@ public sealed class WorkAssignmentMaterializer
         _combinatorLeftChunkCache.Clear();
     }
 
-    private async Task<string> DownloadFileRangeChunkAsync(string requestId, string chunkUrlWithQuery, string label, string? cacheKey = null, bool useCache = false)
+    private async Task<string> DownloadFileRangeChunkAsync(
+        string requestId,
+        string chunkUrlWithQuery,
+        string label,
+        string? cacheKey = null,
+        bool useCache = false,
+        string? expectedChecksum = null)
     {
         var uri = new Uri(chunkUrlWithQuery);
         var queryParams = uri.Query.TrimStart('?').Split('&')
@@ -102,8 +111,22 @@ public sealed class WorkAssignmentMaterializer
 
         if (useCache && cacheKey is not null && _combinatorLeftChunkCache.TryGetValue(cacheKey, out var cachedPath) && File.Exists(cachedPath))
         {
-            Console.WriteLine($"Reusing cached {label} chunk: {requestId} ({Path.GetFileName(cachedPath)})");
-            return cachedPath;
+            if (string.IsNullOrWhiteSpace(expectedChecksum))
+            {
+                Console.WriteLine($"Reusing cached {label} chunk: {requestId} ({Path.GetFileName(cachedPath)})");
+                return cachedPath;
+            }
+
+            var cachedChecksum = await ComputeFileSha256Async(cachedPath);
+            if (string.Equals(cachedChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"Reusing cached {label} chunk: {requestId} ({Path.GetFileName(cachedPath)})");
+                return cachedPath;
+            }
+
+            _combinatorLeftChunkCache.Remove(cacheKey);
+            _combinatorLeftCachedPaths.Remove(cachedPath);
+            TryDeleteLocalFile(cachedPath);
         }
 
         if (useCache && cacheKey is not null && _combinatorLeftChunkCache.TryGetValue(cacheKey, out var stalePath) && !File.Exists(stalePath))
@@ -121,8 +144,20 @@ public sealed class WorkAssignmentMaterializer
         response.EnsureSuccessStatusCode();
 
         var chunkPath = Path.Combine(Path.GetTempPath(), $"dpcs_{label}_{requestId}_{Guid.NewGuid():N}.txt");
-        using var fileStream = new FileStream(chunkPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await response.Content.CopyToAsync(fileStream);
+        await using (var fileStream = new FileStream(chunkPath, FileMode.Create, FileAccess.Write, FileShare.None))
+        {
+            await response.Content.CopyToAsync(fileStream);
+        }
+
+        if (!string.IsNullOrWhiteSpace(expectedChecksum))
+        {
+            var actualChecksum = await ComputeFileSha256Async(chunkPath);
+            if (!string.Equals(actualChecksum, expectedChecksum, StringComparison.OrdinalIgnoreCase))
+            {
+                TryDeleteLocalFile(chunkPath);
+                throw new InvalidDataException($"Checksum mismatch for {label} chunk {requestId}. Expected {expectedChecksum}, got {actualChecksum}.");
+            }
+        }
 
         if (useCache && cacheKey is not null)
         {
@@ -133,14 +168,25 @@ public sealed class WorkAssignmentMaterializer
         return chunkPath;
     }
 
-    private bool IsCachedCombinatorLeftPath(string path)
+    private static async Task<string> ComputeFileSha256Async(string path)
     {
-        return !string.IsNullOrWhiteSpace(path) && _combinatorLeftCachedPaths.Contains(path);
+        Console.WriteLine($"Computing SHA256 for file: {path}");
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        await using var stream = File.OpenRead(path);
+        var hashBytes = await sha256.ComputeHashAsync(stream);
+        var hexString = Convert.ToHexString(hashBytes).ToLowerInvariant();
+        Console.WriteLine($"SHA256 for file {path}: {hexString}");
+        return hexString;
     }
 
     private static string GetCombinatorLeftCacheKey(CombinatorWorkAssignment assignment)
     {
         return $"{assignment.LeftWordlistName}|{assignment.LeftStartByte}|{assignment.LeftEndByte}";
+    }
+
+    private bool IsCachedCombinatorLeftPath(string path)
+    {
+        return !string.IsNullOrWhiteSpace(path) && _combinatorLeftCachedPaths.Contains(path);
     }
 
     private static void TryDeleteLocalFile(string path)

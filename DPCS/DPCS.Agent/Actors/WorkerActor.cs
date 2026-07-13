@@ -13,6 +13,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     private CancellationTokenSource? _currentWorkCts;
     private JobAssignment? _currentJob;
     private readonly HashFileStore _hashFileStore = new();
+    private readonly RuleFileStore _ruleFileStore = new();
     private readonly WorkAssignmentMaterializer _workAssignmentMaterializer = new();
 
     private readonly Queue<WorkAssignmentEnvelope> _workQueue = new();
@@ -119,6 +120,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
 
             Console.WriteLine($"Job found: {assignment.JobId}");
             _currentJob = assignment;
+            await _ruleFileStore.InitializeJobRulesAsync(assignment.JobId, assignment.RuleFileContent, CancellationToken.None);
             _noMoreWork = false;
             _isPrefetching = false;
             _isCracking = false;
@@ -312,11 +314,21 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
 
             case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
                 Console.WriteLine($"Cracking dictionary chunk: {chunk.RequestId}");
-                return await hashcatWrapper.RunHashcatDictionaryAttackAsync(chunk.DictionaryAssignment, _currentJob.HashType, hashFilePath, _currentWorkCts!.Token);
+                return await hashcatWrapper.RunHashcatDictionaryAttackAsync(
+                    chunk.DictionaryAssignment,
+                    _currentJob.HashType,
+                    hashFilePath,
+                    _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
+                    _currentWorkCts!.Token);
 
             case WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment:
                 Console.WriteLine($"Cracking combinator chunk: {chunk.RequestId}");
-                return await hashcatWrapper.RunHashcatCombinatorAttackAsync(chunk.CombinatorAssignment, _currentJob.HashType, hashFilePath, _currentWorkCts!.Token);
+                return await hashcatWrapper.RunHashcatCombinatorAttackAsync(
+                    chunk.CombinatorAssignment,
+                    _currentJob.HashType,
+                    hashFilePath,
+                    _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
+                    _currentWorkCts!.Token);
 
             default:
                 return [];
@@ -329,6 +341,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     private void CleanupJobData(string? jobId)
     {
         _hashFileStore.CleanupJobData(jobId);
+        _ruleFileStore.CleanupJobData(jobId);
         _workAssignmentMaterializer.CleanupJobCache();
     }
 

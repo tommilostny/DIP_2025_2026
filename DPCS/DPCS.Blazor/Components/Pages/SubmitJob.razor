@@ -9,7 +9,7 @@
 
 <h1>Submit New Job</h1>
 
-<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" FormName="SubmitJobForm">
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit">
     <DataAnnotationsValidator />
     <div class="row">
         <div class="col-md-6">
@@ -117,6 +117,9 @@
                                            @bind-SelectedWordlists="Model.Wordlists"
                                            ValidationFor="() => Model.Wordlists"
                                            HelpText="Select one or more wordlists for the dictionary attack." />
+
+                        <RulesSelection @bind-RuleContent="Model.DictionaryRules"
+                                        OnLoadFile="OnDictionaryRulesFileSelected" />
                     </div>
                 </div>
             }
@@ -156,7 +159,6 @@
 </EditForm>
 
 @code {
-    [SupplyParameterFromForm]
     public SubmitJobViewModel? Model { get; set; }
 
     private bool _isSubmitting;
@@ -198,6 +200,10 @@
 
     private Task OnMaskFileSelected(InputFileChangeEventArgs e)
         => LoadContentFromFileAsync(e, () => Model!.Masks, val => Model!.Masks = val);
+
+    private Task OnDictionaryRulesFileSelected(InputFileChangeEventArgs e)
+        => LoadContentFromFileAsync(e, () => Model!.DictionaryRules, val => Model!.DictionaryRules = val);
+
     private void AddMaskToInput(string mask)
     {
         if (string.IsNullOrWhiteSpace(Model!.Masks))
@@ -232,7 +238,7 @@
         try
         {
             var hashes = Model.Hashes?
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                 .Select(h => h.Trim())
                 .Where(h => !string.IsNullOrWhiteSpace(h))
                 .ToHashSet();
@@ -249,7 +255,7 @@
             {
             case AttackMode.Mask:
                 var masks = Model.Masks!
-                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                     .Select(m => m.Trim())
                     .Where(m => !string.IsNullOrWhiteSpace(m))
                     .ToHashSet();
@@ -271,25 +277,29 @@
                 break;
         
             case AttackMode.Dictionary:
-                var wordlists = Model.Wordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                var wordlists = Model.Wordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+                var dictionaryRuleContent = string.Join('\n', (Model.DictionaryRules ?? string.Empty)
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(r => r.Trim())
+                    .Where(r => !string.IsNullOrWhiteSpace(r) && !r.StartsWith('#')));
 
                 jobSpecs.DictionaryJobSpecs = new HashcatDictionaryJobSpecs
                 {
                     Wordlists = { wordlists },
-                    RuleFiles = { } // TODO
+                    RuleFileContent = dictionaryRuleContent
                 };
                 await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
                 break;
 
             case AttackMode.Combinator:
-                var leftWordlists = Model.LeftWordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
-                var rightWordlists = Model.RightWordlists?.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries) ?? Array.Empty<string>();
+                var leftWordlists = Model.LeftWordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+                var rightWordlists = Model.RightWordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
 
                 jobSpecs.CombinatorJobSpecs = new HashcatCombinatorJobSpecs
                 {
                     LeftWordlists = { leftWordlists },
                     RightWordlists = { rightWordlists },
-                    RuleFiles = { } // TODO
+                    RuleFileContent = string.Empty // TODO: add dedicated combinator rule input if needed
                 };
                 await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
                 break;

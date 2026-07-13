@@ -1,0 +1,118 @@
+@using System.Linq.Expressions
+
+<div class="mb-3">
+    <label class="form-label">
+        @Title
+        <button type="button" class="btn btn-sm btn-link p-0 ms-1 text-decoration-none" @onclick="() => _showRulesHelp = true" title="Show Rule Help">
+            &#x24D8;
+        </button>
+    </label>
+
+    <InputTextArea @bind-Value="RuleContent" class="form-control font-monospace" rows="@Rows" placeholder=":&#10;c&#10;$1" />
+
+    @if (ValidationFor is not null)
+    {
+        <ValidationMessage For="ValidationFor" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(HelpText))
+    {
+        <div class="form-text text-muted">@HelpText</div>
+    }
+
+    <div class="mt-2">
+        <label class="form-label small text-muted">Load rules from file (.rule, .txt)</label>
+        <InputFile OnChange="OnLoadFile" class="form-control form-control-sm" accept=".rule,.txt" />
+    </div>
+
+    @if (_showRulesHelp)
+    {
+        <Microsoft.AspNetCore.Components.Sections.SectionContent SectionName="modal-layer">
+            <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);" @onclick="() => _showRulesHelp = false">
+                <div class="modal-dialog modal-dialog-centered modal-lg animate-fade-in-up" @onclick:stopPropagation="true">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Hashcat Rules Quick Help</h5>
+                            <button type="button" class="btn-close" @onclick="() => _showRulesHelp = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="small text-muted mb-3">
+                                Rules transform each base dictionary candidate before hashing. One rule per line.
+                            </p>
+
+                            <table class="table table-bordered table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Rule</th>
+                                        <th>Meaning</th>
+                                        <th>Example</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr><td><code>:</code></td><td>No change (passthrough)</td><td><code>password</code> -> <code>password</code></td></tr>
+                                    <tr><td><code>l</code></td><td>Lowercase all letters</td><td><code>PassWord</code> -> <code>password</code></td></tr>
+                                    <tr><td><code>u</code></td><td>Uppercase all letters</td><td><code>passWord</code> -> <code>PASSWORD</code></td></tr>
+                                    <tr><td><code>c</code></td><td>Capitalize first letter, lowercase rest</td><td><code>pASSword</code> -> <code>Password</code></td></tr>
+                                    <tr><td><code>C</code></td><td>Lowercase first letter, uppercase rest</td><td><code>PassWord</code> -> <code>pASSWORD</code></td></tr>
+                                    <tr><td><code>t</code></td><td>Toggle case of all letters</td><td><code>Pass12</code> -> <code>pASS12</code></td></tr>
+                                    <tr><td><code>T3</code></td><td>Toggle case at position 3</td><td><code>passWord</code> -> <code>pasSWord</code></td></tr>
+                                    <tr><td><code>r</code></td><td>Reverse word</td><td><code>password</code> -> <code>drowssap</code></td></tr>
+                                    <tr><td><code>d</code></td><td>Duplicate whole word</td><td><code>pass</code> -> <code>passpass</code></td></tr>
+                                    <tr><td><code>p2</code></td><td>Append duplicated word 2 times</td><td><code>pass</code> -> <code>passpass</code></td></tr>
+                                    <tr><td><code>f</code></td><td>Reflect (append reversed word)</td><td><code>pass</code> -> <code>passssap</code></td></tr>
+                                    <tr><td><code>{</code></td><td>Rotate left by one</td><td><code>pass</code> -> <code>assp</code></td></tr>
+                                    <tr><td><code>}</code></td><td>Rotate right by one</td><td><code>pass</code> -> <code>spas</code></td></tr>
+                                    <tr><td><code>$1</code></td><td>Append character <code>1</code></td><td><code>pass</code> -> <code>pass1</code></td></tr>
+                                    <tr><td><code>$1$2</code></td><td>Append multiple chars in sequence</td><td><code>pass</code> -> <code>pass12</code></td></tr>
+                                    <tr><td><code>^!</code></td><td>Prepend character <code>!</code></td><td><code>pass</code> -> <code>!pass</code></td></tr>
+                                    <tr><td><code>]</code></td><td>Delete last character</td><td><code>pass1</code> -> <code>pass</code></td></tr>
+                                    <tr><td><code>[</code></td><td>Delete first character</td><td><code>password</code> -> <code>assword</code></td></tr>
+                                    <tr><td><code>D3</code></td><td>Delete character at position 3</td><td><code>passWord</code> -> <code>pasWord</code></td></tr>
+                                    <tr><td><code>x04</code></td><td>Extract 4 chars starting at position 0</td><td><code>password</code> -> <code>pass</code></td></tr>
+                                    <tr><td><code>O12</code></td><td>Delete 2 chars starting at position 1</td><td><code>password</code> -> <code>pssword</code></td></tr>
+                                    <tr><td><code>i4!</code></td><td>Insert <code>!</code> at position 4</td><td><code>passWord</code> -> <code>pass!Word</code></td></tr>
+                                    <tr><td><code>o3$</code></td><td>Overwrite character at position 3 with <code>$</code></td><td><code>passWord</code> -> <code>pas$Word</code></td></tr>
+                                    <tr><td><code>'6</code></td><td>Truncate word at position 6</td><td><code>password1</code> -> <code>passwo</code></td></tr>
+                                    <tr><td><code>sse</code></td><td>Replace all <code>s</code> with <code>e</code></td><td><code>pass</code> -> <code>paee</code></td></tr>
+                                    <tr><td><code>@@s</code></td><td>Remove all <code>s</code></td><td><code>pass</code> -> <code>pa</code></td></tr>
+                                    <tr><td><code>z2</code></td><td>Duplicate first character 2 times</td><td><code>pass</code> -> <code>pppass</code></td></tr>
+                                    <tr><td><code>Z2</code></td><td>Duplicate last character 2 times</td><td><code>pass</code> -> <code>passss</code></td></tr>
+                                    <tr><td><code>q</code></td><td>Duplicate every character</td><td><code>pass</code> -> <code>ppaassss</code></td></tr>
+                                    <tr><td><code>k</code></td><td>Swap first two characters</td><td><code>pass</code> -> <code>apss</code></td></tr>
+                                    <tr><td><code>K</code></td><td>Swap last two characters</td><td><code>pass</code> -> <code>psas</code></td></tr>
+                                    <tr><td><code>+2</code></td><td>ASCII increment at position 2</td><td><code>pass</code> -> <code>pats</code></td></tr>
+                                    <tr><td><code>-2</code></td><td>ASCII decrement at position 2</td><td><code>pass</code> -> <code>pars</code></td></tr>
+                                </tbody>
+                            </table>
+
+                            <p class="mt-3 mb-0 small text-muted">
+                                Position index <code>N</code> starts at <code>0</code>. For positions above <code>9</code>, use <code>A-Z</code> (for example <code>A</code> = 10).
+                                Rules are applied left-to-right in each line, so <code>c$1</code> means "capitalize, then append 1".
+                            </p>
+                        </div>
+                        <div class="modal-footer" style="justify-content: flex-start;">
+                            <p class="mb-0 small">
+                                More info about rule-based attack:
+                                <a href="https://hashcat.net/wiki/doku.php?id=rule_based_attack" target="_blank">https://hashcat.net/wiki/doku.php?id=rule_based_attack</a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </Microsoft.AspNetCore.Components.Sections.SectionContent>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "Rules (one per line, optional)";
+    [Parameter] public string? HelpText { get; set; } = "When provided, each dictionary candidate is transformed by these rules before cracking.";
+    [Parameter] public int Rows { get; set; } = 6;
+
+    [Parameter] public string? RuleContent { get; set; }
+    [Parameter] public EventCallback<string?> RuleContentChanged { get; set; }
+
+    [Parameter] public EventCallback<InputFileChangeEventArgs> OnLoadFile { get; set; }
+    [Parameter] public Expression<Func<string?>>? ValidationFor { get; set; }
+
+    private bool _showRulesHelp;
+}

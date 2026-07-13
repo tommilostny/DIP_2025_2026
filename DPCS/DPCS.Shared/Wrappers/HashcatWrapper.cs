@@ -46,55 +46,37 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         return await RunHashcatAttackAsync(argumentsBuilder, ct);
     }
 
-    public async Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    public async Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
     {
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Dictionary} ");
         argumentsBuilder.Append($"-m {hashType} ");
         argumentsBuilder.Append($" \"{hashFilePath}\" ");
-        argumentsBuilder.Append($"\"{chunk.DictionaryChunkUrl}\""); // Assuming this will be a local path to the downloaded wordlist chunk
+        argumentsBuilder.Append($"\"{chunk.DictionaryChunkUrl}\"");
+
+        if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
+        {
+            argumentsBuilder.Append($" -r \"{jobRuleFilePath}\"");
+        }
 
         return await RunHashcatAttackAsync(argumentsBuilder, ct);
     }
 
-    public async Task<List<RecoveredPassword>> RunHashcatCombinatorAttackAsync(CombinatorWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
+    public async Task<List<RecoveredPassword>> RunHashcatCombinatorAttackAsync(CombinatorWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
     {
-        string? ruleFilePath = null;
-        try
-        {
-            var argumentsBuilder = new StringBuilder();
-            argumentsBuilder.Append($"-a {(int)AttackMode.Combinator} ");
-            argumentsBuilder.Append($"-m {hashType} ");
-            argumentsBuilder.Append($" \"{hashFilePath}\" ");
-            argumentsBuilder.Append($"\"{chunk.LeftDictionaryChunkUrl}\" ");
-            argumentsBuilder.Append($"\"{chunk.RightDictionaryChunkUrl}\"");
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Combinator} ");
+        argumentsBuilder.Append($"-m {hashType} ");
+        argumentsBuilder.Append($" \"{hashFilePath}\" ");
+        argumentsBuilder.Append($"\"{chunk.LeftDictionaryChunkUrl}\" ");
+        argumentsBuilder.Append($"\"{chunk.RightDictionaryChunkUrl}\"");
 
-            if (!string.IsNullOrWhiteSpace(chunk.RuleFileContent))
-            {
-                ruleFilePath = Path.Combine(Path.GetTempPath(), $"dpcs_rules_{Guid.NewGuid():N}.rule");
-                await File.WriteAllTextAsync(ruleFilePath, chunk.RuleFileContent, ct);
-                argumentsBuilder.Append($" -r \"{ruleFilePath}\"");
-            }
-
-            return await RunHashcatAttackAsync(argumentsBuilder, ct);
-        }
-        finally
+        if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
         {
-            if (ruleFilePath is not null)
-            {
-                try
-                {
-                    if (File.Exists(ruleFilePath))
-                    {
-                        File.Delete(ruleFilePath);
-                    }
-                }
-                catch
-                {
-                    // Ignore temporary file cleanup failures.
-                }
-            }
+            argumentsBuilder.Append($" -r \"{jobRuleFilePath}\"");
         }
+
+        return await RunHashcatAttackAsync(argumentsBuilder, ct);
     }
 
     private async Task<List<RecoveredPassword>> RunHashcatAttackAsync(StringBuilder arguments, CancellationToken cancellationToken = default)

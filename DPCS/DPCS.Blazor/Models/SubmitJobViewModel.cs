@@ -24,6 +24,7 @@ public class SubmitJobViewModel : IValidatableObject
 
 
     public string? Wordlists { get; set; } = "";
+    public string? DictionaryRules { get; set; } = "";
     public string? LeftWordlists { get; set; } = "";
     public string? RightWordlists { get; set; } = "";
 

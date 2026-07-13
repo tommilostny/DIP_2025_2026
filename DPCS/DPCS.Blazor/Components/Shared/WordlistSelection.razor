@@ -12,7 +12,7 @@
             }
             else
             {
-                @foreach (var wordlist in AvailableWordlists)
+                @foreach (var wordlist in VisibleWordlists)
                 {
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="@GetCheckboxId(wordlist)"
@@ -25,6 +25,13 @@
                 }
             }
         </div>
+
+        @if (HasHiddenWordlists)
+        {
+            <button type="button" class="btn btn-link p-0 mt-2" @onclick="ToggleWordlistListExpansion">
+                @(_isWordlistListExpanded ? "Show fewer wordlists" : $"Show all wordlists ({AvailableWordlists.Count})")
+            </button>
+        }
     }
     else
     {
@@ -67,6 +74,14 @@
     private readonly HashSet<string> _selectedWordlists = [];
     private string _singleSelection = string.Empty;
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
+    private bool _isWordlistListExpanded;
+
+    private IReadOnlyList<string> VisibleWordlists
+        => _isWordlistListExpanded || AvailableWordlists.Count <= 10
+            ? AvailableWordlists
+            : AvailableWordlists.Take(10).ToList();
+
+    private bool HasHiddenWordlists => AvailableWordlists.Count > 10;
 
     protected override void OnParametersSet()
     {
@@ -99,6 +114,11 @@
     {
         _singleSelection = e.Value?.ToString() ?? string.Empty;
         await SelectedWordlistsChanged.InvokeAsync(string.IsNullOrWhiteSpace(_singleSelection) ? string.Empty : _singleSelection);
+    }
+
+    private void ToggleWordlistListExpansion()
+    {
+        _isWordlistListExpanded = !_isWordlistListExpanded;
     }
 
     private string GetCheckboxId(string wordlist) => $"{_instanceId}_{wordlist.GetHashCode():X}";

@@ -24,6 +24,7 @@ message JobAssignment {
   repeated string hashes = 4;
   repeated string masks = 5;
   repeated string wordlists = 6;
+  string rule_file_content = 7;
 }
 
 // Parameters for submitting a Hashcat mask attack job by user in the web interface
@@ -40,14 +41,14 @@ message HashcatMaskJobSpecs {
 // Parameters for submitting a Hashcat dictionary attack job by user in the web interface
 message HashcatDictionaryJobSpecs {
   repeated string wordlists = 1;
-  repeated string rule_files = 2;
+  string rule_file_content = 2;
 }
 
 // Parameters for submitting a Hashcat combinator attack job by user in the web interface
 message HashcatCombinatorJobSpecs {
   repeated string left_wordlists = 1;
   repeated string right_wordlists = 2;
-  repeated string rule_files = 3;
+  string rule_file_content = 3;
 }
 
 message JobSpecsEnvelope {
@@ -86,7 +87,6 @@ message MaskWorkAssignment {
 message DictionaryWorkAssignment {
   string dictionary_chunk_url = 1; // HTTP URL to download the chunk
   string dictionary_chunk_checksum = 2; // SHA256 to verify integrity
-  string rule_file_content = 3; // Optional rules to apply
 }
 
 message CombinatorWorkAssignment {
@@ -94,13 +94,12 @@ message CombinatorWorkAssignment {
   string right_dictionary_chunk_url = 2;
   string left_dictionary_chunk_checksum = 3;
   string right_dictionary_chunk_checksum = 4;
-  string rule_file_content = 5;
-  string left_wordlist_name = 6;
-  string right_wordlist_name = 7;
-  int64 left_start_byte = 8;
-  int64 left_end_byte = 9;
-  int64 right_start_byte = 10;
-  int64 right_end_byte = 11;
+  string left_wordlist_name = 5;
+  string right_wordlist_name = 6;
+  int64 left_start_byte = 7;
+  int64 left_end_byte = 8;
+  int64 right_start_byte = 9;
+  int64 right_end_byte = 10;
 }
 
 message WorkAssignmentEnvelope {

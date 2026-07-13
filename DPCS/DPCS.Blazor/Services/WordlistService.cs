@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Security.Cryptography;
 
 namespace DPCS.Blazor.Services;
 
@@ -122,5 +123,62 @@ public class WordlistService
         }
 
         return new FileInfo(filePath).Length;
+    }
+
+    public async Task<string> GetWordlistRangeChecksumAsync(string fileName, long startByte, long endByte, CancellationToken cancellationToken = default)
+    {
+        var safeFileName = Path.GetFileName(fileName);
+        var filePath = Path.Combine(_storagePath, safeFileName);
+
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"Wordlist '{fileName}' not found.");
+        }
+
+        if (startByte < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startByte), "startByte must be non-negative.");
+        }
+
+        if (endByte != -1 && endByte < startByte)
+        {
+            throw new ArgumentOutOfRangeException(nameof(endByte), "endByte must be -1 (EOF) or greater than or equal to startByte.");
+        }
+
+        var fileInfo = new FileInfo(filePath);
+        if (startByte >= fileInfo.Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startByte), "startByte must be within file bounds.");
+        }
+
+        var effectiveEndByte = endByte == -1 ? fileInfo.Length - 1 : Math.Min(endByte, fileInfo.Length - 1);
+        var bytesRemaining = effectiveEndByte - startByte + 1;
+
+        using var incrementalHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = ArrayPool<byte>.Shared.Rent(BufferSize);
+        try
+        {
+            using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize, useAsync: true);
+            fileStream.Seek(startByte, SeekOrigin.Begin);
+
+            while (bytesRemaining > 0)
+            {
+                var bytesToRead = (int)Math.Min(buffer.Length, bytesRemaining);
+                var bytesRead = await fileStream.ReadAsync(buffer.AsMemory(0, bytesToRead), cancellationToken);
+                if (bytesRead == 0)
+                {
+                    break;
+                }
+
+                incrementalHash.AppendData(buffer, 0, bytesRead);
+                bytesRemaining -= bytesRead;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        return Convert.ToHexString(incrementalHash.GetHashAndReset()).ToLowerInvariant();
     }
 }

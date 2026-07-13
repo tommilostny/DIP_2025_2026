@@ -23,7 +23,9 @@ var blazor = builder.AddProject<Projects.DPCS_Blazor>("dpcs-blazor")
 // Add the Coordinator project, also with references to the database and Consul
 var coordinator = builder.AddProject<Projects.DPCS_Coordinator>("dpcs-coordinator")
                          .WithReference(database)
-                         .WithReference(consul.GetEndpoint("consul-http"));
+                         .WithReference(consul.GetEndpoint("consul-http"))
+                         .WithReference(blazor)
+                         .WithEnvironment("DPCS__ServerBaseUrl", blazor.GetEndpoint("http"));
 
 // Add the Agent project, with a reference to Consul.
 // The 'WithReplicas(3)' will launch 3 instances of the agent for testing.
