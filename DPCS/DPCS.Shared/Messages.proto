@@ -146,17 +146,50 @@ message AgentTelemetry {
   int32 fan_speed = 4;
   int32 gpu_utilization = 5;
   float reject_rate = 6;
+  repeated GpuDeviceTelemetry gpu_devices = 7;
+}
+
+message GpuDeviceTelemetry {
+  int32 device_index = 1;
+  string device_name = 2;
+  int64 current_hashrate = 3;
+  int32 temperature = 4;
+  int32 fan_speed = 5;
+  int32 gpu_utilization = 6;
+  int64 vram_total_bytes = 7;
+  int64 vram_used_bytes = 8;
+  int32 vram_utilization = 9;
+}
+
+message MaskAssignedChunk {
+  string mask = 1;
+  uint64 keyspace_start = 2;
+  uint64 keyspace_end = 3;
+  uint64 total_keyspace = 4;
+}
+
+message DictionaryAssignedChunk {
+  string wordlist_name = 1;
+  int64 byte_start = 2;
+  int64 byte_end = 3;
+}
+
+message CombinatorAssignedChunk {
+  string left_wordlist_name = 1;
+  int64 left_byte_start = 2;
+  int64 left_byte_end = 3;
+  string right_wordlist_name = 4;
+  int64 right_byte_start = 5;
+  int64 right_byte_end = 6;
 }
 
 message AssignedChunk {
   string request_id = 1;
-  string mask = 2;
-  uint64 keyspace_start = 3;
-  uint64 keyspace_end = 4;
-  uint64 total_keyspace = 5;
-  string wordlist_name = 6;
-  int64 byte_start = 7;
-  int64 byte_end = 8;
+  oneof payload {
+    MaskAssignedChunk mask_chunk = 2;
+    DictionaryAssignedChunk dictionary_chunk = 3;
+    CombinatorAssignedChunk combinator_chunk = 4;
+  }
 }
 
 message AgentStatus {
@@ -172,6 +205,7 @@ message JobStatus {
   uint64 chunk_attack_seconds = 4;
   repeated AgentStatus agents = 5;
   repeated RecoveredPassword recovered_passwords = 6;
+  repeated AgentStatus participating_agents = 7;
 }
 
 message JobsCollection {
@@ -197,4 +231,44 @@ message WordlistQuery {
 
 message WordlistUsageResponse {
     bool is_in_use = 1;
+}
+
+message WorkUnitLifecycleFilter {
+  string outcome = 1;
+  int64 from_unix_ms = 2;
+  int64 to_unix_ms = 3;
+}
+
+message WorkUnitLifecycleRecord {
+  string request_id = 1;
+  string job_id = 2;
+  string mode = 3;
+  string agent_key = 4;
+  string chunk_summary = 5;
+  google.protobuf.Timestamp assigned_at = 6;
+  google.protobuf.Timestamp completed_at = 7;
+  google.protobuf.Timestamp timed_out_at = 8;
+  string outcome = 9;
+  double processing_duration_seconds = 10;
+  int32 recovered_count = 11;
+}
+
+message WorkUnitLifecycleExport {
+  string job_id = 1;
+  repeated WorkUnitLifecycleRecord records = 2;
+}
+
+message AgentGpuTelemetrySample {
+  string agent_key = 1;
+  google.protobuf.Timestamp captured_at = 2;
+  int64 current_hashrate = 3;
+  int32 temperature = 4;
+  int32 fan_speed = 5;
+  int32 gpu_utilization = 6;
+  repeated GpuDeviceTelemetry gpu_devices = 7;
+}
+
+message AgentGpuTelemetryExport {
+  string job_id = 1;
+  repeated AgentGpuTelemetrySample samples = 2;
 }

@@ -32,6 +32,56 @@ agentMeter.CreateObservableGauge("dpcs.agent.gpu.fanspeed", () => hashcatWrapper
 agentMeter.CreateObservableGauge("dpcs.agent.gpu.utilization", () => hashcatWrapper.GpuUtilization, "%", "The average utilization of the GPU devices.");
 agentMeter.CreateObservableGauge("dpcs.agent.reject_rate", () => hashcatWrapper.RejectRate, "%", "The percentage of rejected shares.");
 
+agentMeter.CreateObservableGauge("dpcs.agent.gpu.device.hashrate", () =>
+	hashcatWrapper.GpuDevices
+		.Where(gpu => gpu.CurrentHashrate >= 0)
+		.Select(gpu => new Measurement<long>(
+			gpu.CurrentHashrate,
+			new KeyValuePair<string, object?>("gpu_index", gpu.DeviceIndex),
+			new KeyValuePair<string, object?>("gpu_name", string.IsNullOrWhiteSpace(gpu.DeviceName) ? $"GPU {gpu.DeviceIndex}" : gpu.DeviceName))),
+	"H/s",
+	"Per-device cracking speed from hashcat status telemetry.");
+
+agentMeter.CreateObservableGauge("dpcs.agent.gpu.device.temperature", () =>
+	hashcatWrapper.GpuDevices
+		.Where(gpu => gpu.Temperature >= 0)
+		.Select(gpu => new Measurement<int>(
+			gpu.Temperature,
+			new KeyValuePair<string, object?>("gpu_index", gpu.DeviceIndex),
+			new KeyValuePair<string, object?>("gpu_name", string.IsNullOrWhiteSpace(gpu.DeviceName) ? $"GPU {gpu.DeviceIndex}" : gpu.DeviceName))),
+	"C",
+	"Per-device temperature from hashcat status telemetry.");
+
+agentMeter.CreateObservableGauge("dpcs.agent.gpu.device.utilization", () =>
+	hashcatWrapper.GpuDevices
+		.Where(gpu => gpu.GpuUtilization >= 0)
+		.Select(gpu => new Measurement<int>(
+			gpu.GpuUtilization,
+			new KeyValuePair<string, object?>("gpu_index", gpu.DeviceIndex),
+			new KeyValuePair<string, object?>("gpu_name", string.IsNullOrWhiteSpace(gpu.DeviceName) ? $"GPU {gpu.DeviceIndex}" : gpu.DeviceName))),
+	"%",
+	"Per-device utilization from hashcat status telemetry.");
+
+agentMeter.CreateObservableGauge("dpcs.agent.gpu.device.vram.used", () =>
+	hashcatWrapper.GpuDevices
+		.Where(gpu => gpu.VramUsedBytes >= 0)
+		.Select(gpu => new Measurement<long>(
+			gpu.VramUsedBytes,
+			new KeyValuePair<string, object?>("gpu_index", gpu.DeviceIndex),
+			new KeyValuePair<string, object?>("gpu_name", string.IsNullOrWhiteSpace(gpu.DeviceName) ? $"GPU {gpu.DeviceIndex}" : gpu.DeviceName))),
+	"By",
+	"Per-device used VRAM from hashcat status telemetry.");
+
+agentMeter.CreateObservableGauge("dpcs.agent.gpu.device.vram.total", () =>
+	hashcatWrapper.GpuDevices
+		.Where(gpu => gpu.VramTotalBytes > 0)
+		.Select(gpu => new Measurement<long>(
+			gpu.VramTotalBytes,
+			new KeyValuePair<string, object?>("gpu_index", gpu.DeviceIndex),
+			new KeyValuePair<string, object?>("gpu_name", string.IsNullOrWhiteSpace(gpu.DeviceName) ? $"GPU {gpu.DeviceIndex}" : gpu.DeviceName))),
+	"By",
+	"Per-device total VRAM from hashcat status telemetry.");
+
 builder.Services.AddActorSystem();
 builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 builder.Services.AddHostedService<AgentService>();

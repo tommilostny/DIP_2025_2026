@@ -23,6 +23,22 @@ public sealed class DummyHashcatWrapper : IHashcatWrapper
 
     public long CurrentHashrate { get; private set; }
 
+    public IReadOnlyList<GpuDeviceTelemetry> GpuDevices =>
+    [
+        new GpuDeviceTelemetry
+        {
+            DeviceIndex = 0,
+            DeviceName = "Dummy GPU",
+            CurrentHashrate = CurrentHashrate,
+            Temperature = Temperature,
+            FanSpeed = FanSpeed,
+            GpuUtilization = GpuUtilization,
+            VramTotalBytes = -1,
+            VramUsedBytes = -1,
+            VramUtilization = -1
+        }
+    ];
+
     // Allows tests to explicitly dictate the fake keyspace size for testing dynamic chunking math
     public ulong MockKeyspaceSize { get; set; } = 10_000_000UL; 
     

@@ -59,11 +59,14 @@ public static class Extensions
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
-                    .AddMeter("DPCS.Agent"); // Add our custom meter
+                    .AddMeter("DPCS.Agent")
+                    .AddMeter("DPCS.Coordinator");
             })
             .WithTracing(tracing =>
             {
                 tracing.AddSource(builder.Environment.ApplicationName)
+                    .AddSource("DPCS.Agent")
+                    .AddSource("DPCS.Coordinator")
                     .AddAspNetCoreInstrumentation(tracing =>
                         // Exclude health check requests from tracing
                         tracing.Filter = context =>

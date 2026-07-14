@@ -1,10 +1,8 @@
 using DPCS.Blazor.Components;
 using DPCS.DAL;
 using DPCS.ServiceDefaults;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using OpenTelemetry;
 using Proto.OpenTelemetry;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,23 +12,6 @@ builder.AddServiceDefaults();
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-
-/*
-builder.Services.AddOpenTelemetry()
-    .WithMetrics(metrics =>
-        metrics.SetResourceBuilder(ResourceBuilder
-                .CreateDefault()
-                //.AddAttributes(new KeyValuePair<string, object>[]
-                //{
-                //    new("someLabel", builder.Configuration["SomeLabel"]),
-                //    new("env", builder.Environment.EnvironmentName)
-                //})
-                //.AddService(builder.Configuration["Service:Name"])
-            )
-            .AddProtoActorInstrumentation()
-            .AddPrometheusExporter()
-        );
-*/
 
 // Aspire injects the connection string named "postgres" from the AppHost
 builder.Services.AddDpcsDbContextFactory(builder.Configuration.GetConnectionString("dpcs")
@@ -42,6 +23,7 @@ builder.Services.AddHostedService<ActorSystemClusterHostedService>();
 
 builder.Services.AddSingleton<MaskService>();
 builder.Services.AddSingleton<WordlistService>();
+builder.Services.AddSingleton<JobReportExportService>();
 
 var app = builder.Build();
 
@@ -80,6 +62,59 @@ app.MapGet("/api/wordlists/{fileName}/checksum", async (
     }
 });
 
+app.MapGet("/api/jobs/{jobId}/work-units", async (
+    string jobId,
+    string? format,
+    string? outcome,
+    long? fromUnixMs,
+    long? toUnixMs,
+    ActorSystem actorSystem,
+    JobReportExportService reportExportService,
+    CancellationToken cancellationToken) =>
+{
+    var filter = new WorkUnitLifecycleFilter
+    {
+        Outcome = outcome ?? string.Empty,
+        FromUnixMs = fromUnixMs ?? 0,
+        ToUnixMs = toUnixMs ?? 0
+    };
+
+    var lifecycle = await actorSystem
+        .Cluster()
+        .GetJobCoordinatorGrain(jobId)
+        .GetWorkUnitLifecycle(filter, cancellationToken)
+        ?? new WorkUnitLifecycleExport { JobId = jobId };
+
+    if (!string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+    {
+        return Results.Json(lifecycle);
+    }
+
+    var csv = reportExportService.BuildLifecycleCsv(lifecycle);
+    return Results.Text(csv, "text/csv", Encoding.UTF8);
+});
+
+app.MapGet("/api/jobs/{jobId}/report-chart", async (
+    string jobId,
+    string? type,
+    ActorSystem actorSystem,
+    JobReportExportService reportExportService,
+    CancellationToken cancellationToken) =>
+{
+    var coordinator = actorSystem.Cluster().GetJobCoordinatorGrain(jobId);
+
+    var lifecycle = await coordinator
+        .GetWorkUnitLifecycle(new WorkUnitLifecycleFilter(), cancellationToken)
+        ?? new WorkUnitLifecycleExport { JobId = jobId };
+
+    var telemetry = await coordinator
+        .GetAgentGpuTelemetryHistory(cancellationToken)
+        ?? new AgentGpuTelemetryExport { JobId = jobId };
+
+    var png = reportExportService.BuildReportChartPng(lifecycle, telemetry, type);
+    return Results.File(png, "image/png");
+});
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
@@ -88,7 +123,5 @@ app.Services.EnsureDpcsDbCreated();
 
 var loggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
 Proto.Log.SetLoggerFactory(loggerFactory);
-
-//app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
 app.Run();

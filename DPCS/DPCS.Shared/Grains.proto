@@ -42,6 +42,12 @@ service JobCoordinatorGrain {
   // RPC for web interface to query job status and progress
   rpc GetJobStatus (google.protobuf.Empty) returns (JobStatus);
 
+  // RPC for exporting work-unit lifecycle records (JSON/CSV endpoints consume this)
+  rpc GetWorkUnitLifecycle (WorkUnitLifecycleFilter) returns (WorkUnitLifecycleExport);
+
+  // RPC for exporting per-agent GPU telemetry history for time-series report charts
+  rpc GetAgentGpuTelemetryHistory (google.protobuf.Empty) returns (AgentGpuTelemetryExport);
+
   // RPC for web interface to cancel an ongoing job
   rpc CancelJob (google.protobuf.Empty) returns (google.protobuf.Empty);
 }

@@ -7,6 +7,7 @@ public interface IHashcatWrapper
     int GpuUtilization { get; }
     float RejectRate { get; }
     long CurrentHashrate { get; }
+    IReadOnlyList<GpuDeviceTelemetry> GpuDevices { get; }
     Task<List<RecoveredPassword>> RunHashcatMaskAttackAsync(MaskWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct);
     Task<List<RecoveredPassword>> RunHashcatDictionaryAttackAsync(DictionaryWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct);
     Task<List<RecoveredPassword>> RunHashcatCombinatorAttackAsync(CombinatorWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct);

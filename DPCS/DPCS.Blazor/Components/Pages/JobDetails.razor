@@ -54,9 +54,9 @@ else
                 <div class="card-body">
                     <p>
                         <strong>Attack mode:</strong> @(_dbJob?.AttackMode ?? 0) 
-                        (@( _dbJob?.AttackMode == (int)AttackMode.Mask ? "Mask" : "Dictionary" ))
+                        (@(((AttackMode)(_dbJob?.AttackMode ?? 0)).ToString()))
                     </p>
-                    
+
                     @switch (_jobSpecs)
                     {
                     case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs }:
@@ -178,7 +178,7 @@ else
                                         <th>Hashrate</th>
                                         <th>Temp</th>
                                         <th>Fan</th>
-                                        <th>GPU</th>
+                                        <th>GPU Util</th>
                                         <th>Reject</th>
                                     </tr>
                                 </thead>
@@ -186,7 +186,7 @@ else
                                 {
                                 <tbody class="agent-block" style="--agent-bg:@GetAgentColor(agentStatus.Telemetry.AgentId.Id); border-left:4px solid @GetAgentAccentColor(agentStatus.Telemetry.AgentId.Id);">
                                     <tr>
-                                        <td class="font-monospace small align-middle" rowspan="@GetAgentRowspan(agentStatus.AssignedChunks)">
+                                        <td class="font-monospace small align-middle" rowspan="@GetAgentRowspan(agentStatus)">
                                             @agentStatus.Telemetry.AgentId.Address/@agentStatus.Telemetry.AgentId.Id
                                         </td>
                                         @if (!float.IsNaN(agentStatus.Telemetry.RejectRate))
@@ -214,46 +214,100 @@ else
                                             </td>
                                         }
                                     </tr>
+                                    @foreach (var gpu in agentStatus.Telemetry.GpuDevices.OrderBy(g => g.DeviceIndex))
+                                    {
+                                        <tr class="assignment-row">
+                                            <td colspan="5">
+                                                <span class="badge rounded-pill bg-dark text-white me-2">GPU @gpu.DeviceIndex</span>
+                                                @if (!string.IsNullOrWhiteSpace(gpu.DeviceName))
+                                                {
+                                                    <span class="badge rounded-pill bg-secondary me-2">@gpu.DeviceName</span>
+                                                }
+                                                <span class="badge rounded-pill bg-light text-dark me-2">Hashrate: @FormatGpuHashrate(gpu.CurrentHashrate)</span>
+                                                <span class="badge rounded-pill bg-light text-dark me-2">Temp: @FormatIntMetric(gpu.Temperature, "°C")</span>
+                                                <span class="badge rounded-pill bg-light text-dark me-2">Fan: @FormatIntMetric(gpu.FanSpeed, "%")</span>
+                                                <span class="badge rounded-pill bg-light text-dark me-2">GPU Util: @FormatIntMetric(gpu.GpuUtilization, "%")</span>
+                                                <span class="badge rounded-pill bg-light text-dark me-2">VRAM: @FormatVramMetric(gpu.VramUsedBytes, gpu.VramTotalBytes, gpu.VramUtilization)</span>
+                                            </td>
+                                        </tr>
+                                    }
                                     @foreach (var chunk in agentStatus.AssignedChunks)
                                     {
-                                        @switch (_jobSpecs)
+                                        @switch (chunk.PayloadCase)
                                         {
-                                        case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs }:
+                                        case AssignedChunk.PayloadOneofCase.DictionaryChunk:
                                             <tr class="assignment-row">
                                                 <td colspan="2">
                                                     <span class="badge rounded-pill bg-primary text-white me-2">Dictionary</span>
                                                     <br>
-                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.WordlistName</span>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.DictionaryChunk.WordlistName</span>
                                                 </td>
                                                 <td colspan="2">
                                                     <span class="badge rounded-pill bg-info text-dark me-2">Bytes</span>
                                                     <br>
-                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.ByteStart - @(chunk.ByteEnd == -1 ? "EOF" : chunk.ByteEnd.ToString())</span>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.DictionaryChunk.ByteStart - @(chunk.DictionaryChunk.ByteEnd == -1 ? "EOF" : chunk.DictionaryChunk.ByteEnd.ToString())</span>
                                                 </td>
                                                 <td>
                                                     <span class="badge rounded-pill bg-warning text-dark me-2">Size</span>
                                                     <br>
-                                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.WordlistName)</span>
+                                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.DictionaryChunk.WordlistName)</span>
                                                 </td>
                                             </tr>
                                             break;
 
-                                        case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs }:
+                                        case AssignedChunk.PayloadOneofCase.MaskChunk:
                                             <tr class="assignment-row">
                                                 <td colspan="2">
                                                     <span class="badge rounded-pill bg-success text-white me-2">Mask</span>
                                                     <br>
-                                                    <span class="badge rounded-pill bg-light text-dark font-monospace">@chunk.Mask</span>
+                                                    <span class="badge rounded-pill bg-light text-dark font-monospace">@chunk.MaskChunk.Mask</span>
                                                 </td>
                                                 <td colspan="2">
                                                     <span class="badge rounded-pill bg-info text-dark me-2">Range</span>
                                                     <br>
-                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.KeyspaceStart.ToString("N0") - @chunk.KeyspaceEnd.ToString("N0")</span>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.MaskChunk.KeyspaceStart.ToString("N0") - @chunk.MaskChunk.KeyspaceEnd.ToString("N0")</span>
                                                 </td>
                                                 <td>
                                                     <span class="badge rounded-pill bg-warning text-dark me-2">Total</span>
                                                     <br>
-                                                    <span class="badge rounded-pill bg-light text-dark">@FormatMaskKeyspace(chunk.TotalKeyspace)</span>
+                                                    <span class="badge rounded-pill bg-light text-dark">@FormatMaskKeyspace(chunk.MaskChunk.TotalKeyspace)</span>
+                                                </td>
+                                            </tr>
+                                            break;
+
+                                        case AssignedChunk.PayloadOneofCase.CombinatorChunk:
+                                            <tr class="assignment-row">
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-primary text-white me-2">Left</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.LeftWordlistName</span>
+                                                </td>
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-info text-dark me-2">Left Bytes</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.LeftByteStart - @(chunk.CombinatorChunk.LeftByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.LeftByteEnd.ToString())</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge rounded-pill bg-warning text-dark me-2">Left Size</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.CombinatorChunk.LeftWordlistName)</span>
+                                                </td>
+                                            </tr>
+                                            <tr class="assignment-row">
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-secondary text-white me-2">Right</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.RightWordlistName</span>
+                                                </td>
+                                                <td colspan="2">
+                                                    <span class="badge rounded-pill bg-info text-dark me-2">Right Bytes</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.RightByteStart - @(chunk.CombinatorChunk.RightByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.RightByteEnd.ToString())</span>
+                                                </td>
+                                                <td>
+                                                    <span class="badge rounded-pill bg-warning text-dark me-2">Right Size</span>
+                                                    <br>
+                                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.CombinatorChunk.RightWordlistName)</span>
                                                 </td>
                                             </tr>
                                             break;
@@ -286,10 +340,276 @@ else
                             }
                         </ul>
                     }
+
                 </div>
             </div>
         </div>
     </div>
+
+    @if (_attackReport is { TotalWorkUnits: > 0 })
+    {
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <strong>Attack Report</strong>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a class="btn btn-outline-primary btn-sm" href="/api/jobs/@JobId/work-units">Export JSON</a>
+                    <a class="btn btn-outline-secondary btn-sm" href="/api/jobs/@JobId/work-units?format=csv">Export CSV</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-2 mb-3">
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="border rounded p-2 bg-light">
+                            <div class="small text-muted">Total WU</div>
+                            <div class="fw-semibold">@_attackReport.TotalWorkUnits</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="border rounded p-2 bg-light">
+                            <div class="small text-muted">Completed WU</div>
+                            <div class="fw-semibold">@_attackReport.CompletedWorkUnits (@_attackReport.CompletedRatePercent.ToString("F1")%)</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="border rounded p-2 bg-light">
+                            <div class="small text-muted">Timed Out WU</div>
+                            <div class="fw-semibold">@_attackReport.TimedOutWorkUnits (@_attackReport.TimeoutRatePercent.ToString("F1")%)</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="border rounded p-2 bg-light">
+                            <div class="small text-muted">Retry WU</div>
+                            <div class="fw-semibold">@_attackReport.RetriedWorkUnits</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="border rounded p-2 bg-light">
+                            <div class="small text-muted">Mean WU Duration</div>
+                            <div class="fw-semibold">@FormatDurationSeconds(_attackReport.MeanDurationSeconds)</div>
+                        </div>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <div class="border rounded p-2 bg-light">
+                            <div class="small text-muted">P95 WU Duration</div>
+                            <div class="fw-semibold">@FormatDurationSeconds(_attackReport.P95DurationSeconds)</div>
+                        </div>
+                    </div>
+                </div>
+
+                @if (_attackReport.ByAgent.Count > 0)
+                {
+                    <div class="small text-muted mb-2">
+                        Participating agents: @GetParticipatingAgentCount()
+                    </div>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Agent</th>
+                                    <th>Total WU</th>
+                                    <th>Completed</th>
+                                    <th>Timed Out</th>
+                                    <th>Mean Duration</th>
+                                    <th>Avg Hashrate</th>
+                                    <th>Avg Temp</th>
+                                    <th>Avg Fan</th>
+                                    <th>Avg GPU Util</th>
+                                    <th>Avg VRAM Util</th>
+                                    <th>Avg VRAM Used / Total</th>
+                                    <th>Reject</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in _attackReport.ByAgent.OrderByDescending(x => x.TotalWorkUnits))
+                                {
+                                    var agentStatusReport = GetAgentStatusForReport(item.AgentKey);
+                                    <tr>
+                                        <td class="font-monospace small" rowspan="@GetReportAgentRowspan(agentStatusReport)">@item.AgentKey</td>
+                                        <td>@item.TotalWorkUnits</td>
+                                        <td>@item.CompletedWorkUnits</td>
+                                        <td>@item.TimedOutWorkUnits</td>
+                                        <td>@FormatDurationSeconds(item.MeanDurationSeconds)</td>
+                                        <td>@FormatGpuHashrate(agentStatusReport?.Telemetry.CurrentHashrate ?? -1)</td>
+                                        <td>@FormatIntMetric(agentStatusReport?.Telemetry.Temperature ?? -1, "°C")</td>
+                                        <td>@FormatIntMetric(agentStatusReport?.Telemetry.FanSpeed ?? -1, "%")</td>
+                                        <td>@FormatIntMetric(agentStatusReport?.Telemetry.GpuUtilization ?? -1, "%")</td>
+                                        <td>@FormatAverageGpuUtilization(agentStatusReport?.Telemetry.GpuDevices)</td>
+                                        <td>@FormatAverageVramUsage(agentStatusReport?.Telemetry.GpuDevices)</td>
+                                        <td>@FormatRejectRate(agentStatusReport?.Telemetry.RejectRate)</td>
+                                    </tr>
+
+                                    @if (agentStatusReport is not null && agentStatusReport.Telemetry.GpuDevices.Count > 0)
+                                    {
+                                        @foreach (var gpu in agentStatusReport.Telemetry.GpuDevices.OrderBy(g => g.DeviceIndex))
+                                        {
+                                            <tr class="assignment-row">
+                                                <td colspan="4">
+                                                    <span class="badge rounded-pill bg-dark text-white me-2">GPU @gpu.DeviceIndex</span>
+                                                    @if (!string.IsNullOrWhiteSpace(gpu.DeviceName))
+                                                    {
+                                                        <span class="badge rounded-pill bg-secondary">@gpu.DeviceName</span>
+                                                    }
+                                                </td>
+                                                <td>@FormatGpuHashrate(gpu.CurrentHashrate)</td>
+                                                <td>@FormatIntMetric(gpu.Temperature, "°C")</td>
+                                                <td>@FormatIntMetric(gpu.FanSpeed, "%")</td>
+                                                <td>@FormatIntMetric(gpu.GpuUtilization, "%")</td>
+                                                <td>@FormatIntMetric(gpu.VramUtilization, "%")</td>
+                                                <td>@FormatVramMetric(gpu.VramUsedBytes, gpu.VramTotalBytes, gpu.VramUtilization)</td>
+                                                <td class="text-muted">-</td>
+                                            </tr>
+                                        }
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+
+                @if (_attackReport.Chunks.Count > 0)
+                {
+                    <div class="d-flex justify-content-between align-items-center mb-2 mt-3">
+                        <div>
+                            <strong>Chunk Details</strong>
+                            <span class="text-muted small ms-2">@_attackReport.Chunks.Count unique chunks, @_attackReport.Chunks.Sum(c => c.AttemptCount) attempts</span>
+                        </div>
+                        <div class="d-flex gap-2 align-items-center">
+                            @if (_isChunkDetailsExpanded)
+                            {
+                                <span class="small text-muted">Showing @GetChunkRangeLabel()</span>
+                            }
+                            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ToggleChunkDetails">
+                                @(_isChunkDetailsExpanded ? "Hide" : "Show")
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (_isChunkDetailsExpanded)
+                    {
+                        <div class="table-responsive mb-3">
+                            <table class="table table-sm table-bordered align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Chunk</th>
+                                        <th>Mode</th>
+                                        <th>Attempts</th>
+                                        <th>Agents</th>
+                                        <th>Final Outcome</th>
+                                        <th>Mean Duration</th>
+                                        <th>Recovered</th>
+                                        <th>Attempt History</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var chunk in GetVisibleChunks())
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="small fw-semibold">@chunk.Display.Title</div>
+                                                @if (!string.IsNullOrWhiteSpace(chunk.Display.PrimaryRange))
+                                                {
+                                                    <div class="small text-muted">@chunk.Display.PrimaryRange</div>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(chunk.Display.SecondaryTitle))
+                                                {
+                                                    <div class="small fw-semibold mt-2">@chunk.Display.SecondaryTitle</div>
+                                                }
+                                                @if (!string.IsNullOrWhiteSpace(chunk.Display.SecondaryRange))
+                                                {
+                                                    <div class="small text-muted">@chunk.Display.SecondaryRange</div>
+                                                }
+                                            </td>
+                                            <td>@chunk.Mode</td>
+                                            <td>@chunk.AttemptCount</td>
+                                            <td>
+                                                @foreach (var agent in chunk.Agents)
+                                                {
+                                                    <div class="font-monospace small">@agent</div>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetOutcomeBadgeClass(chunk.FinalOutcome)">@FormatOutcome(chunk.FinalOutcome)</span>
+                                            </td>
+                                            <td>@FormatDurationSeconds(chunk.MeanDurationSeconds)</td>
+                                            <td>@chunk.RecoveredCount</td>
+                                            <td>
+                                                @foreach (var attempt in chunk.Attempts)
+                                                {
+                                                    <div class="border rounded p-1 mb-1 bg-light-subtle">
+                                                        <div class="font-monospace small">@attempt.RequestId</div>
+                                                        <div class="small">@attempt.AgentKey</div>
+                                                        <div class="small text-muted">Assigned: @attempt.AssignedAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</div>
+                                                        <div class="small">
+                                                            <span class="badge @GetOutcomeBadgeClass(attempt.Outcome)">@FormatOutcome(attempt.Outcome)</span>
+                                                            <span class="ms-2">@FormatDurationSeconds(attempt.ProcessingDurationSeconds)</span>
+                                                            @if (attempt.RecoveredCount > 0)
+                                                            {
+                                                                <span class="ms-2">Recovered: @attempt.RecoveredCount</span>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if (GetChunkPageCount() > 1)
+                        {
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="small text-muted">Page @_chunkDetailsPage of @GetChunkPageCount()</div>
+                                <div class="btn-group" role="group" aria-label="Chunk details pagination">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ShowPreviousChunkPage" disabled="@(_chunkDetailsPage <= 1)">Previous 10</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ShowNextChunkPage" disabled="@(_chunkDetailsPage >= GetChunkPageCount())">Next 10</button>
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+
+                <div class="row g-3 mt-2">
+                    <div class="col-12">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Chart: Load Balancing (Agent Work Share)</strong>
+                                <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_load_balancing.png")" href="/api/jobs/@JobId/report-chart?type=load-balancing&amp;ts=@_chartCacheBust">Download PNG</a>
+                            </div>
+                            <img src="/api/jobs/@JobId/report-chart?type=load-balancing&amp;ts=@_chartCacheBust" alt="Load balancing chart" class="img-fluid border rounded" />
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Chart: Mean Work Time Per Agent</strong>
+                                <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_mean_work_time_per_agent.png")" href="/api/jobs/@JobId/report-chart?type=mean-work-time&amp;ts=@_chartCacheBust">Download PNG</a>
+                            </div>
+                            <img src="/api/jobs/@JobId/report-chart?type=mean-work-time&amp;ts=@_chartCacheBust" alt="Mean work time per agent chart" class="img-fluid border rounded" />
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Chart: GPU Usage Over Time (Per Agent + All Agents Avg)</strong>
+                                <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_gpu_usage_over_time.png")" href="/api/jobs/@JobId/report-chart?type=gpu-usage-time&amp;ts=@_chartCacheBust">Download PNG</a>
+                            </div>
+                            <img src="/api/jobs/@JobId/report-chart?type=gpu-usage-time&amp;ts=@_chartCacheBust" alt="GPU usage over time chart" class="img-fluid border rounded" />
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div class="border rounded p-2 bg-white">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Chart: WU Duration Distribution (P95)</strong>
+                                <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_wu_duration_distribution.png")" href="/api/jobs/@JobId/report-chart?type=duration-distribution&amp;ts=@_chartCacheBust">Download PNG</a>
+                            </div>
+                            <img src="/api/jobs/@JobId/report-chart?type=duration-distribution&amp;ts=@_chartCacheBust" alt="Work-unit duration distribution chart" class="img-fluid border rounded" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -300,6 +620,9 @@ else
     private JobRecordEntity? _dbJob;
     private JobStatus? _jobStatus;
     private JobSpecsEnvelope? _jobSpecs;
+    private WorkUnitLifecycleExport? _workUnitLifecycle;
+    private AttackReportSummary? _attackReport;
+    private long _chartCacheBust;
     private List<string> _hashes = [];
     private List<string> _rules = [];
 
@@ -308,6 +631,9 @@ else
     private bool _isRecoveredPasswordsExpanded = true;
     private bool _isHashesExpanded;
     private bool _isRulesExpanded;
+    private bool _isChunkDetailsExpanded = true;
+    private int _chunkDetailsPage = 1;
+    private const int ChunkDetailsPageSize = 10;
 
     protected override async Task OnInitializedAsync()
     {
@@ -349,6 +675,11 @@ else
             _jobSpecs = await jobCoordinator.GetJobSpecs(CancellationToken.None);
             _hashes = _jobSpecs?.Hashes.ToList() ?? [];
             _rules = GetRulesFromSpecs(_jobSpecs).ToList();
+
+            _workUnitLifecycle = await jobCoordinator.GetWorkUnitLifecycle(new WorkUnitLifecycleFilter(), CancellationToken.None);
+            _attackReport = BuildAttackReport(_workUnitLifecycle);
+            EnsureChunkPageInRange();
+            _chartCacheBust = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
         catch (Exception ex)
         {
@@ -367,6 +698,59 @@ else
     private void ToggleRecoveredPasswords() => _isRecoveredPasswordsExpanded = !_isRecoveredPasswordsExpanded;
     private void ToggleHashes() => _isHashesExpanded = !_isHashesExpanded;
     private void ToggleRules() => _isRulesExpanded = !_isRulesExpanded;
+    private void ToggleChunkDetails() => _isChunkDetailsExpanded = !_isChunkDetailsExpanded;
+
+    private IReadOnlyList<ChunkReportSummary> GetVisibleChunks()
+    {
+        if (_attackReport?.Chunks is null || _attackReport.Chunks.Count == 0)
+        {
+            return [];
+        }
+
+        var skip = (_chunkDetailsPage - 1) * ChunkDetailsPageSize;
+        return _attackReport.Chunks.Skip(skip).Take(ChunkDetailsPageSize).ToList();
+    }
+
+    private int GetChunkPageCount()
+    {
+        var total = _attackReport?.Chunks.Count ?? 0;
+        return total == 0 ? 1 : (int)Math.Ceiling(total / (double)ChunkDetailsPageSize);
+    }
+
+    private string GetChunkRangeLabel()
+    {
+        var total = _attackReport?.Chunks.Count ?? 0;
+        if (total == 0)
+        {
+            return "Showing 0 of 0";
+        }
+
+        var start = ((_chunkDetailsPage - 1) * ChunkDetailsPageSize) + 1;
+        var end = Math.Min(total, _chunkDetailsPage * ChunkDetailsPageSize);
+        return $"Showing {start}-{end} of {total}";
+    }
+
+    private void ShowPreviousChunkPage()
+    {
+        if (_chunkDetailsPage > 1)
+        {
+            _chunkDetailsPage--;
+        }
+    }
+
+    private void ShowNextChunkPage()
+    {
+        if (_chunkDetailsPage < GetChunkPageCount())
+        {
+            _chunkDetailsPage++;
+        }
+    }
+
+    private void EnsureChunkPageInRange()
+    {
+        var pageCount = GetChunkPageCount();
+        _chunkDetailsPage = Math.Clamp(_chunkDetailsPage, 1, pageCount);
+    }
 
     private string GetStatusBadgeClass(string? status) => status switch
     {
@@ -396,7 +780,143 @@ else
         return $"hsl({h}, 70%, 45%)";
     }
 
-    private int GetAgentRowspan(IList<AssignedChunk> chunks) => 1 + chunks.Count;
+    private int GetAgentRowspan(AgentStatus agentStatus)
+        => 1
+           + agentStatus.Telemetry.GpuDevices.Count
+           + agentStatus.AssignedChunks.Sum(chunk => GetAssignmentRowCount(chunk));
+
+    private int GetAssignmentRowCount(AssignedChunk chunk)
+    {
+        if (chunk.PayloadCase == AssignedChunk.PayloadOneofCase.CombinatorChunk)
+        {
+            return 2;
+        }
+
+        return 1;
+    }
+
+    private string FormatGpuHashrate(long hashrate)
+    {
+        return hashrate < 0 ? "Unknown" : $"{hashrate:N0} H/s";
+    }
+
+    private string FormatIntMetric(int value, string unit)
+    {
+        return value < 0 ? "Unknown" : $"{value} {unit}";
+    }
+
+    private string FormatVramMetric(long usedBytes, long totalBytes, int utilization)
+    {
+        if (usedBytes < 0 && totalBytes <= 0 && utilization < 0)
+        {
+            return "Unknown";
+        }
+
+        var used = usedBytes >= 0 ? FormatBytes(usedBytes) : "?";
+        var total = totalBytes > 0 ? FormatBytes(totalBytes) : "?";
+        var util = utilization >= 0 ? $" ({utilization}%)" : string.Empty;
+        return $"{used} / {total}{util}";
+    }
+
+    private static int GetReportAgentRowspan(AgentStatus? status)
+        => 1 + (status?.Telemetry.GpuDevices.Count ?? 0);
+
+    private AgentStatus? GetAgentStatusForReport(string agentKey)
+    {
+        if (_jobStatus is null)
+        {
+            return null;
+        }
+
+        var participating = _jobStatus.ParticipatingAgents.FirstOrDefault(agent =>
+            string.Equals($"{agent.Telemetry.AgentId.Address}/{agent.Telemetry.AgentId.Id}", agentKey, StringComparison.Ordinal));
+
+        if (participating is not null)
+        {
+            return participating;
+        }
+
+        return _jobStatus.Agents.FirstOrDefault(agent =>
+            string.Equals($"{agent.Telemetry.AgentId.Address}/{agent.Telemetry.AgentId.Id}", agentKey, StringComparison.Ordinal));
+    }
+
+    private int GetParticipatingAgentCount()
+    {
+        if (_jobStatus is null)
+        {
+            return 0;
+        }
+
+        if (_jobStatus.ParticipatingAgents.Count > 0)
+        {
+            return _jobStatus.ParticipatingAgents.Count;
+        }
+
+        return _attackReport?.ByAgent.Count ?? 0;
+    }
+
+    private static string GetOutcomeBadgeClass(string? outcome) => outcome?.ToLowerInvariant() switch
+    {
+        var value when value is not null && value.StartsWith("completed") => "bg-success",
+        "timed_out_requeued" => "bg-warning text-dark",
+        "assigned" => "bg-secondary",
+        _ => "bg-dark"
+    };
+
+    private static string FormatOutcome(string? outcome)
+    {
+        if (string.IsNullOrWhiteSpace(outcome))
+        {
+            return "Unknown";
+        }
+
+        return outcome.Replace('_', ' ');
+    }
+
+    private static string FormatRejectRate(float? rejectRate)
+    {
+        if (!rejectRate.HasValue || float.IsNaN(rejectRate.Value))
+        {
+            return "Unknown";
+        }
+
+        return $"{rejectRate.Value * 100:F2} %";
+    }
+
+    private static string FormatAverageGpuUtilization(IEnumerable<GpuDeviceTelemetry>? devices)
+    {
+        if (devices is null)
+        {
+            return "Unknown";
+        }
+
+        var usable = devices.Where(d => d.GpuUtilization >= 0).Select(d => d.GpuUtilization).ToList();
+        if (usable.Count == 0)
+        {
+            return "Unknown";
+        }
+
+        return $"{usable.Average():F1} %";
+    }
+
+    private static string FormatAverageVramUsage(IEnumerable<GpuDeviceTelemetry>? devices)
+    {
+        if (devices is null)
+        {
+            return "Unknown";
+        }
+
+        var usable = devices.Where(d => d.VramUsedBytes >= 0 && d.VramTotalBytes > 0).ToList();
+        if (usable.Count == 0)
+        {
+            return "Unknown";
+        }
+
+        var avgUsed = (long)usable.Average(d => d.VramUsedBytes);
+        var avgTotal = (long)usable.Average(d => d.VramTotalBytes);
+        var util = avgTotal > 0 ? (int)Math.Round(avgUsed * 100.0 / avgTotal) : -1;
+        return $"{FormatBytes(avgUsed)} / {FormatBytes(avgTotal)}" + (util >= 0 ? $" ({util}%)" : string.Empty);
+    }
 
     private string GetWordlistSizeLabel(string? wordlistName)
     {
@@ -466,5 +986,299 @@ else
             : ruleContent.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
                 .Select(rule => rule.Trim())
                 .Where(rule => !string.IsNullOrWhiteSpace(rule));
+    }
+
+    private static AttackReportSummary BuildAttackReport(WorkUnitLifecycleExport? export)
+    {
+        if (export is null || export.Records.Count == 0)
+        {
+            return new AttackReportSummary();
+        }
+
+        var records = export.Records.ToList();
+        var completed = records.Count(r => r.Outcome.StartsWith("completed", StringComparison.OrdinalIgnoreCase));
+        var timedOut = records.Count(r => string.Equals(r.Outcome, "timed_out_requeued", StringComparison.OrdinalIgnoreCase));
+        var retried = timedOut;
+
+        var durations = records
+            .Select(r => r.ProcessingDurationSeconds)
+            .Where(v => v >= 0)
+            .OrderBy(v => v)
+            .ToList();
+
+        var byAgent = records
+            .GroupBy(r => string.IsNullOrWhiteSpace(r.AgentKey) ? "unknown" : r.AgentKey)
+            .Select(group =>
+            {
+                var groupDurations = group
+                    .Select(r => r.ProcessingDurationSeconds)
+                    .Where(v => v >= 0)
+                    .ToList();
+                return new AgentReportSummary
+                {
+                    AgentKey = group.Key,
+                    TotalWorkUnits = group.Count(),
+                    CompletedWorkUnits = group.Count(r => r.Outcome.StartsWith("completed", StringComparison.OrdinalIgnoreCase)),
+                    TimedOutWorkUnits = group.Count(r => string.Equals(r.Outcome, "timed_out_requeued", StringComparison.OrdinalIgnoreCase)),
+                    MeanDurationSeconds = groupDurations.Count > 0 ? groupDurations.Average() : 0
+                };
+            })
+            .ToList();
+
+        var chunks = records
+            .GroupBy(r => BuildChunkGroupKey(r.Mode, r.ChunkSummary))
+            .Select(group =>
+            {
+                var ordered = group
+                    .OrderBy(r => r.AssignedAt?.ToDateTime() ?? DateTime.MinValue)
+                    .ToList();
+                var durationsForChunk = ordered
+                    .Select(r => r.ProcessingDurationSeconds)
+                    .Where(v => v >= 0)
+                    .ToList();
+                var first = ordered[0];
+                var parsed = ParseChunkSummary(first.Mode, first.ChunkSummary);
+                return new ChunkReportSummary
+                {
+                    Mode = parsed.ModeLabel,
+                    Display = parsed,
+                    AttemptCount = ordered.Count,
+                    Agents = ordered
+                        .Select(r => string.IsNullOrWhiteSpace(r.AgentKey) ? "unknown" : r.AgentKey)
+                        .Distinct(StringComparer.Ordinal)
+                        .ToList(),
+                    FinalOutcome = ordered[^1].Outcome,
+                    MeanDurationSeconds = durationsForChunk.Count > 0 ? durationsForChunk.Average() : 0,
+                    RecoveredCount = ordered.Sum(r => r.RecoveredCount),
+                    Attempts = ordered.Select(r => new ChunkAttemptSummary
+                    {
+                        RequestId = r.RequestId,
+                        AgentKey = string.IsNullOrWhiteSpace(r.AgentKey) ? "unknown" : r.AgentKey,
+                        Outcome = r.Outcome,
+                        ProcessingDurationSeconds = r.ProcessingDurationSeconds,
+                        RecoveredCount = r.RecoveredCount,
+                        AssignedAtUtc = r.AssignedAt?.ToDateTime().ToUniversalTime() ?? DateTime.MinValue
+                    }).ToList()
+                };
+            })
+            .OrderByDescending(chunk => chunk.Attempts.Max(a => a.AssignedAtUtc))
+            .ToList();
+
+        var total = records.Count;
+        return new AttackReportSummary
+        {
+            TotalWorkUnits = total,
+            CompletedWorkUnits = completed,
+            TimedOutWorkUnits = timedOut,
+            RetriedWorkUnits = retried,
+            CompletedRatePercent = total > 0 ? completed * 100.0 / total : 0,
+            TimeoutRatePercent = total > 0 ? timedOut * 100.0 / total : 0,
+            MeanDurationSeconds = durations.Count > 0 ? durations.Average() : 0,
+            P95DurationSeconds = Percentile(durations, 0.95),
+            ByAgent = byAgent,
+            Chunks = chunks
+        };
+    }
+
+    private static string BuildChunkGroupKey(string? mode, string? chunkSummary)
+    {
+        var parsed = ParseChunkSummary(mode, chunkSummary);
+        return string.Join("|", [
+            parsed.ModeLabel,
+            parsed.Title,
+            parsed.PrimaryRange,
+            parsed.SecondaryTitle,
+            parsed.SecondaryRange
+        ]);
+    }
+
+    private static ChunkDisplaySummary ParseChunkSummary(string? mode, string? chunkSummary)
+    {
+        var normalizedMode = string.IsNullOrWhiteSpace(mode) ? "unknown" : mode;
+        var summary = chunkSummary?.Trim() ?? string.Empty;
+
+        if (summary.StartsWith("mask=", StringComparison.OrdinalIgnoreCase))
+        {
+            var mask = ExtractBetween(summary, "mask=", ";range=");
+            var range = ExtractAfter(summary, ";range=");
+            return new ChunkDisplaySummary
+            {
+                ModeLabel = normalizedMode,
+                Title = $"Mask: {mask}",
+                PrimaryRange = string.IsNullOrWhiteSpace(range) ? string.Empty : $"Range: {range}"
+            };
+        }
+
+        if (summary.StartsWith("wordlist=", StringComparison.OrdinalIgnoreCase))
+        {
+            var wordlist = ExtractBetween(summary, "wordlist=", ";bytes=");
+            var range = ExtractAfter(summary, ";bytes=");
+            return new ChunkDisplaySummary
+            {
+                ModeLabel = normalizedMode,
+                Title = $"Wordlist: {wordlist}",
+                PrimaryRange = string.IsNullOrWhiteSpace(range) ? string.Empty : $"Bytes: {range}"
+            };
+        }
+
+        if (summary.StartsWith("dictionary_url=", StringComparison.OrdinalIgnoreCase))
+        {
+            var urlValue = ExtractAfter(summary, "dictionary_url=");
+            if (Uri.TryCreate(urlValue, UriKind.Absolute, out var uri))
+            {
+                var name = Uri.UnescapeDataString(uri.Segments.LastOrDefault()?.Trim('/') ?? "unknown");
+                var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+                var startByte = query.TryGetValue("startByte", out var startValue) ? startValue.ToString() : "0";
+                var endByte = query.TryGetValue("endByte", out var endValue) ? endValue.ToString() : "EOF";
+                return new ChunkDisplaySummary
+                {
+                    ModeLabel = normalizedMode,
+                    Title = $"Wordlist: {name}",
+                    PrimaryRange = $"Bytes: {startByte} - {endByte}"
+                };
+            }
+        }
+
+        if (summary.StartsWith("left=", StringComparison.OrdinalIgnoreCase) && summary.Contains(";right=", StringComparison.OrdinalIgnoreCase))
+        {
+            var splitIndex = summary.IndexOf(";right=", StringComparison.OrdinalIgnoreCase);
+            var leftSegment = splitIndex >= 0 ? summary[..splitIndex] : summary;
+            var rightSegment = splitIndex >= 0 ? summary[(splitIndex + 1)..] : string.Empty;
+            var (leftName, leftRange) = ParseBracketedSegment(leftSegment, "left=");
+            var (rightName, rightRange) = ParseBracketedSegment(rightSegment, "right=");
+            return new ChunkDisplaySummary
+            {
+                ModeLabel = normalizedMode,
+                Title = $"Left: {leftName}",
+                PrimaryRange = string.IsNullOrWhiteSpace(leftRange) ? string.Empty : $"Bytes: {leftRange}",
+                SecondaryTitle = $"Right: {rightName}",
+                SecondaryRange = string.IsNullOrWhiteSpace(rightRange) ? string.Empty : $"Bytes: {rightRange}"
+            };
+        }
+
+        return new ChunkDisplaySummary
+        {
+            ModeLabel = normalizedMode,
+            Title = summary,
+            PrimaryRange = string.Empty
+        };
+    }
+
+    private static string ExtractBetween(string text, string startMarker, string endMarker)
+    {
+        var start = text.IndexOf(startMarker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        start += startMarker.Length;
+        var end = text.IndexOf(endMarker, start, StringComparison.OrdinalIgnoreCase);
+        return end >= start ? text[start..end] : text[start..];
+    }
+
+    private static string ExtractAfter(string text, string marker)
+    {
+        var start = text.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (start < 0)
+        {
+            return string.Empty;
+        }
+
+        return text[(start + marker.Length)..];
+    }
+
+    private static (string Name, string Range) ParseBracketedSegment(string segment, string prefix)
+    {
+        var value = ExtractAfter(segment, prefix);
+        var bracketStart = value.LastIndexOf('[');
+        var bracketEnd = value.LastIndexOf(']');
+        if (bracketStart < 0 || bracketEnd <= bracketStart)
+        {
+            return (value, string.Empty);
+        }
+
+        return (value[..bracketStart], value[(bracketStart + 1)..bracketEnd]);
+    }
+
+    private static double Percentile(IReadOnlyList<double> sortedValues, double percentile)
+    {
+        if (sortedValues.Count == 0)
+        {
+            return 0;
+        }
+
+        if (percentile <= 0)
+        {
+            return sortedValues[0];
+        }
+
+        if (percentile >= 1)
+        {
+            return sortedValues[sortedValues.Count - 1];
+        }
+
+        var index = (int)Math.Ceiling(percentile * sortedValues.Count) - 1;
+        index = Math.Clamp(index, 0, sortedValues.Count - 1);
+        return sortedValues[index];
+    }
+
+    private static string FormatDurationSeconds(double seconds)
+    {
+        return $"{seconds:F2} s";
+    }
+
+    private sealed class AttackReportSummary
+    {
+        public int TotalWorkUnits { get; set; }
+        public int CompletedWorkUnits { get; set; }
+        public int TimedOutWorkUnits { get; set; }
+        public int RetriedWorkUnits { get; set; }
+        public double CompletedRatePercent { get; set; }
+        public double TimeoutRatePercent { get; set; }
+        public double MeanDurationSeconds { get; set; }
+        public double P95DurationSeconds { get; set; }
+        public List<AgentReportSummary> ByAgent { get; set; } = [];
+        public List<ChunkReportSummary> Chunks { get; set; } = [];
+    }
+
+    private sealed class AgentReportSummary
+    {
+        public string AgentKey { get; set; } = string.Empty;
+        public int TotalWorkUnits { get; set; }
+        public int CompletedWorkUnits { get; set; }
+        public int TimedOutWorkUnits { get; set; }
+        public double MeanDurationSeconds { get; set; }
+    }
+
+    private sealed class ChunkReportSummary
+    {
+        public string Mode { get; set; } = string.Empty;
+        public ChunkDisplaySummary Display { get; set; } = new();
+        public int AttemptCount { get; set; }
+        public List<string> Agents { get; set; } = [];
+        public string FinalOutcome { get; set; } = string.Empty;
+        public double MeanDurationSeconds { get; set; }
+        public int RecoveredCount { get; set; }
+        public List<ChunkAttemptSummary> Attempts { get; set; } = [];
+    }
+
+    private sealed class ChunkAttemptSummary
+    {
+        public string RequestId { get; set; } = string.Empty;
+        public string AgentKey { get; set; } = string.Empty;
+        public string Outcome { get; set; } = string.Empty;
+        public double ProcessingDurationSeconds { get; set; }
+        public int RecoveredCount { get; set; }
+        public DateTime AssignedAtUtc { get; set; }
+    }
+
+    private sealed class ChunkDisplaySummary
+    {
+        public string ModeLabel { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string PrimaryRange { get; set; } = string.Empty;
+        public string SecondaryTitle { get; set; } = string.Empty;
+        public string SecondaryRange { get; set; } = string.Empty;
     }
 }

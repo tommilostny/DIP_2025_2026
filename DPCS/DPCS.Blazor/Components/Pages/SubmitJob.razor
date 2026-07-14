@@ -132,7 +132,7 @@
                             <div class="col-md-6 mb-3">
                                 <WordlistSelection Title="Left Wordlist"
                                                    AvailableWordlists="_availableWordlists"
-                                                   AllowMultiple="false"
+                                                   AllowMultiple="true"
                                                    @bind-SelectedWordlists="Model.LeftWordlists"
                                                    ValidationFor="() => Model.LeftWordlists"
                                                    HelpText="Choose the left-side wordlist for the combinator attack." />
@@ -140,7 +140,7 @@
                             <div class="col-md-6 mb-3">
                                 <WordlistSelection Title="Right Wordlist"
                                                    AvailableWordlists="_availableWordlists"
-                                                   AllowMultiple="false"
+                                                   AllowMultiple="true"
                                                    @bind-SelectedWordlists="Model.RightWordlists"
                                                    ValidationFor="() => Model.RightWordlists"
                                                    HelpText="Choose the right-side wordlist for the combinator attack." />

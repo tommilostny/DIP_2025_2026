@@ -1,0 +1,20 @@
+services:
+  consul:
+    image: consul:1.15.4
+    command: agent -server -bootstrap-expect=1 -client=0.0.0.0 -ui
+    ports:
+      - "8500:8500"
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: dpcs
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
+
 namespace DPCS.Agent.Actors;
 
 /// <summary>
@@ -10,6 +13,15 @@ namespace DPCS.Agent.Actors;
 /// </remarks>
 public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper, int maxPrefetchQueueSize = 1, TimeSpan? heartbeatInterval = null) : IActor
 {
+    private static readonly ActivitySource WorkUnitActivitySource = new("DPCS.Agent");
+    private static readonly Meter AgentMeter = new("DPCS.Agent");
+    private static readonly Counter<long> WorkUnitStartedCounter = AgentMeter.CreateCounter<long>("dpcs.agent.wu.started.total", description: "Number of work-unit executions started by agent.");
+    private static readonly Counter<long> WorkUnitResultCounter = AgentMeter.CreateCounter<long>("dpcs.agent.wu.result.total", description: "Number of finished work-unit executions by outcome.");
+    private static readonly UpDownCounter<long> WorkUnitActiveCounter = AgentMeter.CreateUpDownCounter<long>("dpcs.agent.wu.active", description: "Number of work units currently executing on this agent.");
+    private static readonly Histogram<double> WorkUnitComputeDurationSeconds = AgentMeter.CreateHistogram<double>("dpcs.agent.wu.compute.duration.seconds", unit: "s", description: "Time spent in hashcat compute for one work-unit execution.");
+    private static readonly Histogram<double> WorkUnitSubmissionDurationSeconds = AgentMeter.CreateHistogram<double>("dpcs.agent.wu.submission.duration.seconds", unit: "s", description: "Time spent submitting one work-unit result back to coordinator.");
+    private static readonly Histogram<double> WorkUnitTotalDurationSeconds = AgentMeter.CreateHistogram<double>("dpcs.agent.wu.total.duration.seconds", unit: "s", description: "Total work-unit execution time including compute and submission.");
+
     private CancellationTokenSource? _currentWorkCts;
     private JobAssignment? _currentJob;
     private readonly HashFileStore _hashFileStore = new();
@@ -21,7 +33,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     private bool _isCracking;
     private bool _noMoreWork;
     private Timer? _heartbeatTimer;
-    private readonly TimeSpan _heartbeatInterval = heartbeatInterval ?? TimeSpan.FromSeconds(15);
+    private readonly TimeSpan _heartbeatInterval = heartbeatInterval ?? TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// Main actor message dispatcher.
@@ -234,8 +246,27 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     /// </summary>
     private async Task ProcessAndSubmitAsync(WorkAssignmentEnvelope chunk, IContext context)
     {
+        var modeTag = GetWorkUnitModeTag(chunk);
+        using var workUnitActivity = WorkUnitActivitySource.StartActivity("wu.execute", ActivityKind.Internal);
+        workUnitActivity?.SetTag("job.id", _currentJob?.JobId);
+        workUnitActivity?.SetTag("wu.request_id", chunk.RequestId);
+        workUnitActivity?.SetTag("wu.mode", modeTag);
+        workUnitActivity?.SetTag("agent.id", context.Self.Id);
+        workUnitActivity?.SetTag("agent.address", context.Self.Address);
+
+        EmitWorkUnitLifecycleLog("wu_started", chunk, context, modeTag);
+        WorkUnitStartedCounter.Add(1, new KeyValuePair<string, object?>("mode", modeTag));
+        WorkUnitActiveCounter.Add(1, new KeyValuePair<string, object?>("mode", modeTag));
+        await SendHeartbeatAsync(context);
+
+        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var computeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        using var computeActivity = WorkUnitActivitySource.StartActivity("wu.compute", ActivityKind.Internal);
+        computeActivity?.SetTag("wu.request_id", chunk.RequestId);
+        computeActivity?.SetTag("wu.mode", modeTag);
         List<RecoveredPassword> recovered = [];
         bool isFaulted = false;
+        bool submitFailed = false;
         try
         {
             recovered = await ProcessChunkAsync(chunk);
@@ -243,10 +274,22 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         catch (Exception ex)
         {
             isFaulted = true;
+            computeActivity?.SetStatus(ActivityStatusCode.Error, ex.GetBaseException().Message);
+            workUnitActivity?.SetStatus(ActivityStatusCode.Error, ex.GetBaseException().Message);
             Console.Error.WriteLine($"Hashcat task failed: {ex.GetBaseException().Message}");
         }
         finally
         {
+            computeStopwatch.Stop();
+            computeActivity?.SetTag("wu.compute.duration_seconds", computeStopwatch.Elapsed.TotalSeconds);
+            EmitWorkUnitLifecycleLog("wu_compute_finished", chunk, context, modeTag, new()
+            {
+                ["compute_duration_seconds"] = computeStopwatch.Elapsed.TotalSeconds,
+                ["faulted"] = isFaulted
+            });
+            WorkUnitComputeDurationSeconds.Record(
+                computeStopwatch.Elapsed.TotalSeconds,
+                new KeyValuePair<string, object?>("mode", modeTag));
             _workAssignmentMaterializer.CleanupAssignmentFiles(chunk);
         }
 
@@ -258,6 +301,10 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             RequestId = chunk.RequestId,
         };
 
+        var submissionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        using var submissionActivity = WorkUnitActivitySource.StartActivity("wu.submit", ActivityKind.Client);
+        submissionActivity?.SetTag("wu.request_id", chunk.RequestId);
+        submissionActivity?.SetTag("wu.mode", modeTag);
         try
         {
             var coordinator = cluster.GetJobCoordinatorGrain(_currentJob!.JobId);
@@ -277,8 +324,110 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         }
         catch (Exception ex)
         {
+            submitFailed = true;
+            submissionActivity?.SetStatus(ActivityStatusCode.Error, ex.GetBaseException().Message);
+            workUnitActivity?.SetStatus(ActivityStatusCode.Error, ex.GetBaseException().Message);
             Console.WriteLine($"Failed to submit work result: {ex.Message}");
         }
+        finally
+        {
+            submissionStopwatch.Stop();
+            totalStopwatch.Stop();
+            submissionActivity?.SetTag("wu.submission.duration_seconds", submissionStopwatch.Elapsed.TotalSeconds);
+            workUnitActivity?.SetTag("wu.total.duration_seconds", totalStopwatch.Elapsed.TotalSeconds);
+
+            WorkUnitSubmissionDurationSeconds.Record(
+                submissionStopwatch.Elapsed.TotalSeconds,
+                new KeyValuePair<string, object?>("mode", modeTag));
+            WorkUnitTotalDurationSeconds.Record(
+                totalStopwatch.Elapsed.TotalSeconds,
+                new KeyValuePair<string, object?>("mode", modeTag));
+
+            var outcome = isFaulted ? "faulted" : submitFailed ? "submit_failed" : "completed";
+            WorkUnitResultCounter.Add(
+                1,
+                new KeyValuePair<string, object?>("mode", modeTag),
+                new KeyValuePair<string, object?>("outcome", outcome));
+            WorkUnitActiveCounter.Add(-1, new KeyValuePair<string, object?>("mode", modeTag));
+
+            EmitWorkUnitLifecycleLog("wu_finished", chunk, context, modeTag, new()
+            {
+                ["outcome"] = outcome,
+                ["compute_duration_seconds"] = computeStopwatch.Elapsed.TotalSeconds,
+                ["submission_duration_seconds"] = submissionStopwatch.Elapsed.TotalSeconds,
+                ["total_duration_seconds"] = totalStopwatch.Elapsed.TotalSeconds,
+                ["recovered_count"] = recovered.Count
+            });
+
+            await SendHeartbeatAsync(context);
+        }
+    }
+
+    private static string GetWorkUnitModeTag(WorkAssignmentEnvelope chunk)
+    {
+        return chunk.PayloadCase switch
+        {
+            WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment => "mask",
+            WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment => "dictionary",
+            WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment => "combinator",
+            _ => "unknown"
+        };
+    }
+
+    private void EmitWorkUnitLifecycleLog(
+        string eventName,
+        WorkAssignmentEnvelope chunk,
+        IContext context,
+        string modeTag,
+        Dictionary<string, object?>? extras = null)
+    {
+        var payload = new Dictionary<string, object?>
+        {
+            ["event"] = eventName,
+            ["timestamp_utc"] = DateTime.UtcNow,
+            ["job_id"] = _currentJob?.JobId,
+            ["request_id"] = chunk.RequestId,
+            ["mode"] = modeTag,
+            ["agent_id"] = context.Self.Id,
+            ["agent_address"] = context.Self.Address,
+            ["chunk"] = DescribeChunk(chunk)
+        };
+
+        if (extras is not null)
+        {
+            foreach (var (key, value) in extras)
+            {
+                payload[key] = value;
+            }
+        }
+
+        Console.WriteLine($"WU_LIFECYCLE {System.Text.Json.JsonSerializer.Serialize(payload)}");
+    }
+
+    private static object DescribeChunk(WorkAssignmentEnvelope chunk)
+    {
+        return chunk.PayloadCase switch
+        {
+            WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment => new
+            {
+                type = "mask",
+                mask = chunk.MaskAssignment.Mask,
+                keyspace_start = chunk.MaskAssignment.KeyspaceStart,
+                keyspace_length = chunk.MaskAssignment.KeyspaceLength
+            },
+            WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment => new
+            {
+                type = "dictionary",
+                dictionary_chunk_url = chunk.DictionaryAssignment.DictionaryChunkUrl
+            },
+            WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment => new
+            {
+                type = "combinator",
+                left_dictionary_chunk_url = chunk.CombinatorAssignment.LeftDictionaryChunkUrl,
+                right_dictionary_chunk_url = chunk.CombinatorAssignment.RightDictionaryChunkUrl
+            },
+            _ => new { type = "unknown" }
+        };
     }
 
     /// <summary>
@@ -365,13 +514,18 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     /// </summary>
     private async Task OnHeartbeatTick(IContext context)
     {
+        await SendHeartbeatAsync(context);
+    }
+
+    private async Task SendHeartbeatAsync(IContext context)
+    {
         if (_currentJob is not null)
         {
             try
             {
                 var coordinator = cluster.GetJobCoordinatorGrain(_currentJob.JobId);
-                
-                await coordinator.Heartbeat(new AgentTelemetry 
+
+                var telemetry = new AgentTelemetry
                 {
                     AgentId = new AgentId { Address = context.Self.Address, Id = context.Self.Id },
                     CurrentHashrate = hashcatWrapper.CurrentHashrate,
@@ -379,7 +533,10 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
                     FanSpeed = hashcatWrapper.FanSpeed,
                     GpuUtilization = hashcatWrapper.GpuUtilization,
                     RejectRate = hashcatWrapper.RejectRate,
-                }, CancellationToken.None);
+                };
+                telemetry.GpuDevices.AddRange(hashcatWrapper.GpuDevices);
+
+                await coordinator.Heartbeat(telemetry, CancellationToken.None);
             }
             catch { /* Ignore heartbeat network delivery failures */ }
         }

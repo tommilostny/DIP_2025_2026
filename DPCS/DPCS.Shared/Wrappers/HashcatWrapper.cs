@@ -16,6 +16,9 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
     public int GpuUtilization { get; private set; }
     public float RejectRate { get; private set; }
     public long CurrentHashrate { get; private set; }
+    public IReadOnlyList<GpuDeviceTelemetry> GpuDevices => _gpuDevices;
+
+    private IReadOnlyList<GpuDeviceTelemetry> _gpuDevices = [];
 
     public async Task<List<RecoveredPassword>> RunHashcatMaskAttackAsync(MaskWorkAssignment chunk, int hashType, string hashFilePath, CancellationToken ct)
     {
@@ -88,7 +91,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         arguments.Append(" --quiet"); // Suppress non-essential output for cleaner logs
         arguments.Append(" --potfile-disable"); // Do not skip work using cached potfiles
         arguments.Append($" --outfile=\"{outFilePath}\""); // Safely write cracked passwords to a temp file
-        arguments.Append(" --status --status-json --status-timer 5"); // Periodically print JSON status to stdout
+        arguments.Append(" --status --status-json --status-timer 2"); // Emit JSON status frequently to capture telemetry for short-lived chunks
 
         // We set captureOutput: false to prevent memory bloat during long jobs, 
         // but onLine will still receive stdout because we force redirection internally.
@@ -275,34 +278,79 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
                 int tempSum = 0, fanSum = 0, utilSum = 0;
                 int validTemps = 0, validFans = 0, validUtils = 0;
                 long speedSum = 0;
+                var deviceTelemetry = new List<GpuDeviceTelemetry>();
+                var deviceCounter = 0;
 
                 foreach (var device in devices.EnumerateArray())
                 {
-                    if (device.TryGetProperty("temp", out var t) && t.ValueKind == JsonValueKind.Number)
+                    var deviceIndex = GetInt32(device, "device_id", "device", "id") ?? deviceCounter;
+                    var deviceName = GetString(device, "device_name", "name") ?? $"GPU {deviceIndex}";
+                    var temp = GetInt32(device, "temp", "temperature") ?? -1;
+                    var fan = GetInt32(device, "fanspeed", "fan") ?? -1;
+                    var util = GetInt32(device, "util", "gpu_util") ?? -1;
+                    var speed = GetInt64(device, "speed", "hashrate") ?? -1;
+                    var vramTotal = GetInt64(device, "memory_total", "mem_total", "vram_total") ?? -1;
+                    var vramUsed = GetInt64(device, "memory_used", "mem_used", "vram_used") ?? -1;
+                    var vramUtil = GetInt32(device, "memory_util", "mem_util", "vram_util") ?? -1;
+
+                    if (vramUsed < 0)
                     {
-                        var temp = t.GetInt32();
-                        if (temp > 0) { tempSum += temp; validTemps++; }
+                        var vramFree = GetInt64(device, "memory_free", "mem_free", "vram_free");
+                        if (vramTotal > 0 && vramFree is >= 0)
+                        {
+                            vramUsed = Math.Max(0, vramTotal - vramFree.Value);
+                        }
                     }
-                    if (device.TryGetProperty("fanspeed", out var f) && f.ValueKind == JsonValueKind.Number)
+
+                    if (vramUtil < 0 && vramTotal > 0 && vramUsed >= 0)
                     {
-                        var fan = f.GetInt32();
-                        if (fan >= 0) { fanSum += fan; validFans++; }
+                        vramUtil = (int)Math.Clamp((vramUsed * 100L) / vramTotal, 0, 100);
                     }
-                    if (device.TryGetProperty("util", out var u) && u.ValueKind == JsonValueKind.Number)
+
+                    if (temp > 0)
                     {
-                        var util = u.GetInt32();
-                        if (util >= 0) { utilSum += util; validUtils++; }
+                        tempSum += temp;
+                        validTemps++;
                     }
-                    if (device.TryGetProperty("speed", out var s) && s.ValueKind == JsonValueKind.Number)
+
+                    if (fan >= 0)
                     {
-                        speedSum += s.GetInt64();
+                        fanSum += fan;
+                        validFans++;
                     }
+
+                    if (util >= 0)
+                    {
+                        utilSum += util;
+                        validUtils++;
+                    }
+
+                    if (speed >= 0)
+                    {
+                        speedSum += speed;
+                    }
+
+                    deviceTelemetry.Add(new GpuDeviceTelemetry
+                    {
+                        DeviceIndex = deviceIndex,
+                        DeviceName = deviceName,
+                        CurrentHashrate = speed,
+                        Temperature = temp,
+                        FanSpeed = fan,
+                        GpuUtilization = util,
+                        VramTotalBytes = vramTotal,
+                        VramUsedBytes = vramUsed,
+                        VramUtilization = vramUtil
+                    });
+
+                    deviceCounter++;
                 }
 
                 Temperature = validTemps > 0 ? tempSum / validTemps : 0;
                 FanSpeed = validFans > 0 ? fanSum / validFans : 0;
                 GpuUtilization = validUtils > 0 ? utilSum / validUtils : 0;
                 CurrentHashrate = speedSum;
+                _gpuDevices = deviceTelemetry;
 
                 //Console.WriteLine($"Updated telemetry - Temp: {Temperature}°C, Fan: {FanSpeed}%, Utilization: {GpuUtilization}%, Hashrate: {CurrentHashrate} H/s");
             }
@@ -317,6 +365,54 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
             }
         }
         catch { /* Ignore parse errors from malformed JSON strings */ }
+    }
+
+    private static int? GetInt32(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Number)
+            {
+                continue;
+            }
+
+            if (value.TryGetInt32(out var i32)) return i32;
+            if (value.TryGetInt64(out var i64) && i64 >= int.MinValue && i64 <= int.MaxValue) return (int)i64;
+        }
+
+        return null;
+    }
+
+    private static long? GetInt64(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.Number)
+            {
+                continue;
+            }
+
+            if (value.TryGetInt64(out var i64)) return i64;
+            if (value.TryGetDouble(out var dbl)) return (long)dbl;
+        }
+
+        return null;
+    }
+
+    private static string? GetString(JsonElement element, params string[] propertyNames)
+    {
+        foreach (var propertyName in propertyNames)
+        {
+            if (!element.TryGetProperty(propertyName, out var value) || value.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var text = value.GetString();
+            if (!string.IsNullOrWhiteSpace(text)) return text;
+        }
+
+        return null;
     }
 
     private async Task<string> ExecuteHashcatInternalAsync(string arguments, bool captureOutput, CancellationToken cancellationToken, Action<string>? onLine = null)
@@ -397,5 +493,6 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         GpuUtilization = 0;
         RejectRate = 0.0f;
         CurrentHashrate = 0;
+        _gpuDevices = [];
     }
 }

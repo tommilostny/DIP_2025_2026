@@ -1,10 +1,40 @@
 using DPCS.Coordinator.Strategies;
+using JsonSerializer = System.Text.Json.JsonSerializer;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 
 namespace DPCS.Coordinator.Grains;
 
 public class JobCoordinatorGrain : JobCoordinatorGrainBase
 {
+    private static readonly ActivitySource WorkUnitActivitySource = new("DPCS.Coordinator");
+    private static readonly Meter CoordinatorMeter = new("DPCS.Coordinator");
+    private static readonly Counter<long> WorkUnitAssignedCounter = CoordinatorMeter.CreateCounter<long>("dpcs.coordinator.wu.assigned.total", description: "Number of work units assigned by coordinator.");
+    private static readonly Counter<long> WorkUnitCompletedCounter = CoordinatorMeter.CreateCounter<long>("dpcs.coordinator.wu.completed.total", description: "Number of work units completed and submitted.");
+    private static readonly Counter<long> WorkUnitRetriedCounter = CoordinatorMeter.CreateCounter<long>("dpcs.coordinator.wu.retried.total", description: "Number of work units queued for retry.");
+    private static readonly Counter<long> WorkUnitTimeoutCounter = CoordinatorMeter.CreateCounter<long>("dpcs.coordinator.wu.timeout.total", description: "Number of work units that timed out due to worker liveness expiration.");
+    private static readonly UpDownCounter<long> WorkUnitActiveCounter = CoordinatorMeter.CreateUpDownCounter<long>("dpcs.coordinator.wu.active", description: "Number of work units currently assigned and awaiting result.");
+    private static readonly Histogram<double> WorkUnitProcessingDurationSeconds = CoordinatorMeter.CreateHistogram<double>("dpcs.coordinator.wu.processing.duration.seconds", unit: "s", description: "Time from work assignment to completion or timeout.");
+
     private readonly ClusterIdentity _clusterIdentity;
+    private const int MaxLifecycleRecords = 10000;
+    private const int MaxGpuTelemetrySamples = 50000;
+
+    private sealed class WorkUnitLifecycleState
+    {
+        public string RequestId { get; set; } = string.Empty;
+        public string JobId { get; set; } = string.Empty;
+        public string Mode { get; set; } = "unknown";
+        public string AgentKey { get; set; } = string.Empty;
+        public string ChunkSummary { get; set; } = string.Empty;
+        public DateTime AssignedAtUtc { get; set; }
+        public DateTime LastUpdatedUtc { get; set; }
+        public DateTime? CompletedAtUtc { get; set; }
+        public DateTime? TimedOutAtUtc { get; set; }
+        public string Outcome { get; set; } = "assigned";
+        public double? ProcessingDurationSeconds { get; set; }
+        public int RecoveredCount { get; set; }
+    }
 
     // Maps a Worker PID to the RequestId of the chunk they are currently processing.
     private readonly Lock _workersLock = new();
@@ -12,6 +42,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
     {
         public DateTime LastSeen { get; set; }
         public HashSet<string> AssignedChunks { get; } = [];
+        public Dictionary<string, DateTime> AssignedAtUtc { get; } = [];
     }
     private readonly Dictionary<PID, WorkerState> _activeWorkers = [];
     private readonly Timer? _timeoutTimer;
@@ -27,6 +58,10 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     private readonly HashSet<RecoveredPassword> _recoveredPasswords = [];
     private readonly Dictionary<PID, AgentStatus> _agentStatuses = [];
+    private readonly Dictionary<string, AgentStatus> _participatingAgentStatuses = [];
+    private readonly Dictionary<string, WorkUnitLifecycleState> _workUnitLifecycle = [];
+    private readonly Queue<string> _workUnitLifecycleOrder = [];
+    private readonly List<AgentGpuTelemetrySample> _agentGpuTelemetryHistory = [];
 
     private readonly TimeSpan _livenessTimeout;
 
@@ -56,7 +91,16 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 _agentStatuses.Remove(pid);
                 foreach (var reqId in workerState.AssignedChunks)
                 {
+                    using var timeoutActivity = WorkUnitActivitySource.StartActivity("wu.timeout", ActivityKind.Internal);
+                    timeoutActivity?.SetTag("job.id", _clusterIdentity.Identity);
+                    timeoutActivity?.SetTag("wu.request_id", reqId);
+                    timeoutActivity?.SetTag("agent.id", pid.Id);
+                    timeoutActivity?.SetTag("agent.address", pid.Address);
+                    timeoutActivity?.SetTag("wu.mode", GetModeTag());
+
                     _jobStrategy?.FailChunk(reqId);
+                    RecordChunkCompletionMetrics(workerState, reqId, timeout: true, recoveredCount: 0);
+                    UpdateWorkUnitLifecycleOnTimeout(reqId, $"{pid.Address}/{pid.Id}");
                     Console.WriteLine($"{_clusterIdentity.Identity}: Agent {pid.Address}/{pid.Id} timed out. Re-queuing chunk {reqId}.");
                 }
             }
@@ -103,6 +147,12 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override async Task<WorkAssignmentEnvelope> WorkRequest(WorkRequest request)
     {
+        using var assignActivity = WorkUnitActivitySource.StartActivity("wu.assign", ActivityKind.Producer);
+        assignActivity?.SetTag("job.id", _clusterIdentity.Identity);
+        assignActivity?.SetTag("agent.id", request.AgentId.Id);
+        assignActivity?.SetTag("agent.address", request.AgentId.Address);
+        assignActivity?.SetTag("wu.mode", GetModeTag());
+
         if (_jobStrategy is null)
         {
             return new WorkAssignmentEnvelope();
@@ -129,6 +179,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             return new WorkAssignmentEnvelope();
         }
 
+        var assignedChunk = CreateAssignedChunk(nextChunk);
         lock (_workersLock)
         {
             if (!_activeWorkers.TryGetValue(workerPid, out var state))
@@ -141,15 +192,20 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             if (!string.IsNullOrWhiteSpace(requestId))
             {
                 state.AssignedChunks.Add(requestId);
+                state.AssignedAtUtc[requestId] = DateTime.UtcNow;
+                WorkUnitAssignedCounter.Add(1, new KeyValuePair<string, object?>("mode", GetModeTag()));
+                WorkUnitActiveCounter.Add(1, new KeyValuePair<string, object?>("mode", GetModeTag()));
+                UpsertWorkUnitLifecycleOnAssigned(requestId, request.AgentId, assignedChunk);
             }
 
             if (_agentStatuses.TryGetValue(workerPid, out AgentStatus? value))
             {
-                value.AssignedChunks.Add(CreateAssignedChunk(nextChunk));
+                value.AssignedChunks.Add(assignedChunk);
+                UpsertParticipatingStatus(value.Telemetry, value.AssignedChunks);
             }
             else
             {
-                _agentStatuses[workerPid] = new AgentStatus
+                var status = new AgentStatus
                 {
                     Telemetry = new AgentTelemetry
                     {
@@ -160,10 +216,16 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                         GpuUtilization = -1,
                         RejectRate = float.NaN
                     },
-                    AssignedChunks = { CreateAssignedChunk(nextChunk) }
+                    AssignedChunks = { assignedChunk }
                 };
+                _agentStatuses[workerPid] = status;
+                UpsertParticipatingStatus(status.Telemetry, status.AssignedChunks);
             }
         }
+
+        assignActivity?.SetTag("wu.request_id", nextChunk.RequestId);
+        assignActivity?.SetTag("wu.chunk", SummarizeChunk(assignedChunk));
+        EmitWorkUnitLifecycleEvent("assigned", nextChunk.RequestId, request.AgentId, assignedChunk);
 
         return nextChunk;
     }
@@ -176,10 +238,13 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 return new AssignedChunk
                 {
                     RequestId = assignment.RequestId,
-                    Mask = assignment.MaskAssignment.Mask,
-                    KeyspaceStart = assignment.MaskAssignment.KeyspaceStart,
-                    KeyspaceEnd = assignment.MaskAssignment.KeyspaceStart + assignment.MaskAssignment.KeyspaceLength - 1,
-                    TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(assignment.MaskAssignment.Mask) ?? 0
+                    MaskChunk = new MaskAssignedChunk
+                    {
+                        Mask = assignment.MaskAssignment.Mask,
+                        KeyspaceStart = assignment.MaskAssignment.KeyspaceStart,
+                        KeyspaceEnd = assignment.MaskAssignment.KeyspaceStart + assignment.MaskAssignment.KeyspaceLength - 1,
+                        TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(assignment.MaskAssignment.Mask) ?? 0
+                    }
                 };
             case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
             {
@@ -188,17 +253,34 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 return new AssignedChunk
                 {
                     RequestId = assignment.RequestId,
-                    WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
-                    ByteStart = dictUri.Query.Contains("startByte=")
-                        ? long.TryParse(parsedQuery["startByte"].FirstOrDefault() ?? "0", out var startByte)
-                            ? startByte : 0
-                        : 0,
-                    ByteEnd = dictUri.Query.Contains("endByte=")
-                        ? long.TryParse(parsedQuery["endByte"].FirstOrDefault() ?? "0", out var endByte)
-                            ? endByte : 0
-                        : 0,
+                    DictionaryChunk = new DictionaryAssignedChunk
+                    {
+                        WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
+                        ByteStart = dictUri.Query.Contains("startByte=")
+                            ? long.TryParse(parsedQuery["startByte"].FirstOrDefault() ?? "0", out var startByte)
+                                ? startByte : 0
+                            : 0,
+                        ByteEnd = dictUri.Query.Contains("endByte=")
+                            ? long.TryParse(parsedQuery["endByte"].FirstOrDefault() ?? "0", out var endByte)
+                                ? endByte : 0
+                            : 0,
+                    }
                 };
             }
+            case WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment:
+                return new AssignedChunk
+                {
+                    RequestId = assignment.RequestId,
+                    CombinatorChunk = new CombinatorAssignedChunk
+                    {
+                        LeftWordlistName = assignment.CombinatorAssignment.LeftWordlistName,
+                        LeftByteStart = assignment.CombinatorAssignment.LeftStartByte,
+                        LeftByteEnd = assignment.CombinatorAssignment.LeftEndByte,
+                        RightWordlistName = assignment.CombinatorAssignment.RightWordlistName,
+                        RightByteStart = assignment.CombinatorAssignment.RightStartByte,
+                        RightByteEnd = assignment.CombinatorAssignment.RightEndByte
+                    }
+                };
             default:
                 return new AssignedChunk();
         }
@@ -206,6 +288,13 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
 
     public override async Task WorkResultSubmission(WorkResult request)
     {
+        using var resultActivity = WorkUnitActivitySource.StartActivity("wu.result", ActivityKind.Consumer);
+        resultActivity?.SetTag("job.id", _clusterIdentity.Identity);
+        resultActivity?.SetTag("wu.request_id", request.RequestId);
+        resultActivity?.SetTag("agent.id", request.AgentId.Id);
+        resultActivity?.SetTag("agent.address", request.AgentId.Address);
+        resultActivity?.SetTag("wu.mode", GetModeTag());
+
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
         string? requestId = null;
         lock (_workersLock)
@@ -213,7 +302,11 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             if (_activeWorkers.TryGetValue(workerPid, out var state))
             {
                 requestId = request.RequestId;
-                state.AssignedChunks.Remove(requestId);
+                if (!string.IsNullOrWhiteSpace(requestId))
+                {
+                    state.AssignedChunks.Remove(requestId);
+                    RecordChunkCompletionMetrics(state, requestId, timeout: false, recoveredCount: request.RecoveredPasswords.Count);
+                }
                 state.LastSeen = DateTime.UtcNow;
                 if (state.AssignedChunks.Count == 0)
                 {
@@ -222,17 +315,31 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 }
                 else if (_agentStatuses.TryGetValue(workerPid, out var agentStatus))
                 {
-                    _agentStatuses[workerPid] = new AgentStatus
+                    var updatedStatus = new AgentStatus
                     {
                         Telemetry = agentStatus.Telemetry,
                         AssignedChunks = { agentStatus.AssignedChunks.Where(c => c.RequestId != requestId) }
                     };
+                    _agentStatuses[workerPid] = updatedStatus;
+                    UpsertParticipatingStatus(updatedStatus.Telemetry, updatedStatus.AssignedChunks);
                 }
             }
         }
 
         if (requestId is null)
             return;
+
+        UpdateWorkUnitLifecycleOnCompleted(requestId, request.RecoveredPasswords.Count, request.Success);
+        EmitWorkUnitLifecycleEvent(
+            "completed",
+            requestId,
+            request.AgentId,
+            chunk: null,
+            extras: new Dictionary<string, object?>
+            {
+                ["success"] = request.Success,
+                ["recovered_count"] = request.RecoveredPasswords.Count
+            });
 
         // Mark the chunk as complete in the strategy.
         _jobStrategy?.CompleteChunk(requestId);
@@ -295,13 +402,31 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         var workerPid = new PID(request.AgentId.Address, request.AgentId.Id);
         lock (_workersLock)
         {
+            AppendGpuTelemetrySample(request);
+            UpsertParticipatingStatus(request, assignedChunks: null);
             if (_activeWorkers.TryGetValue(workerPid, out var state))
             {
                 state.LastSeen = DateTime.UtcNow;
                 _agentStatuses[workerPid].Telemetry = request;
+                UpsertParticipatingStatus(request, _agentStatuses[workerPid].AssignedChunks);
             }
         }
         return Task.CompletedTask;
+    }
+
+    public override Task<AgentGpuTelemetryExport> GetAgentGpuTelemetryHistory()
+    {
+        var export = new AgentGpuTelemetryExport
+        {
+            JobId = _clusterIdentity.Identity
+        };
+
+        lock (_workersLock)
+        {
+            export.Samples.Add(_agentGpuTelemetryHistory);
+        }
+
+        return Task.FromResult(export);
     }
 
     public override async Task<JobStatus> GetJobStatus()
@@ -309,7 +434,6 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         if (_jobStrategy is null)
         {
             Console.WriteLine($"{_clusterIdentity.Identity}: Reporting status of cancelled or invalid job...");
-            Context.Stop(Context.Self);
             return new JobStatus
             {
                 JobId = _clusterIdentity.Identity,
@@ -317,6 +441,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 ProgressPercentage = 100,
                 ChunkAttackSeconds = _chunkAttackSeconds,
                 RecoveredPasswords = { _recoveredPasswords },
+                ParticipatingAgents = { _participatingAgentStatuses.Values },
             };
         }
 
@@ -329,8 +454,73 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             Agents = { _agentStatuses.Values },
             ChunkAttackSeconds = _chunkAttackSeconds,
             RecoveredPasswords = { _recoveredPasswords },
+            ParticipatingAgents = { _participatingAgentStatuses.Values },
         };
         return await Task.FromResult(jobStatus);
+    }
+
+    public override Task<WorkUnitLifecycleExport> GetWorkUnitLifecycle(WorkUnitLifecycleFilter request)
+    {
+        var export = new WorkUnitLifecycleExport
+        {
+            JobId = _clusterIdentity.Identity
+        };
+
+        DateTime? fromUtc = request.FromUnixMs > 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds(request.FromUnixMs).UtcDateTime
+            : null;
+        DateTime? toUtc = request.ToUnixMs > 0
+            ? DateTimeOffset.FromUnixTimeMilliseconds(request.ToUnixMs).UtcDateTime
+            : null;
+        var outcomeFilter = request.Outcome?.Trim();
+
+        lock (_workersLock)
+        {
+            var orderedRecords = _workUnitLifecycleOrder
+                .Select(id => _workUnitLifecycle.TryGetValue(id, out var record) ? record : null)
+                .Where(record => record is not null)
+                .Cast<WorkUnitLifecycleState>();
+
+            foreach (var record in orderedRecords)
+            {
+                if (!string.IsNullOrWhiteSpace(outcomeFilter)
+                    && !string.Equals(record.Outcome, outcomeFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (fromUtc.HasValue && record.AssignedAtUtc < fromUtc.Value)
+                {
+                    continue;
+                }
+
+                if (toUtc.HasValue && record.AssignedAtUtc > toUtc.Value)
+                {
+                    continue;
+                }
+
+                export.Records.Add(new Shared.WorkUnitLifecycleRecord
+                {
+                    RequestId = record.RequestId,
+                    JobId = record.JobId,
+                    Mode = record.Mode,
+                    AgentKey = record.AgentKey,
+                    ChunkSummary = record.ChunkSummary,
+                    AssignedAt = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(record.AssignedAtUtc),
+                    CompletedAt = record.CompletedAtUtc.HasValue
+                        ? Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(record.CompletedAtUtc.Value)
+                        : null,
+                    TimedOutAt = record.TimedOutAtUtc.HasValue
+                        ? Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(record.TimedOutAtUtc.Value)
+                        : null,
+                    Outcome = record.Outcome,
+                    ProcessingDurationSeconds = record.ProcessingDurationSeconds ?? -1,
+                    RecoveredCount = record.RecoveredCount
+                });
+            }
+        }
+
+        return Task.FromResult(export);
     }
 
     public override async Task CancelJob()
@@ -358,21 +548,234 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
         List<PID> workersToStop;
         lock (_workersLock)
         {
+            var modeTag = GetModeTag();
+            var remainingAssigned = _activeWorkers.Values.Sum(state => state.AssignedChunks.Count);
             workersToStop = [.. _activeWorkers.Keys];
             _activeWorkers.Clear();
             _agentStatuses.Clear();
+            if (remainingAssigned > 0)
+            {
+                WorkUnitActiveCounter.Add(-remainingAssigned, new KeyValuePair<string, object?>("mode", modeTag));
+            }
         }
         foreach (var worker in workersToStop)
         {
             Context.Send(worker, new StopWork());
             // We don't need to FailChunk here because the job is being cancelled entirely.
         }
+    }
 
-        Context.Stop(Context.Self);
+    private void UpsertParticipatingStatus(AgentTelemetry telemetry, IEnumerable<AssignedChunk>? assignedChunks)
+    {
+        var key = $"{telemetry.AgentId.Address}/{telemetry.AgentId.Id}";
+        var snapshot = new AgentStatus
+        {
+            Telemetry = telemetry
+        };
+
+        if (assignedChunks is not null)
+        {
+            snapshot.AssignedChunks.Add(assignedChunks);
+        }
+
+        _participatingAgentStatuses[key] = snapshot;
+    }
+
+    private void AppendGpuTelemetrySample(AgentTelemetry telemetry)
+    {
+        var sample = new AgentGpuTelemetrySample
+        {
+            AgentKey = $"{telemetry.AgentId.Address}/{telemetry.AgentId.Id}",
+            CapturedAt = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTime(DateTime.UtcNow),
+            CurrentHashrate = telemetry.CurrentHashrate,
+            Temperature = telemetry.Temperature,
+            FanSpeed = telemetry.FanSpeed,
+            GpuUtilization = telemetry.GpuUtilization
+        };
+        sample.GpuDevices.Add(telemetry.GpuDevices);
+
+        _agentGpuTelemetryHistory.Add(sample);
+        if (_agentGpuTelemetryHistory.Count > MaxGpuTelemetrySamples)
+        {
+            var overflow = _agentGpuTelemetryHistory.Count - MaxGpuTelemetrySamples;
+            _agentGpuTelemetryHistory.RemoveRange(0, overflow);
+        }
     }
 
     public override async Task<JobSpecsEnvelope> GetJobSpecs()
     {
         return await Task.FromResult(_jobStrategy?.Specs ?? new JobSpecsEnvelope());
+    }
+
+    private void RecordChunkCompletionMetrics(WorkerState workerState, string requestId, bool timeout)
+    {
+        var modeTag = GetModeTag();
+        WorkUnitActiveCounter.Add(-1, new KeyValuePair<string, object?>("mode", modeTag));
+
+        if (workerState.AssignedAtUtc.Remove(requestId, out var assignedAtUtc))
+        {
+            var durationSeconds = (DateTime.UtcNow - assignedAtUtc).TotalSeconds;
+            if (durationSeconds >= 0)
+            {
+                WorkUnitProcessingDurationSeconds.Record(
+                    durationSeconds,
+                    new KeyValuePair<string, object?>("mode", modeTag),
+                    new KeyValuePair<string, object?>("outcome", timeout ? "timeout" : "completed"));
+            }
+        }
+
+        if (timeout)
+        {
+            WorkUnitTimeoutCounter.Add(1, new KeyValuePair<string, object?>("mode", modeTag));
+            WorkUnitRetriedCounter.Add(1, new KeyValuePair<string, object?>("mode", modeTag));
+            return;
+        }
+
+        WorkUnitCompletedCounter.Add(1, new KeyValuePair<string, object?>("mode", modeTag));
+    }
+
+    private void RecordChunkCompletionMetrics(WorkerState workerState, string requestId, bool timeout, int recoveredCount)
+    {
+        RecordChunkCompletionMetrics(workerState, requestId, timeout);
+        if (_workUnitLifecycle.TryGetValue(requestId, out var record))
+        {
+            record.RecoveredCount = recoveredCount;
+        }
+    }
+
+    private void UpsertWorkUnitLifecycleOnAssigned(string requestId, AgentId agentId, AssignedChunk chunk)
+    {
+        var now = DateTime.UtcNow;
+        _workUnitLifecycle[requestId] = new WorkUnitLifecycleState
+        {
+            RequestId = requestId,
+            JobId = _clusterIdentity.Identity,
+            Mode = GetModeTag(),
+            AgentKey = $"{agentId.Address}/{agentId.Id}",
+            ChunkSummary = SummarizeChunk(chunk),
+            AssignedAtUtc = now,
+            LastUpdatedUtc = now,
+            Outcome = "assigned"
+        };
+
+        _workUnitLifecycleOrder.Enqueue(requestId);
+        TrimWorkUnitLifecycleRecords();
+    }
+
+    private void UpdateWorkUnitLifecycleOnCompleted(string requestId, int recoveredCount, bool success)
+    {
+        if (!_workUnitLifecycle.TryGetValue(requestId, out var record))
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        record.CompletedAtUtc = now;
+        record.LastUpdatedUtc = now;
+        record.RecoveredCount = recoveredCount;
+        record.Outcome = success ? "completed_with_result" : "completed_no_result";
+        record.ProcessingDurationSeconds = Math.Max(0, (now - record.AssignedAtUtc).TotalSeconds);
+    }
+
+    private void UpdateWorkUnitLifecycleOnTimeout(string requestId, string agentKey)
+    {
+        if (!_workUnitLifecycle.TryGetValue(requestId, out var record))
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        record.AgentKey = agentKey;
+        record.TimedOutAtUtc = now;
+        record.LastUpdatedUtc = now;
+        record.Outcome = "timed_out_requeued";
+        record.ProcessingDurationSeconds = Math.Max(0, (now - record.AssignedAtUtc).TotalSeconds);
+
+        EmitWorkUnitLifecycleEvent(
+            "timed_out",
+            requestId,
+            new AgentId { Address = agentKey.Split('/').FirstOrDefault() ?? string.Empty, Id = agentKey.Split('/').LastOrDefault() ?? string.Empty },
+            chunk: null,
+            extras: new Dictionary<string, object?>
+            {
+                ["outcome"] = "timed_out_requeued"
+            });
+    }
+
+    private void EmitWorkUnitLifecycleEvent(string eventName, string requestId, AgentId agentId, AssignedChunk? chunk, Dictionary<string, object?>? extras = null)
+    {
+        _workUnitLifecycle.TryGetValue(requestId, out var record);
+        var payload = new Dictionary<string, object?>
+        {
+            ["event"] = eventName,
+            ["timestamp_utc"] = DateTime.UtcNow,
+            ["job_id"] = _clusterIdentity.Identity,
+            ["request_id"] = requestId,
+            ["mode"] = record?.Mode ?? GetModeTag(),
+            ["agent_id"] = agentId.Id,
+            ["agent_address"] = agentId.Address,
+            ["agent_key"] = string.IsNullOrWhiteSpace(agentId.Address) && string.IsNullOrWhiteSpace(agentId.Id) ? record?.AgentKey : $"{agentId.Address}/{agentId.Id}",
+            ["outcome"] = record?.Outcome,
+            ["processing_duration_seconds"] = record?.ProcessingDurationSeconds,
+            ["chunk"] = chunk is null ? record?.ChunkSummary : SummarizeChunk(chunk)
+        };
+
+        if (extras is not null)
+        {
+            foreach (var (key, value) in extras)
+            {
+                payload[key] = value;
+            }
+        }
+
+        Console.WriteLine($"WU_LIFECYCLE {JsonSerializer.Serialize(payload)}");
+    }
+
+    private static string SummarizeChunk(AssignedChunk chunk)
+    {
+        return chunk.PayloadCase switch
+        {
+            AssignedChunk.PayloadOneofCase.MaskChunk =>
+                $"mask={chunk.MaskChunk.Mask};range={chunk.MaskChunk.KeyspaceStart}-{chunk.MaskChunk.KeyspaceEnd}",
+            AssignedChunk.PayloadOneofCase.DictionaryChunk =>
+                $"wordlist={chunk.DictionaryChunk.WordlistName};bytes={chunk.DictionaryChunk.ByteStart}-{(chunk.DictionaryChunk.ByteEnd == -1 ? "EOF" : chunk.DictionaryChunk.ByteEnd.ToString())}",
+            AssignedChunk.PayloadOneofCase.CombinatorChunk =>
+                $"left={chunk.CombinatorChunk.LeftWordlistName}[{chunk.CombinatorChunk.LeftByteStart}-{(chunk.CombinatorChunk.LeftByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.LeftByteEnd.ToString())}];right={chunk.CombinatorChunk.RightWordlistName}[{chunk.CombinatorChunk.RightByteStart}-{(chunk.CombinatorChunk.RightByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.RightByteEnd.ToString())}]",
+            _ => "unknown"
+        };
+    }
+
+    private static string SummarizeChunk(WorkAssignmentEnvelope chunk)
+    {
+        return chunk.PayloadCase switch
+        {
+            WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment =>
+                $"mask={chunk.MaskAssignment.Mask};range={chunk.MaskAssignment.KeyspaceStart}-{chunk.MaskAssignment.KeyspaceStart + chunk.MaskAssignment.KeyspaceLength - 1}",
+            WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment =>
+                $"dictionary_url={chunk.DictionaryAssignment.DictionaryChunkUrl}",
+            WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment =>
+                $"left={chunk.CombinatorAssignment.LeftWordlistName}[{chunk.CombinatorAssignment.LeftStartByte}-{(chunk.CombinatorAssignment.LeftEndByte == -1 ? "EOF" : chunk.CombinatorAssignment.LeftEndByte.ToString())}];right={chunk.CombinatorAssignment.RightWordlistName}[{chunk.CombinatorAssignment.RightStartByte}-{(chunk.CombinatorAssignment.RightEndByte == -1 ? "EOF" : chunk.CombinatorAssignment.RightEndByte.ToString())}]",
+            _ => "unknown"
+        };
+    }
+
+    private void TrimWorkUnitLifecycleRecords()
+    {
+        while (_workUnitLifecycleOrder.Count > MaxLifecycleRecords)
+        {
+            var oldestRequestId = _workUnitLifecycleOrder.Dequeue();
+            _workUnitLifecycle.Remove(oldestRequestId);
+        }
+    }
+
+    private string GetModeTag()
+    {
+        return _jobStrategy?.Mode switch
+        {
+            AttackMode.Mask => "mask",
+            AttackMode.Dictionary => "dictionary",
+            AttackMode.Combinator => "combinator",
+            _ => "unknown"
+        };
     }
 }
