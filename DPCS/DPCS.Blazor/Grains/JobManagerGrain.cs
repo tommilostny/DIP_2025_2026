@@ -48,36 +48,38 @@ public sealed class JobManagerGrain : JobManagerGrainBase
             return existingSubmission.Assignment;
         }
 
+        var normalizedRequest = NormalizeJobSubmissionRequest(request);
+
         var guid = Guid.NewGuid();
         var signedJobId = JobIdSecurity.GenerateSignedId(guid);
 
-        JobAssignment assignment = request.PayloadCase switch
+        JobAssignment assignment = normalizedRequest.PayloadCase switch
         {
             JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs => new()
             {
                 JobId = signedJobId,
                 ModeId = (int)AttackMode.Mask,
-                HashType = request.HashType,
-                Hashes = { request.Hashes },
-                Masks = { request.MaskJobSpecs.Masks },
+                HashType = normalizedRequest.HashType,
+                Hashes = { normalizedRequest.Hashes },
+                Masks = { normalizedRequest.MaskJobSpecs.Masks },
             },
             JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs => new()
             {
                 JobId = signedJobId,
                 ModeId = (int)AttackMode.Dictionary,
-                HashType = request.HashType,
-                Hashes = { request.Hashes },
-                Wordlists = { request.DictionaryJobSpecs.Wordlists },
-                RuleFileContent = request.DictionaryJobSpecs.RuleFileContent,
+                HashType = normalizedRequest.HashType,
+                Hashes = { normalizedRequest.Hashes },
+                Wordlists = { normalizedRequest.DictionaryJobSpecs.Wordlists },
+                RuleFileContent = normalizedRequest.DictionaryJobSpecs.RuleFileContent,
             },
             JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs => new()
             {
                 JobId = signedJobId,
                 ModeId = (int)AttackMode.Combinator,
-                HashType = request.HashType,
-                Hashes = { request.Hashes },
-                Wordlists = { request.CombinatorJobSpecs.LeftWordlists, request.CombinatorJobSpecs.RightWordlists },
-                RuleFileContent = request.CombinatorJobSpecs.RuleFileContent,
+                HashType = normalizedRequest.HashType,
+                Hashes = { normalizedRequest.Hashes },
+                Wordlists = { normalizedRequest.CombinatorJobSpecs.LeftWordlists, normalizedRequest.CombinatorJobSpecs.RightWordlists },
+                RuleFileContent = normalizedRequest.CombinatorJobSpecs.RuleFileContent,
             },
             _ => throw new InvalidOperationException("Invalid job specs payload")
         };
@@ -85,7 +87,7 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         _unfinishedJobs[signedJobId] = assignment;
     _recentSubmissions[requestFingerprint] = new SubmissionFingerprintEntry(assignment, DateTime.UtcNow);
 
-        Console.WriteLine($"{_clusterIdentity.Identity}: received job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(request)}");
+        Console.WriteLine($"{_clusterIdentity.Identity}: received job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(normalizedRequest)}");
 
         foreach (var wl in assignment.Wordlists)
         {
@@ -98,10 +100,72 @@ public sealed class JobManagerGrain : JobManagerGrainBase
         var cluster = System.Cluster();
         await cluster
             .GetJobCoordinatorGrain(assignment.JobId)
-            .JobInit(request, CancellationToken.None);
+            .JobInit(normalizedRequest, CancellationToken.None);
 
         return await Task.FromResult(assignment);
     }
+
+    private static JobSpecsEnvelope NormalizeJobSubmissionRequest(JobSpecsEnvelope request)
+    {
+        if (request.PayloadCase != JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs
+            || !HashcatWrapper.IsIncrementMode(request.MaskJobSpecs.MinLength, request.MaskJobSpecs.MaxLength))
+        {
+            return request;
+        }
+
+        var normalized = request.Clone();
+        var expandedMasks = ExpandMasksForIncrementMode(
+            normalized.MaskJobSpecs.Masks,
+            normalized.MaskJobSpecs.MinLength,
+            normalized.MaskJobSpecs.MaxLength);
+
+        normalized.MaskJobSpecs.Masks.Clear();
+        normalized.MaskJobSpecs.Masks.Add(expandedMasks);
+        normalized.MaskJobSpecs.MinLength = 0;
+        normalized.MaskJobSpecs.MaxLength = 0;
+
+        return normalized;
+    }
+
+    private static IEnumerable<string> ExpandMasksForIncrementMode(IEnumerable<string> masks, int minLength, int maxLength)
+    {
+        static IEnumerable<string> _ExpandSingleMask(string mask, int minLength, int maxLength)
+        {
+            var tokens = new List<string>(mask.Length);
+
+            for (var index = 0; index < mask.Length; index++)
+            {
+                if (mask[index] == '?' && index + 1 < mask.Length)
+                {
+                    tokens.Add(mask.Substring(index, 2));
+                    index++;
+                    continue;
+                }
+
+                tokens.Add(mask[index].ToString());
+            }
+            if (tokens.Count == 0)
+            {
+                return [mask];
+            }
+
+            var effectiveMin = Math.Max(1, minLength);
+            var effectiveMax = Math.Min(maxLength, tokens.Count);
+
+            if (effectiveMin > effectiveMax)
+            {
+                return [mask];
+            }
+
+            return Enumerable.Range(effectiveMin, effectiveMax - effectiveMin + 1)
+                .Select(length => string.Concat(tokens.Take(length)));
+        }
+
+        return [.. masks
+            .SelectMany(mask => _ExpandSingleMask(mask, minLength, maxLength))
+            .Distinct(StringComparer.Ordinal)];
+    }
+
 
     private void CleanupExpiredSubmissionFingerprints()
     {
