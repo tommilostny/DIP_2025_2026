@@ -6,7 +6,7 @@ services:
       - "8500:8500"
 
   postgres:
-    image: postgres:16
+    image: postgres:18.3
     environment:
       POSTGRES_DB: dpcs
       POSTGRES_USER: postgres
