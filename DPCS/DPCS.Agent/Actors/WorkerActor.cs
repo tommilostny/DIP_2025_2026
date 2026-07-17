@@ -46,7 +46,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         StopWork => OnStopWork(context),
         PrefetchWork => OnPrefetchWork(context),
         ProcessWork => OnProcessWork(context),
-        HeartbeatTick => OnHeartbeatTick(context),
+        HeartbeatTick => SendHeartbeatAsync(context),
         _ => Task.CompletedTask
     };
 
@@ -259,8 +259,8 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         WorkUnitActiveCounter.Add(1, new KeyValuePair<string, object?>("mode", modeTag));
         await SendHeartbeatAsync(context);
 
-        var totalStopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var computeStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var totalStopwatch = Stopwatch.StartNew();
+        var computeStopwatch = Stopwatch.StartNew();
         using var computeActivity = WorkUnitActivitySource.StartActivity("wu.compute", ActivityKind.Internal);
         computeActivity?.SetTag("wu.request_id", chunk.RequestId);
         computeActivity?.SetTag("wu.mode", modeTag);
@@ -301,7 +301,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             RequestId = chunk.RequestId,
         };
 
-        var submissionStopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var submissionStopwatch = Stopwatch.StartNew();
         using var submissionActivity = WorkUnitActivitySource.StartActivity("wu.submit", ActivityKind.Client);
         submissionActivity?.SetTag("wu.request_id", chunk.RequestId);
         submissionActivity?.SetTag("wu.mode", modeTag);
@@ -418,13 +418,21 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
             WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment => new
             {
                 type = "dictionary",
-                dictionary_chunk_url = chunk.DictionaryAssignment.DictionaryChunkUrl
+                dictionary_chunk_url = chunk.DictionaryAssignment.WordlistUrl
             },
             WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment => new
             {
                 type = "combinator",
-                left_dictionary_chunk_url = chunk.CombinatorAssignment.LeftDictionaryChunkUrl,
-                right_dictionary_chunk_url = chunk.CombinatorAssignment.RightDictionaryChunkUrl
+                left_dictionary_chunk_url = chunk.CombinatorAssignment.LeftWordlistUrl,
+                right_dictionary_chunk_url = chunk.CombinatorAssignment.RightWordlistUrl
+            },
+            WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment => new
+            {
+                type = "hybrid",
+                mask = chunk.HybridAssignment.Mask,
+                keyspace_start = chunk.HybridAssignment.KeyspaceStart,
+                keyspace_length = chunk.HybridAssignment.KeyspaceLength,
+                dictionary_chunk_url = chunk.HybridAssignment.WordlistUrl
             },
             _ => new { type = "unknown" }
         };
@@ -479,6 +487,27 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
                     _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
                     _currentWorkCts!.Token);
 
+            case WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment:
+                Console.WriteLine($"Cracking hybrid chunk: {chunk.RequestId} ({chunk.HybridAssignment.KeyspaceStart} - {chunk.HybridAssignment.KeyspaceStart + chunk.HybridAssignment.KeyspaceLength})");
+                return chunk.HybridAssignment.AttackMode switch
+                {
+                    (int)AttackMode.Hybrid_WordlistMask => await hashcatWrapper.RunHashcatHybridWordlistMaskAttackAsync(
+                        chunk.HybridAssignment,
+                        _currentJob.HashType,
+                        hashFilePath,
+                        _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
+                        _currentWorkCts!.Token),
+
+                    (int)AttackMode.Hybrid_MaskWordlist => await hashcatWrapper.RunHashcatHybridMaskWordlistAttackAsync(
+                        chunk.HybridAssignment,
+                        _currentJob.HashType,
+                        hashFilePath,
+                        _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
+                        _currentWorkCts!.Token),
+
+                    _ => []
+                };
+
             default:
                 return [];
         }
@@ -512,11 +541,6 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     /// <summary>
     /// Sends periodic telemetry heartbeat to the job coordinator while a job is active.
     /// </summary>
-    private async Task OnHeartbeatTick(IContext context)
-    {
-        await SendHeartbeatAsync(context);
-    }
-
     private async Task SendHeartbeatAsync(IContext context)
     {
         if (_currentJob is not null)

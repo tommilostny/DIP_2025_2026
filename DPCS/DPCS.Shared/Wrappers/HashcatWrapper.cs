@@ -55,7 +55,7 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         argumentsBuilder.Append($"-a {(int)AttackMode.Dictionary} ");
         argumentsBuilder.Append($"-m {hashType} ");
         argumentsBuilder.Append($" \"{hashFilePath}\" ");
-        argumentsBuilder.Append($"\"{chunk.DictionaryChunkUrl}\"");
+        argumentsBuilder.Append($"\"{chunk.WordlistUrl}\"");
 
         if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
         {
@@ -71,8 +71,46 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         argumentsBuilder.Append($"-a {(int)AttackMode.Combinator} ");
         argumentsBuilder.Append($"-m {hashType} ");
         argumentsBuilder.Append($" \"{hashFilePath}\" ");
-        argumentsBuilder.Append($"\"{chunk.LeftDictionaryChunkUrl}\" ");
-        argumentsBuilder.Append($"\"{chunk.RightDictionaryChunkUrl}\"");
+        argumentsBuilder.Append($"\"{chunk.LeftWordlistUrl}\" ");
+        argumentsBuilder.Append($"\"{chunk.RightWordlistUrl}\"");
+
+        if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
+        {
+            argumentsBuilder.Append($" -r \"{jobRuleFilePath}\"");
+        }
+
+        return await RunHashcatAttackAsync(argumentsBuilder, ct);
+    }
+
+    public async Task<List<RecoveredPassword>> RunHashcatHybridWordlistMaskAttackAsync(HybridWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
+    {
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Hybrid_WordlistMask} ");
+        argumentsBuilder.Append($"-m {hashType} ");
+        argumentsBuilder.Append($"--skip {chunk.KeyspaceStart} ");
+        argumentsBuilder.Append($"--limit {chunk.KeyspaceLength} ");
+        argumentsBuilder.Append($" \"{hashFilePath}\" ");
+        argumentsBuilder.Append($"\"{chunk.WordlistUrl}\" ");
+        argumentsBuilder.Append($"\"{chunk.Mask}\"");
+
+        if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
+        {
+            argumentsBuilder.Append($" -r \"{jobRuleFilePath}\"");
+        }
+
+        return await RunHashcatAttackAsync(argumentsBuilder, ct);
+    }
+
+    public async Task<List<RecoveredPassword>> RunHashcatHybridMaskWordlistAttackAsync(HybridWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
+    {
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Hybrid_MaskWordlist} ");
+        argumentsBuilder.Append($"-m {hashType} ");
+        argumentsBuilder.Append($"--skip {chunk.KeyspaceStart} ");
+        argumentsBuilder.Append($"--limit {chunk.KeyspaceLength} ");
+        argumentsBuilder.Append($" \"{hashFilePath}\" ");
+        argumentsBuilder.Append($"\"{chunk.Mask}\" ");
+        argumentsBuilder.Append($"\"{chunk.WordlistUrl}\"");
 
         if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
         {
@@ -183,26 +221,10 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
             .Aggregate(0UL, (sum, speed) => sum + speed);
     }
 
-    public static bool IsIncrementMode(int incMinLen, int incMaxLen)
-    {
-        return incMinLen > 0 && incMaxLen > 0 && incMinLen <= incMaxLen;
-    }
-
-    public static async Task<string> CreateTemporaryMaskFileAsync(IEnumerable<string> masks, CancellationToken cancellationToken = default)
-    {
-        var tempFilePath = Path.Combine(Path.GetTempPath(), $"dpcs_masks_{Guid.NewGuid():N}.hcmask");
-        await File.WriteAllLinesAsync(tempFilePath, masks, cancellationToken);
-        return tempFilePath;
-    }
-
     public async Task<ulong> GetMaskKeyspaceSizeAsync(HashcatMaskJobSpecs maskJobSpecs, string mask, CancellationToken cancellationToken = default)
     {
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Mask} --keyspace ");
-        if (IsIncrementMode(maskJobSpecs.MinLength, maskJobSpecs.MaxLength))
-        {
-            argumentsBuilder.Append($"--increment --increment-min={maskJobSpecs.MinLength} --increment-max={maskJobSpecs.MaxLength} ");
-        }
 
         if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset1)) argumentsBuilder.Append($"-1 \"{maskJobSpecs.CustomCharset1}\" ");
         if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset2)) argumentsBuilder.Append($"-2 \"{maskJobSpecs.CustomCharset2}\" ");
@@ -234,10 +256,6 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
     {
         var argumentsBuilder = new StringBuilder();
         argumentsBuilder.Append($"-a {(int)AttackMode.Mask} --total-candidates ");
-        if (IsIncrementMode(maskJobSpecs.MinLength, maskJobSpecs.MaxLength))
-        {
-            argumentsBuilder.Append($"--increment --increment-min={maskJobSpecs.MinLength} --increment-max={maskJobSpecs.MaxLength} ");
-        }
 
         if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset1)) argumentsBuilder.Append($"-1 \"{maskJobSpecs.CustomCharset1}\" ");
         if (!string.IsNullOrEmpty(maskJobSpecs.CustomCharset2)) argumentsBuilder.Append($"-2 \"{maskJobSpecs.CustomCharset2}\" ");

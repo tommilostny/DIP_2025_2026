@@ -111,4 +111,24 @@ public sealed class DummyHashcatWrapper : IHashcatWrapper
         RejectRate = 0.0f;
         CurrentHashrate = _defaultSimulatedHashrate;
     }
+
+    public async Task<List<RecoveredPassword>> RunHashcatHybridMaskWordlistAttackAsync(HybridWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1 * TimeMultiplier), ct);
+        }
+        catch (TaskCanceledException) { }
+        return [];
+    }
+
+    public async Task<List<RecoveredPassword>> RunHashcatHybridWordlistMaskAttackAsync(HybridWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1 * TimeMultiplier), ct);
+        }
+        catch (TaskCanceledException) { }
+        return [];
+    }
 }

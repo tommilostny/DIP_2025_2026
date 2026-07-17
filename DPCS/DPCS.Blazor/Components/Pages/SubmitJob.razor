@@ -59,8 +59,9 @@
         </div>
 
         <div class="col-md-6">
-            @if (Model.AttackMode == AttackMode.Mask)
+            @switch (Model.AttackMode)
             {
+            case AttackMode.Mask:
                 <div class="card mb-3">
                     <div class="card-header">Mask Attack Settings</div>
                     <div class="card-body">
@@ -85,29 +86,15 @@
 
                         <hr />
                         <h6>Custom Character Sets</h6>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Charset 1 (?1)</label>
-                                <InputText @bind-Value="Model.CustomCharset1" class="form-control" placeholder="e.g. ?l?d" />
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Charset 2 (?2)</label>
-                                <InputText @bind-Value="Model.CustomCharset2" class="form-control" />
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Charset 3 (?3)</label>
-                                <InputText @bind-Value="Model.CustomCharset3" class="form-control" />
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Charset 4 (?4)</label>
-                                <InputText @bind-Value="Model.CustomCharset4" class="form-control" />
-                            </div>
-                        </div>
+                        <CustomCharsetFields @bind-Charset1="Model.CustomCharset1"
+                                             @bind-Charset2="Model.CustomCharset2"
+                                             @bind-Charset3="Model.CustomCharset3"
+                                             @bind-Charset4="Model.CustomCharset4" />
                     </div>
                 </div>
-            }
-            else if (Model.AttackMode == AttackMode.Dictionary)
-            {
+                break;
+
+            case AttackMode.Dictionary:
                 <div class="card mb-3">
                     <div class="card-header">Dictionary Attack Settings</div>
                     <div class="card-body">
@@ -122,9 +109,9 @@
                                         OnLoadFile="OnDictionaryRulesFileSelected" />
                     </div>
                 </div>
-            }
-            else if (Model.AttackMode == AttackMode.Combinator)
-            {
+                break;
+
+            case AttackMode.Combinator:
                 <div class="card mb-3">
                     <div class="card-header">Combinator Attack Settings</div>
                     <div class="card-body">
@@ -149,6 +136,41 @@
                         <div class="form-text text-muted">The coordinator will combine the selected left and right wordlists into candidate pairs.</div>
                     </div>
                 </div>
+                break;
+            
+            case AttackMode.Hybrid_WordlistMask:
+            case AttackMode.Hybrid_MaskWordlist:
+                <div class="card mb-3">
+                    <div class="card-header">Hybrid Attack Settings</div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6 mb-3 order-@(Model.AttackMode == AttackMode.Hybrid_WordlistMask ? 1 : 2)">
+                                <WordlistSelection Title="Wordlists"
+                                                   AvailableWordlists="_availableWordlists"
+                                                   AllowMultiple="true"
+                                                   @bind-SelectedWordlists="Model.Wordlists"
+                                                   ValidationFor="() => Model.Wordlists"
+                                                   HelpText="Select one or more base wordlists for the hybrid attack." />
+                            </div>
+                            <div class="col-md-6 mb-3 order-@(Model.AttackMode == AttackMode.Hybrid_MaskWordlist ? 1 : 2)">
+                                <MaskSelection @bind-Masks="Model.Masks"
+                                               SavedMasks="_savedMasks"
+                                               ValidationFor="() => Model.Masks"
+                                               OnLoadFile="OnMaskFileSelected"
+                                               OnAddMask="AddMaskToInput"
+                                               OnDeleteMask="DeleteSavedMask" />
+                            </div>
+                        </div>
+
+                        <hr />
+                        <h6>Custom Character Sets</h6>
+                        <CustomCharsetFields @bind-Charset1="Model.CustomCharset1"
+                                             @bind-Charset2="Model.CustomCharset2"
+                                             @bind-Charset3="Model.CustomCharset3"
+                                             @bind-Charset4="Model.CustomCharset4" />
+                    </div>
+                </div>
+                break;
             }
 
             <ValidationSummary class="text-danger" />
@@ -302,6 +324,36 @@
                     RuleFileContent = string.Empty // TODO: add dedicated combinator rule input if needed
                 };
                 await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
+                break;
+
+            case AttackMode.Hybrid_WordlistMask:
+            case AttackMode.Hybrid_MaskWordlist:
+                var hybridWordlists = Model.Wordlists?
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.Trim())
+                    .Where(w => !string.IsNullOrWhiteSpace(w))
+                    .ToHashSet() ?? [];
+
+                var hybridMasks = Model.Masks?
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(m => m.Trim())
+                    .Where(m => !string.IsNullOrWhiteSpace(m))
+                    .ToHashSet() ?? [];
+
+                jobSpecs.HybridJobSpecs = new HashcatHybridJobSpecs
+                {
+                    AttackMode = (int)Model.AttackMode,
+                    Wordlists = { hybridWordlists },
+                    Masks = { hybridMasks },
+                    CustomCharset1 = Model.CustomCharset1 ?? string.Empty,
+                    CustomCharset2 = Model.CustomCharset2 ?? string.Empty,
+                    CustomCharset3 = Model.CustomCharset3 ?? string.Empty,
+                    CustomCharset4 = Model.CustomCharset4 ?? string.Empty,
+                };
+                await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
+
+                // Save masks entered for hybrid jobs as reusable recent masks.
+                MaskService.SaveMasks(hybridMasks);
                 break;
             }
 

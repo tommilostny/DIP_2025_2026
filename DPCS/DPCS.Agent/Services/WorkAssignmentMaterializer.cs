@@ -26,30 +26,57 @@ public sealed class WorkAssignmentMaterializer
                 return envelope;
 
             case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment }:
-                envelope.DictionaryAssignment.DictionaryChunkUrl = await DownloadFileRangeChunkAsync(
+                envelope.DictionaryAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
-                    envelope.DictionaryAssignment.DictionaryChunkUrl,
+                    envelope.DictionaryAssignment.WordlistUrl,
+                    envelope.DictionaryAssignment.StartByte,
+                    envelope.DictionaryAssignment.EndByte,
                     "dictionary",
-                    expectedChecksum: envelope.DictionaryAssignment.DictionaryChunkChecksum);
+                    expectedChecksum: envelope.DictionaryAssignment.WordlistChunkChecksum);
                 return envelope;
 
             case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment }:
-                var leftCacheKey = GetCombinatorLeftCacheKey(envelope.CombinatorAssignment);
-                envelope.CombinatorAssignment.LeftDictionaryChunkUrl = await DownloadFileRangeChunkAsync(
+                var leftCacheKey = GetCacheKey(
+                    envelope.CombinatorAssignment.LeftWordlistName,
+                    envelope.CombinatorAssignment.LeftStartByte,
+                    envelope.CombinatorAssignment.LeftEndByte);
+
+                envelope.CombinatorAssignment.LeftWordlistUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
-                    envelope.CombinatorAssignment.LeftDictionaryChunkUrl,
+                    envelope.CombinatorAssignment.LeftWordlistUrl,
+                    envelope.CombinatorAssignment.LeftStartByte,
+                    envelope.CombinatorAssignment.LeftEndByte,
                     "left",
                     cacheKey: leftCacheKey,
                     useCache: true,
-                    expectedChecksum: envelope.CombinatorAssignment.LeftDictionaryChunkChecksum);
+                    expectedChecksum: envelope.CombinatorAssignment.LeftWordlistChunkChecksum);
 
-                envelope.CombinatorAssignment.RightDictionaryChunkUrl = await DownloadFileRangeChunkAsync(
+                envelope.CombinatorAssignment.RightWordlistUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
-                    envelope.CombinatorAssignment.RightDictionaryChunkUrl,
+                    envelope.CombinatorAssignment.RightWordlistUrl,
+                    envelope.CombinatorAssignment.RightStartByte,
+                    envelope.CombinatorAssignment.RightEndByte,
                     "right",
-                    expectedChecksum: envelope.CombinatorAssignment.RightDictionaryChunkChecksum);
+                    expectedChecksum: envelope.CombinatorAssignment.RightWordlistChunkChecksum);
 
                 Console.WriteLine($"Prepared combinator assignment {envelope.RequestId} with local left/right chunk files.");
+                return envelope;
+
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment }:
+                envelope.HybridAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
+                    envelope.RequestId,
+                    envelope.HybridAssignment.WordlistUrl,
+                    envelope.HybridAssignment.StartByte,
+                    envelope.HybridAssignment.EndByte,
+                    "hybrid",
+                    cacheKey: GetCacheKey(
+                        envelope.HybridAssignment.WordlistName,
+                        envelope.HybridAssignment.StartByte,
+                        envelope.HybridAssignment.EndByte),
+                    useCache: true,
+                    expectedChecksum: envelope.HybridAssignment.WordlistChunkChecksum);
+
+                Console.WriteLine($"Prepared hybrid assignment {envelope.RequestId} with a local dictionary chunk file.");
                 return envelope;
 
             default:
@@ -65,15 +92,18 @@ public sealed class WorkAssignmentMaterializer
         switch (chunk.PayloadCase)
         {
             case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
-                TryDeleteLocalFile(chunk.DictionaryAssignment.DictionaryChunkUrl);
+                TryDeleteLocalFile(chunk.DictionaryAssignment.WordlistUrl);
                 break;
             case WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment:
-                if (!IsCachedCombinatorLeftPath(chunk.CombinatorAssignment.LeftDictionaryChunkUrl))
+                if (!IsCachedCombinatorLeftPath(chunk.CombinatorAssignment.LeftWordlistUrl))
                 {
-                    TryDeleteLocalFile(chunk.CombinatorAssignment.LeftDictionaryChunkUrl);
+                    TryDeleteLocalFile(chunk.CombinatorAssignment.LeftWordlistUrl);
                 }
 
-                TryDeleteLocalFile(chunk.CombinatorAssignment.RightDictionaryChunkUrl);
+                TryDeleteLocalFile(chunk.CombinatorAssignment.RightWordlistUrl);
+                break;
+            case WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment:
+                TryDeleteLocalFile(chunk.HybridAssignment.WordlistUrl);
                 break;
         }
     }
@@ -94,21 +124,14 @@ public sealed class WorkAssignmentMaterializer
 
     private async Task<string> DownloadFileRangeChunkAsync(
         string requestId,
-        string chunkUrlWithQuery,
+        string wordlistUrl,
+        long startByte,
+        long endByte,
         string label,
         string? cacheKey = null,
         bool useCache = false,
         string? expectedChecksum = null)
     {
-        var uri = new Uri(chunkUrlWithQuery);
-        var queryParams = uri.Query.TrimStart('?').Split('&')
-            .Select(p => p.Split('='))
-            .ToDictionary(p => p[0], p => p.Length > 1 ? p[1] : "");
-
-        long startByte = long.Parse(queryParams["startByte"]);
-        long endByte = long.Parse(queryParams["endByte"]);
-        var cleanUrl = uri.GetLeftPart(UriPartial.Path);
-
         if (useCache && cacheKey is not null && _combinatorLeftChunkCache.TryGetValue(cacheKey, out var cachedPath) && File.Exists(cachedPath))
         {
             if (string.IsNullOrWhiteSpace(expectedChecksum))
@@ -135,7 +158,7 @@ public sealed class WorkAssignmentMaterializer
             _combinatorLeftCachedPaths.Remove(stalePath);
         }
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, cleanUrl);
+        using var request = new HttpRequestMessage(HttpMethod.Get, wordlistUrl);
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte == -1 ? null : endByte);
 
         Console.WriteLine($"Downloading {label} chunk: {requestId} (Bytes: {startByte}-{(endByte == -1 ? "EOF" : endByte)})");
@@ -179,9 +202,9 @@ public sealed class WorkAssignmentMaterializer
         return hexString;
     }
 
-    private static string GetCombinatorLeftCacheKey(CombinatorWorkAssignment assignment)
+    private static string GetCacheKey(string wordlistName, long startByte, long endByte)
     {
-        return $"{assignment.LeftWordlistName}|{assignment.LeftStartByte}|{assignment.LeftEndByte}";
+        return $"{wordlistName}|{startByte}|{endByte}";
     }
 
     private bool IsCachedCombinatorLeftPath(string path)

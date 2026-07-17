@@ -51,6 +51,17 @@ message HashcatCombinatorJobSpecs {
   string rule_file_content = 3;
 }
 
+// Parameters for submitting a Hashcat hybrid attack job by user in the web interface
+message HashcatHybridJobSpecs {
+  repeated string wordlists = 1;
+  repeated string masks = 2;
+  string custom_charset1 = 4;
+  string custom_charset2 = 5;
+  string custom_charset3 = 6;
+  string custom_charset4 = 7;
+  int32 attack_mode = 8; // 6 for Hybrid Wordlist + Mask, 7 for Hybrid Mask + Wordlist
+}
+
 message JobSpecsEnvelope {
   // Common fields for all attack jobs
   repeated string hashes = 1;
@@ -62,6 +73,7 @@ message JobSpecsEnvelope {
     HashcatMaskJobSpecs mask_job_specs = 4;
     HashcatDictionaryJobSpecs dictionary_job_specs = 5;
     HashcatCombinatorJobSpecs combinator_job_specs = 6;
+    HashcatHybridJobSpecs hybrid_job_specs = 7;
   }
 }
 
@@ -85,21 +97,40 @@ message MaskWorkAssignment {
 
 // Message for Attack Mode 0 (Stateful) - JobCoordinator provides dictionary chunk info
 message DictionaryWorkAssignment {
-  string dictionary_chunk_url = 1; // HTTP URL to download the chunk
-  string dictionary_chunk_checksum = 2; // SHA256 to verify integrity
+  string wordlist_url = 1; // HTTP URL to download the chunk
+  string wordlist_chunk_checksum = 2; // SHA256 to verify integrity
+  string wordlist_name = 3; // Name of the wordlist for reference
+  int64 start_byte = 4; // Start byte of the chunk in the wordlist
+  int64 end_byte = 5; // End byte of the chunk in the wordlist
 }
 
 message CombinatorWorkAssignment {
-  string left_dictionary_chunk_url = 1;
-  string right_dictionary_chunk_url = 2;
-  string left_dictionary_chunk_checksum = 3;
-  string right_dictionary_chunk_checksum = 4;
+  string left_wordlist_url = 1;
+  string right_wordlist_url = 2;
+  string left_wordlist_chunk_checksum = 3;
+  string right_wordlist_chunk_checksum = 4;
   string left_wordlist_name = 5;
   string right_wordlist_name = 6;
   int64 left_start_byte = 7;
   int64 left_end_byte = 8;
   int64 right_start_byte = 9;
   int64 right_end_byte = 10;
+}
+
+message HybridWorkAssignment {
+  string wordlist_url = 1;
+  string wordlist_chunk_checksum = 2;
+  string wordlist_name = 3;
+  int64 start_byte = 4;
+  int64 end_byte = 5;
+  string mask = 6;
+  uint64 keyspace_start = 7;
+  uint64 keyspace_length = 8;
+  string custom_charset1 = 9;
+  string custom_charset2 = 10;
+  string custom_charset3 = 11;
+  string custom_charset4 = 12;
+  int32 attack_mode = 13; // 6 for Hybrid Wordlist + Mask, 7 for Hybrid Mask + Wordlist
 }
 
 message WorkAssignmentEnvelope {
@@ -112,6 +143,7 @@ message WorkAssignmentEnvelope {
     MaskWorkAssignment mask_assignment = 3;
     DictionaryWorkAssignment dictionary_assignment = 4;
     CombinatorWorkAssignment combinator_assignment = 5;
+    HybridWorkAssignment hybrid_assignment = 6;
   }
 }
 
@@ -183,12 +215,27 @@ message CombinatorAssignedChunk {
   int64 right_byte_end = 6;
 }
 
+message HybridAssignedChunk {
+  string wordlist_name = 1;
+  int64 byte_start = 2;
+  int64 byte_end = 3;
+  string mask = 4;
+  uint64 keyspace_start = 5;
+  uint64 keyspace_end = 6;
+  uint64 total_keyspace = 7;
+  string custom_charset1 = 8;
+  string custom_charset2 = 9;
+  string custom_charset3 = 10;
+  string custom_charset4 = 11;
+}
+
 message AssignedChunk {
   string request_id = 1;
   oneof payload {
     MaskAssignedChunk mask_chunk = 2;
     DictionaryAssignedChunk dictionary_chunk = 3;
     CombinatorAssignedChunk combinator_chunk = 4;
+    HybridAssignedChunk hybrid_chunk = 5;
   }
 }
 

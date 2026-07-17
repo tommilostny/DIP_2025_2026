@@ -81,6 +81,37 @@ public class SubmitJobViewModel : IValidatableObject
                 yield return new ValidationResult("At least one right wordlist must be provided.", [nameof(RightWordlists)]);
             }
             break;
+
+        case AttackMode.Hybrid_WordlistMask:
+        case AttackMode.Hybrid_MaskWordlist:
+            var hybridWordlistsList = Wordlists?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            var hybridMasksList = Masks?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+
+            if (hybridWordlistsList.Length == 0)
+            {
+                yield return new ValidationResult("At least one wordlist must be provided.", [nameof(Wordlists)]);
+            }
+
+            if (hybridMasksList.Length == 0)
+            {
+                yield return new ValidationResult("At least one mask must be provided.", [nameof(Masks)]);
+            }
+
+            var hybridMaskService = validationContext.GetService<MaskService>();
+            if (hybridMaskService is not null)
+            {
+                var customCharsets = new[] { CustomCharset1, CustomCharset2, CustomCharset3, CustomCharset4 };
+
+                foreach (var mask in hybridMasksList.Select(m => m.Trim()).Where(m => !string.IsNullOrWhiteSpace(m)))
+                {
+                    if (!hybridMaskService.IsMaskValid(mask, customCharsets!))
+                    {
+                        yield return new ValidationResult($"The mask '{mask}' is invalid. It contains unknown placeholders.", [nameof(Masks)]);
+                    }
+                }
+            }
+
+            break;
         }
     }
 }

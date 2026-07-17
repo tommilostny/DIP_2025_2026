@@ -1,0 +1,97 @@
+<div class="row">
+    @if (ReadOnly)
+    {
+        @if (!string.IsNullOrWhiteSpace(Charset1))
+        {
+            <p class="mb-1"><strong>Charset 1 (?1): </strong> @Charset1</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(Charset2))
+        {
+            <p class="mb-1"><strong>Charset 2 (?2): </strong> @Charset2</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(Charset3))
+        {
+            <p class="mb-1"><strong>Charset 3 (?3): </strong> @Charset3</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(Charset4))
+        {
+            <p class="mb-1"><strong>Charset 4 (?4): </strong> @Charset4</p>
+        }
+    }
+    else
+    {
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Charset 1 (?1)</label>
+            <InputText Value="@_charset1" ValueChanged="OnCharset1Changed" ValueExpression="() => _charset1" class="form-control" placeholder="e.g. ?l?d" />
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Charset 2 (?2)</label>
+            <InputText Value="@_charset2" ValueChanged="OnCharset2Changed" ValueExpression="() => _charset2" class="form-control" />
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Charset 3 (?3)</label>
+            <InputText Value="@_charset3" ValueChanged="OnCharset3Changed" ValueExpression="() => _charset3" class="form-control" />
+        </div>
+        <div class="col-md-6 mb-3">
+            <label class="form-label">Charset 4 (?4)</label>
+            <InputText Value="@_charset4" ValueChanged="OnCharset4Changed" ValueExpression="() => _charset4" class="form-control" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? Charset1 { get; set; }
+    [Parameter] public EventCallback<string?> Charset1Changed { get; set; }
+
+    [Parameter] public string? Charset2 { get; set; }
+    [Parameter] public EventCallback<string?> Charset2Changed { get; set; }
+
+    [Parameter] public string? Charset3 { get; set; }
+    [Parameter] public EventCallback<string?> Charset3Changed { get; set; }
+
+    [Parameter] public string? Charset4 { get; set; }
+    [Parameter] public EventCallback<string?> Charset4Changed { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; } = false;
+
+    private string? _charset1;
+    private string? _charset2;
+    private string? _charset3;
+    private string? _charset4;
+
+    protected override void OnParametersSet()
+    {
+        _charset1 = Charset1;
+        _charset2 = Charset2;
+        _charset3 = Charset3;
+        _charset4 = Charset4;
+    }
+
+    private async Task OnCharset1Changed(string? value)
+    {
+        _charset1 = value;
+        Charset1 = value;
+        await Charset1Changed.InvokeAsync(value);
+    }
+
+    private async Task OnCharset2Changed(string? value)
+    {
+        _charset2 = value;
+        Charset2 = value;
+        await Charset2Changed.InvokeAsync(value);
+    }
+
+    private async Task OnCharset3Changed(string? value)
+    {
+        _charset3 = value;
+        Charset3 = value;
+        await Charset3Changed.InvokeAsync(value);
+    }
+
+    private async Task OnCharset4Changed(string? value)
+    {
+        _charset4 = value;
+        Charset4 = value;
+        await Charset4Changed.InvokeAsync(value);
+    }
+}

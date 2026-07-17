@@ -1,0 +1,275 @@
+@inject WordlistService WordlistService
+
+<hr />
+
+<h5 class="card-title mb-3" style="cursor: pointer;" @onclick="ToggleAgents">
+    Active agents (@AgentCount)
+    @if (AgentCount > 0)
+    {
+        <span class="float-end fs-6">@(_isExpanded ? "▼" : "▶")</span>
+    }
+</h5>
+
+@if (_isExpanded && JobStatus is not null && AgentCount > 0)
+{
+    <div class="table-responsive">
+        <table class="table table-sm table-bordered mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Agent</th>
+                    <th>Hashrate</th>
+                    <th>Temp</th>
+                    <th>Fan</th>
+                    <th>GPU Util</th>
+                    <th>Reject</th>
+                </tr>
+            </thead>
+            @foreach (var agentStatus in JobStatus.Agents)
+            {
+                <tbody class="agent-block" style="--agent-bg:@GetAgentColor(agentStatus.Telemetry.AgentId.Id); border-left:4px solid @GetAgentAccentColor(agentStatus.Telemetry.AgentId.Id);">
+                    <tr>
+                        <td class="font-monospace small align-middle" rowspan="@GetAgentRowspan(agentStatus)">
+                            @agentStatus.Telemetry.AgentId.Address/@agentStatus.Telemetry.AgentId.Id
+                        </td>
+                        @if (!float.IsNaN(agentStatus.Telemetry.RejectRate))
+                        {
+                            <td class="align-middle">@agentStatus.Telemetry.CurrentHashrate.ToString("N0") H/s</td>
+                            <td class="align-middle">@agentStatus.Telemetry.Temperature °C</td>
+                            <td class="align-middle">@agentStatus.Telemetry.FanSpeed %</td>
+                            <td class="align-middle">@agentStatus.Telemetry.GpuUtilization %</td>
+                            <td class="align-middle">@(agentStatus.Telemetry.RejectRate * 100) %</td>
+                        }
+                        else
+                        {
+                            <td colspan="5" class="text-muted text-center align-middle">Waiting for telemetry...</td>
+                        }
+                    </tr>
+                    @foreach (var gpu in agentStatus.Telemetry.GpuDevices.OrderBy(g => g.DeviceIndex))
+                    {
+                        <tr class="assignment-row">
+                            <td colspan="5">
+                                <span class="badge rounded-pill bg-dark text-white me-2">GPU @gpu.DeviceIndex</span>
+                                @if (!string.IsNullOrWhiteSpace(gpu.DeviceName))
+                                {
+                                    <span class="badge rounded-pill bg-secondary me-2">@gpu.DeviceName</span>
+                                }
+                                <span class="badge rounded-pill bg-light text-dark me-2">Hashrate: @FormatGpuHashrate(gpu.CurrentHashrate)</span>
+                                <span class="badge rounded-pill bg-light text-dark me-2">Temp: @FormatIntMetric(gpu.Temperature, "°C")</span>
+                                <span class="badge rounded-pill bg-light text-dark me-2">Fan: @FormatIntMetric(gpu.FanSpeed, "%")</span>
+                                <span class="badge rounded-pill bg-light text-dark me-2">GPU Util: @FormatIntMetric(gpu.GpuUtilization, "%")</span>
+                                <span class="badge rounded-pill bg-light text-dark me-2">VRAM: @FormatVramMetric(gpu.VramUsedBytes, gpu.VramTotalBytes, gpu.VramUtilization)</span>
+                            </td>
+                        </tr>
+                    }
+                    @foreach (var chunk in agentStatus.AssignedChunks)
+                    {
+                        @switch (chunk.PayloadCase)
+                        {
+                        case AssignedChunk.PayloadOneofCase.DictionaryChunk:
+                            <tr class="assignment-row">
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-primary text-white me-2">Dictionary</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.DictionaryChunk.WordlistName</span>
+                                </td>
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-info text-dark me-2">Bytes</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.DictionaryChunk.ByteStart - @(chunk.DictionaryChunk.ByteEnd == -1 ? "EOF" : chunk.DictionaryChunk.ByteEnd.ToString())</span>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2">Size</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.DictionaryChunk.WordlistName)</span>
+                                </td>
+                            </tr>
+                            break;
+
+                        case AssignedChunk.PayloadOneofCase.MaskChunk:
+                            <tr class="assignment-row">
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-success text-white me-2">Mask</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark font-monospace">@chunk.MaskChunk.Mask</span>
+                                </td>
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-info text-dark me-2">Range</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.MaskChunk.KeyspaceStart.ToString("N0") - @chunk.MaskChunk.KeyspaceEnd.ToString("N0")</span>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2">Total</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@FormatMaskKeyspace(chunk.MaskChunk.TotalKeyspace)</span>
+                                </td>
+                            </tr>
+                            break;
+
+                        case AssignedChunk.PayloadOneofCase.CombinatorChunk:
+                            <tr class="assignment-row">
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-primary text-white me-2">Left</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.LeftWordlistName</span>
+                                </td>
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-info text-dark me-2">Left Bytes</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.LeftByteStart - @(chunk.CombinatorChunk.LeftByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.LeftByteEnd.ToString())</span>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2">Left Size</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.CombinatorChunk.LeftWordlistName)</span>
+                                </td>
+                            </tr>
+                            <tr class="assignment-row">
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-secondary text-white me-2">Right</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.RightWordlistName</span>
+                                </td>
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-info text-dark me-2">Right Bytes</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.CombinatorChunk.RightByteStart - @(chunk.CombinatorChunk.RightByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.RightByteEnd.ToString())</span>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2">Right Size</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.CombinatorChunk.RightWordlistName)</span>
+                                </td>
+                            </tr>
+                            break;
+
+                        case AssignedChunk.PayloadOneofCase.HybridChunk:
+                            <tr class="assignment-row">
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-primary text-white me-2">Wordlist</span>
+                                    <span class="badge rounded-pill bg-success text-white me-2">Mask</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark me-2">@chunk.HybridChunk.WordlistName</span>
+                                    <span class="badge rounded-pill bg-light text-dark font-monospace">@chunk.HybridChunk.Mask</span>
+                                </td>
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-info text-dark me-2">Wordlist Bytes</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.HybridChunk.ByteStart - @(chunk.HybridChunk.ByteEnd == -1 ? "EOF" : chunk.HybridChunk.ByteEnd.ToString())</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-info text-dark me-2 mt-2">Mask Range</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.HybridChunk.KeyspaceStart.ToString("N0") - @chunk.HybridChunk.KeyspaceEnd.ToString("N0")</span>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2">Wordlist Size</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.HybridChunk.WordlistName)</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2 mt-2">Mask Total</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@FormatMaskKeyspace(chunk.HybridChunk.TotalKeyspace)</span>
+                                </td>
+                            </tr>
+                            break;
+                        }
+                    }
+                </tbody>
+            }
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public JobStatus? JobStatus { get; set; }
+
+    private bool _isExpanded = true;
+
+    private int AgentCount => JobStatus?.Agents.Count ?? 0;
+
+    private void ToggleAgents() => _isExpanded = !_isExpanded;
+
+    private string GetAgentColor(string id)
+    {
+        var h = Math.Abs(id.GetHashCode()) % 360;
+        return $"hsl({h}, 70%, 95%)";
+    }
+
+    private string GetAgentAccentColor(string id)
+    {
+        var h = Math.Abs(id.GetHashCode()) % 360;
+        return $"hsl({h}, 70%, 45%)";
+    }
+
+    private int GetAgentRowspan(AgentStatus agentStatus)
+        => 1 + agentStatus.Telemetry.GpuDevices.Count + agentStatus.AssignedChunks.Sum(GetAssignmentRowCount);
+
+    private static int GetAssignmentRowCount(AssignedChunk chunk)
+        => chunk.PayloadCase == AssignedChunk.PayloadOneofCase.CombinatorChunk ? 2 : 1;
+
+    private static string FormatGpuHashrate(long hashrate)
+        => hashrate < 0 ? "Unknown" : $"{hashrate:N0} H/s";
+
+    private static string FormatIntMetric(int value, string unit)
+        => value < 0 ? "Unknown" : $"{value} {unit}";
+
+    private static string FormatVramMetric(long usedBytes, long totalBytes, int utilization)
+    {
+        if (usedBytes < 0 && totalBytes <= 0 && utilization < 0)
+        {
+            return "Unknown";
+        }
+
+        var used = usedBytes >= 0 ? FormatBytes(usedBytes) : "?";
+        var total = totalBytes > 0 ? FormatBytes(totalBytes) : "?";
+        var util = utilization >= 0 ? $" ({utilization}%)" : string.Empty;
+        return $"{used} / {total}{util}";
+    }
+
+    private string GetWordlistSizeLabel(string? wordlistName)
+    {
+        if (string.IsNullOrWhiteSpace(wordlistName))
+        {
+            return "Unknown";
+        }
+
+        try
+        {
+            var size = WordlistService.GetWordlistFileSize(wordlistName);
+            return FormatBytes(size);
+        }
+        catch
+        {
+            return "Unavailable";
+        }
+    }
+
+    private static string FormatMaskKeyspace(ulong keyspace)
+        => keyspace == 0 ? "Unknown" : keyspace.ToString("N0");
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes < 0)
+        {
+            return "Unknown";
+        }
+
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+
+        var value = (double)bytes;
+        if (bytes < 1024 * 1024)
+        {
+            return $"{value / 1024.0:F1} KiB";
+        }
+
+        if (bytes < 1024L * 1024L * 1024L)
+        {
+            return $"{value / (1024.0 * 1024.0):F1} MiB";
+        }
+
+        return $"{value / (1024.0 * 1024.0 * 1024.0):F1} GiB";
+    }
+}

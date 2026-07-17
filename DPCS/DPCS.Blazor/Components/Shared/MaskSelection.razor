@@ -7,7 +7,7 @@
             &#x24D8;
         </button>
     </label>
-    <InputTextArea @bind-Value="Masks" class="form-control font-monospace" placeholder="?u?l?d?s?a" />
+    <InputTextArea @bind-Value="BoundMasks" class="form-control font-monospace" placeholder="?u?l?d?s?a" />
     @if (ValidationFor is not null)
     {
         <ValidationMessage For="ValidationFor" />
@@ -103,4 +103,19 @@
 
     private bool _showMaskHelp;
     private bool _showAllMasks;
+
+    private string? BoundMasks
+    {
+        get => Masks;
+        set
+        {
+            if (string.Equals(Masks, value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            Masks = value;
+            _ = MasksChanged.InvokeAsync(value);
+        }
+    }
 }

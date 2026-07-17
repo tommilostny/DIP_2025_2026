@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace DPCS.Coordinator.Strategies;
 
 /// <summary>
@@ -16,12 +14,9 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
     private readonly int[] _completedIntervals = new int[specs.DictionaryJobSpecs.Wordlists.Count];
     private readonly int[] _totalIntervals = new int[specs.DictionaryJobSpecs.Wordlists.Count];
 
-    private static readonly HttpClient HttpClient = new();
-
     private readonly Dictionary<string, ChunkState> _activeChunks = [];
     private readonly Queue<ChunkState> _retryQueue = [];
-    private readonly Dictionary<string, string> _cachedIndexFiles = [];
-    private string? _jobCacheDirectory;
+    private readonly WordlistIndexCache _indexCache = new(jobId, serverBaseUrl);
     private readonly int _ruleCount = Math.Max(1, specs.DictionaryJobSpecs.RuleFileContent
         .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
         .Count(line => !string.IsNullOrWhiteSpace(line)));
@@ -102,8 +97,11 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
             DictionaryAssignment = new DictionaryWorkAssignment
             {
                 // Pass the byte bounds via query string so the Agent knows what Range to request
-                DictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{wordlistName}?startByte={nextChunk.StartByte}&endByte={nextChunk.EndByte}",
-                DictionaryChunkChecksum = string.Empty
+                WordlistUrl = $"{serverBaseUrl}/wordlists/{wordlistName}",
+                WordlistChunkChecksum = string.Empty,
+                WordlistName = wordlistName,
+                StartByte = nextChunk.StartByte,
+                EndByte = nextChunk.EndByte,
             },
         };
     }
@@ -170,10 +168,7 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
     private async Task LoadCurrentWordlistIndexAsync()
     {
         var wordlistName = specs.DictionaryJobSpecs.Wordlists[_currentWordlistIndex];
-        var cachePath = _cachedIndexFiles[wordlistName];
-        var bytes = await File.ReadAllBytesAsync(cachePath);
-
-        _currentWordlistIndexData = MemoryMarshal.Cast<byte, long>(bytes).ToArray();
+        _currentWordlistIndexData = await _indexCache.LoadIndexDataAsync(wordlistName);
         _totalIntervals[_currentWordlistIndex] = Math.Max(1, _currentWordlistIndexData.Length - 1);
     }
 
@@ -182,18 +177,7 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
     /// </summary>
     public async Task InitializeAsync()
     {
-        _jobCacheDirectory = Path.Combine(Path.GetTempPath(), "dpcs-coordinator-indexes", SanitizeFileName(jobId));
-        Directory.CreateDirectory(_jobCacheDirectory);
-
-        foreach (var wordlistName in specs.DictionaryJobSpecs.Wordlists.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var cachePath = Path.Combine(_jobCacheDirectory, $"{SanitizeFileName(wordlistName)}.idx");
-            var idxUrl = $"{serverBaseUrl}/wordlists/{wordlistName}.idx";
-            using var response = await HttpClient.GetAsync(idxUrl);
-            response.EnsureSuccessStatusCode();
-            await File.WriteAllBytesAsync(cachePath, await response.Content.ReadAsByteArrayAsync());
-            _cachedIndexFiles[wordlistName] = cachePath;
-        }
+        await _indexCache.InitializeAsync(specs.DictionaryJobSpecs.Wordlists);
     }
 
     /// <summary>
@@ -201,25 +185,8 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
     /// </summary>
     public Task CleanupAsync()
     {
-        if (!string.IsNullOrWhiteSpace(_jobCacheDirectory) && Directory.Exists(_jobCacheDirectory))
-        {
-            Directory.Delete(_jobCacheDirectory, recursive: true);
-        }
-
-        _cachedIndexFiles.Clear();
+        _indexCache.Cleanup();
         _currentWordlistIndexData = null;
         return Task.CompletedTask;
     }
-
-    /// <summary>
-    /// Resolves SHA256 for the exact assigned byte range from the wordlist host checksum endpoint.
-    /// </summary>
-    private async Task<string> ComputeChunkChecksumAsync(string wordlistName, long startByte, long endByte)
-    {
-        var encodedWordlistName = Uri.EscapeDataString(wordlistName);
-        var checksumUrl = $"{serverBaseUrl}/api/wordlists/{encodedWordlistName}/checksum?startByte={startByte}&endByte={endByte}";
-        return (await HttpClient.GetStringAsync(checksumUrl)).Trim();
-    }
-
-    private static string SanitizeFileName(string value) => string.Concat(value.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
 }

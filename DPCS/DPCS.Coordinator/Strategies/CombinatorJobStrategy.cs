@@ -1,5 +1,3 @@
-using System.Runtime.InteropServices;
-
 namespace DPCS.Coordinator.Strategies;
 
 /// <summary>
@@ -9,60 +7,22 @@ namespace DPCS.Coordinator.Strategies;
 /// </summary>
 public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, string serverBaseUrl) : IJobStrategy
 {
-    /// <summary>
-    /// Current index for the left wordlist being processed.
-    /// </summary>
     private int _currentLeftWordlistIndex = 0;
-    /// <summary>
-    /// Current work unit interval index for the left wordlist.
-    /// </summary>
     private int _currentLeftIntervalIndex = 0;
-
-    /// <summary>
-    /// Holds the index data for the current left wordlist, loaded from its .idx file.
-    /// </summary>
     private long[]? _currentLeftIndexData;
-    /// <summary>
-    /// Tracks all active chunks that have been assigned to agents, keyed by their request ID.
-    /// </summary>
-    private readonly Dictionary<string, ChunkState> _activeChunks = [];
-    /// <summary>
-    /// Queue of chunks that failed and need to be reassigned to agents.
-    /// </summary>
-    private readonly Queue<ChunkState> _retryQueue = [];
-    /// <summary>
-    /// Tracks reservations by reservation id.
-    /// </summary>
-    private readonly Dictionary<string, LeftReservation> _leftReservations = [];
-    /// <summary>
-    /// Tracks reservation ownership by agent key.
-    /// </summary>
-    private readonly Dictionary<string, string> _agentReservations = [];
-    /// <summary>
-    /// Queue of reservations that can be picked up by any agent.
-    /// </summary>
-    private readonly Queue<string> _availableReservations = [];
-    /// <summary>
-    /// Caches index file paths to avoid redundant downloads.
-    /// </summary>
-    private readonly Dictionary<string, string> _cachedIndexFiles = [];
-    /// <summary>
-    /// HTTP client for downloading index files and other resources.
-    /// </summary>
-    private readonly HttpClient _httpClient = new();
 
-    /// <summary>
-    /// Total number of completed work units for the combinator job.
-    /// </summary>
+    private readonly Dictionary<string, ChunkState> _activeChunks = [];
+
+    private readonly Queue<ChunkState> _retryQueue = [];
+
+    private readonly Dictionary<string, LeftReservation> _leftReservations = [];
+    private readonly Dictionary<string, string> _agentReservations = [];
+    private readonly Queue<string> _availableReservations = [];
+
+    private readonly WordlistIndexCache _indexCache = new(jobId, serverBaseUrl);
+
     private ulong _completedWorkUnits;
-    /// <summary>
-    /// Total number of work units for the combinator job.
-    /// </summary>
     private ulong _totalWorkUnits;
-    /// <summary>
-    /// Directory for caching job-related files.
-    /// </summary>
-    private string? _jobCacheDirectory;
 
     /// <summary>
     /// Represents a reservation for a specific left wordlist chunk, allowing an agent to continue processing it without interference.
@@ -248,18 +208,7 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
     /// </summary>
     public async Task InitializeAsync()
     {
-        _jobCacheDirectory = Path.Combine(Path.GetTempPath(), "dpcs-coordinator-indexes", SanitizeFileName(jobId));
-        Directory.CreateDirectory(_jobCacheDirectory);
-
-        foreach (var wordlistName in specs.CombinatorJobSpecs.LeftWordlists.Concat(specs.CombinatorJobSpecs.RightWordlists).Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var cachePath = Path.Combine(_jobCacheDirectory, $"{SanitizeFileName(wordlistName)}.idx");
-            var idxUrl = $"{serverBaseUrl}/wordlists/{wordlistName}.idx";
-            using var response = await _httpClient.GetAsync(idxUrl);
-            response.EnsureSuccessStatusCode();
-            await File.WriteAllBytesAsync(cachePath, await response.Content.ReadAsByteArrayAsync());
-            _cachedIndexFiles[wordlistName] = cachePath;
-        }
+        await _indexCache.InitializeAsync(specs.CombinatorJobSpecs.LeftWordlists.Concat(specs.CombinatorJobSpecs.RightWordlists));
 
         RefreshEstimatedWorkUnits();
     }
@@ -269,12 +218,7 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
     /// </summary>
     public Task CleanupAsync()
     {
-        if (!string.IsNullOrWhiteSpace(_jobCacheDirectory) && Directory.Exists(_jobCacheDirectory))
-        {
-            Directory.Delete(_jobCacheDirectory, recursive: true);
-        }
-
-        _cachedIndexFiles.Clear();
+        _indexCache.Cleanup();
         _leftReservations.Clear();
         _agentReservations.Clear();
         _availableReservations.Clear();
@@ -298,10 +242,10 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
             RequestId = requestId,
             CombinatorAssignment = new CombinatorWorkAssignment
             {
-                LeftDictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{leftWordlist}?startByte={chunkState.LeftStartByte}&endByte={chunkState.LeftEndByte}",
-                RightDictionaryChunkUrl = $"{serverBaseUrl}/wordlists/{rightWordlist}?startByte={chunkState.RightStartByte}&endByte={chunkState.RightEndByte}",
-                LeftDictionaryChunkChecksum = string.Empty,
-                RightDictionaryChunkChecksum = string.Empty,
+                LeftWordlistUrl = $"{serverBaseUrl}/wordlists/{leftWordlist}",
+                RightWordlistUrl = $"{serverBaseUrl}/wordlists/{rightWordlist}",
+                LeftWordlistChunkChecksum = string.Empty,
+                RightWordlistChunkChecksum = string.Empty,
                 LeftWordlistName = leftWordlist,
                 RightWordlistName = rightWordlist,
                 LeftStartByte = chunkState.LeftStartByte,
@@ -313,25 +257,13 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
     }
 
     /// <summary>
-    /// Resolves SHA256 for the exact assigned byte range from the wordlist host checksum endpoint.
-    /// </summary>
-    private async Task<string> ComputeChunkChecksumAsync(string wordlistName, long startByte, long endByte)
-    {
-        var encodedWordlistName = Uri.EscapeDataString(wordlistName);
-        var checksumUrl = $"{serverBaseUrl}/api/wordlists/{encodedWordlistName}/checksum?startByte={startByte}&endByte={endByte}";
-        return (await _httpClient.GetStringAsync(checksumUrl)).Trim();
-    }
-
-    /// <summary>
     /// Loads a wordlist index from local cache and returns byte offsets as intervals.
     /// </summary>
     private async Task<long[]> LoadIndexDataAsync(bool isLeft, int wordlistIndex)
     {
         var wordlists = isLeft ? specs.CombinatorJobSpecs.LeftWordlists : specs.CombinatorJobSpecs.RightWordlists;
         var wordlistName = wordlists[wordlistIndex];
-        var cachePath = _cachedIndexFiles[wordlistName];
-        var bytes = await File.ReadAllBytesAsync(cachePath);
-        return MemoryMarshal.Cast<byte, long>(bytes).ToArray();
+        return await _indexCache.LoadIndexDataAsync(wordlistName);
     }
 
     /// <summary>
@@ -469,8 +401,7 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
         ulong leftIntervals = 0UL;
         foreach (var wordlistName in specs.CombinatorJobSpecs.LeftWordlists)
         {
-            var path = _cachedIndexFiles.TryGetValue(wordlistName, out var cachedPath) ? cachedPath : null;
-            if (path is not null && File.Exists(path))
+            if (_indexCache.TryGetCachedIndexPath(wordlistName, out var path) && File.Exists(path))
             {
                 leftIntervals += (ulong)(new FileInfo(path).Length / sizeof(long));
             }
@@ -479,8 +410,7 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
         ulong rightIntervals = 0UL;
         foreach (var wordlistName in specs.CombinatorJobSpecs.RightWordlists)
         {
-            var path = _cachedIndexFiles.TryGetValue(wordlistName, out var cachedPath) ? cachedPath : null;
-            if (path is not null && File.Exists(path))
+            if (_indexCache.TryGetCachedIndexPath(wordlistName, out var path) && File.Exists(path))
             {
                 rightIntervals += (ulong)(new FileInfo(path).Length / sizeof(long));
             }
@@ -488,8 +418,6 @@ public sealed class CombinatorJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
         _totalWorkUnits = leftIntervals == 0 || rightIntervals == 0 ? 0UL : leftIntervals * rightIntervals;
     }
-
-    private static string SanitizeFileName(string value) => string.Concat(value.Select(ch => Path.GetInvalidFileNameChars().Contains(ch) ? '_' : ch));
 
     /// <summary>
     /// Moves left-wordlist cursor to the next source when the current one is fully reserved.

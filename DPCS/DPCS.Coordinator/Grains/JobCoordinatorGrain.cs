@@ -136,6 +136,16 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             registratrion.AttackMode = (int)AttackMode.Combinator;
             break;
 
+        case JobSpecsEnvelope.PayloadOneofCase.HybridJobSpecs:
+            _jobStrategy = new HybridJobStrategy(_clusterIdentity.Identity, request, _hashcatWrapper, _serverBaseUrl);
+            registratrion.AttackMode = request.HybridJobSpecs.AttackMode switch
+            {
+                (int)AttackMode.Hybrid_WordlistMask or (int)AttackMode.Hybrid_MaskWordlist
+                    => request.HybridJobSpecs.AttackMode,
+                _ => throw new InvalidOperationException($"HybridJobStrategy can only be used with hybrid attack modes, but received {request.HybridJobSpecs.AttackMode}.")
+            };
+            break;
+
         default:
             throw new InvalidOperationException("Invalid job specs payload");
         }
@@ -246,27 +256,19 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                         TotalKeyspace = (_jobStrategy as MaskJobStrategy)?.GetStoredKeyspaceForMask(assignment.MaskAssignment.Mask) ?? 0
                     }
                 };
+
             case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
-            {
-                var dictUri = new Uri(assignment.DictionaryAssignment.DictionaryChunkUrl);
-                var parsedQuery = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(dictUri.Query);
                 return new AssignedChunk
                 {
                     RequestId = assignment.RequestId,
                     DictionaryChunk = new DictionaryAssignedChunk
                     {
-                        WordlistName = dictUri.Segments.LastOrDefault() ?? "unknown",
-                        ByteStart = dictUri.Query.Contains("startByte=")
-                            ? long.TryParse(parsedQuery["startByte"].FirstOrDefault() ?? "0", out var startByte)
-                                ? startByte : 0
-                            : 0,
-                        ByteEnd = dictUri.Query.Contains("endByte=")
-                            ? long.TryParse(parsedQuery["endByte"].FirstOrDefault() ?? "0", out var endByte)
-                                ? endByte : 0
-                            : 0,
+                        WordlistName = assignment.DictionaryAssignment.WordlistName,
+                        ByteStart = assignment.DictionaryAssignment.StartByte,
+                        ByteEnd = assignment.DictionaryAssignment.EndByte,
                     }
                 };
-            }
+
             case WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment:
                 return new AssignedChunk
                 {
@@ -279,6 +281,26 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                         RightWordlistName = assignment.CombinatorAssignment.RightWordlistName,
                         RightByteStart = assignment.CombinatorAssignment.RightStartByte,
                         RightByteEnd = assignment.CombinatorAssignment.RightEndByte
+                    }
+                };
+
+            case WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment:
+                return new AssignedChunk
+                {
+                    RequestId = assignment.RequestId,
+                    HybridChunk = new HybridAssignedChunk
+                    {
+                        WordlistName = assignment.HybridAssignment.WordlistName,
+                        ByteStart = assignment.HybridAssignment.StartByte,
+                        ByteEnd = assignment.HybridAssignment.EndByte,
+                        Mask = assignment.HybridAssignment.Mask,
+                        KeyspaceStart = assignment.HybridAssignment.KeyspaceStart,
+                        KeyspaceEnd = assignment.HybridAssignment.KeyspaceStart + assignment.HybridAssignment.KeyspaceLength - 1,
+                        TotalKeyspace = (_jobStrategy as HybridJobStrategy)?.GetStoredKeyspaceForMask(assignment.HybridAssignment.Mask) ?? 0,
+                        CustomCharset1 = assignment.HybridAssignment.CustomCharset1,
+                        CustomCharset2 = assignment.HybridAssignment.CustomCharset2,
+                        CustomCharset3 = assignment.HybridAssignment.CustomCharset3,
+                        CustomCharset4 = assignment.HybridAssignment.CustomCharset4,
                     }
                 };
             default:
@@ -499,7 +521,7 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                     continue;
                 }
 
-                export.Records.Add(new Shared.WorkUnitLifecycleRecord
+                export.Records.Add(new WorkUnitLifecycleRecord
                 {
                     RequestId = record.RequestId,
                     JobId = record.JobId,
@@ -741,6 +763,8 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
                 $"wordlist={chunk.DictionaryChunk.WordlistName};bytes={chunk.DictionaryChunk.ByteStart}-{(chunk.DictionaryChunk.ByteEnd == -1 ? "EOF" : chunk.DictionaryChunk.ByteEnd.ToString())}",
             AssignedChunk.PayloadOneofCase.CombinatorChunk =>
                 $"left={chunk.CombinatorChunk.LeftWordlistName}[{chunk.CombinatorChunk.LeftByteStart}-{(chunk.CombinatorChunk.LeftByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.LeftByteEnd.ToString())}];right={chunk.CombinatorChunk.RightWordlistName}[{chunk.CombinatorChunk.RightByteStart}-{(chunk.CombinatorChunk.RightByteEnd == -1 ? "EOF" : chunk.CombinatorChunk.RightByteEnd.ToString())}]",
+            AssignedChunk.PayloadOneofCase.HybridChunk =>
+                $"wordlist={chunk.HybridChunk.WordlistName};bytes={chunk.HybridChunk.ByteStart}-{(chunk.HybridChunk.ByteEnd == -1 ? "EOF" : chunk.HybridChunk.ByteEnd.ToString())};mask={chunk.HybridChunk.Mask};range={chunk.HybridChunk.KeyspaceStart}-{chunk.HybridChunk.KeyspaceEnd}",
             _ => "unknown"
         };
     }
@@ -752,9 +776,11 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment =>
                 $"mask={chunk.MaskAssignment.Mask};range={chunk.MaskAssignment.KeyspaceStart}-{chunk.MaskAssignment.KeyspaceStart + chunk.MaskAssignment.KeyspaceLength - 1}",
             WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment =>
-                $"dictionary_url={chunk.DictionaryAssignment.DictionaryChunkUrl}",
+                $"dictionary_url={chunk.DictionaryAssignment.WordlistUrl}",
             WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment =>
                 $"left={chunk.CombinatorAssignment.LeftWordlistName}[{chunk.CombinatorAssignment.LeftStartByte}-{(chunk.CombinatorAssignment.LeftEndByte == -1 ? "EOF" : chunk.CombinatorAssignment.LeftEndByte.ToString())}];right={chunk.CombinatorAssignment.RightWordlistName}[{chunk.CombinatorAssignment.RightStartByte}-{(chunk.CombinatorAssignment.RightEndByte == -1 ? "EOF" : chunk.CombinatorAssignment.RightEndByte.ToString())}]",
+            WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment =>
+                $"wordlist={chunk.HybridAssignment.WordlistUrl};mask={chunk.HybridAssignment.Mask};custom_charset1={chunk.HybridAssignment.CustomCharset1};custom_charset2={chunk.HybridAssignment.CustomCharset2};custom_charset3={chunk.HybridAssignment.CustomCharset3};custom_charset4={chunk.HybridAssignment.CustomCharset4};range={chunk.HybridAssignment.KeyspaceStart}-{chunk.HybridAssignment.KeyspaceStart + chunk.HybridAssignment.KeyspaceLength - 1}",
             _ => "unknown"
         };
     }
@@ -775,6 +801,9 @@ public class JobCoordinatorGrain : JobCoordinatorGrainBase
             AttackMode.Mask => "mask",
             AttackMode.Dictionary => "dictionary",
             AttackMode.Combinator => "combinator",
+            AttackMode.Hybrid_WordlistMask => "hybrid_wordlist_mask",
+            AttackMode.Hybrid_MaskWordlist => "hybrid_mask_wordlist",
+            AttackMode.Association => "association",
             _ => "unknown"
         };
     }

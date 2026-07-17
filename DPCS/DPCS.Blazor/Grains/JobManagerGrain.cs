@@ -81,11 +81,25 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 Wordlists = { normalizedRequest.CombinatorJobSpecs.LeftWordlists, normalizedRequest.CombinatorJobSpecs.RightWordlists },
                 RuleFileContent = normalizedRequest.CombinatorJobSpecs.RuleFileContent,
             },
+            JobSpecsEnvelope.PayloadOneofCase.HybridJobSpecs => new()
+            {
+                JobId = signedJobId,
+                ModeId = normalizedRequest.HybridJobSpecs.AttackMode switch
+                {
+                    (int)AttackMode.Hybrid_WordlistMask or (int)AttackMode.Hybrid_MaskWordlist
+                        => normalizedRequest.HybridJobSpecs.AttackMode,
+                    _ => throw new InvalidOperationException($"Invalid hybrid attack mode: {normalizedRequest.HybridJobSpecs.AttackMode}. Expected {(int)AttackMode.Hybrid_WordlistMask} or {(int)AttackMode.Hybrid_MaskWordlist}.")
+                },
+                HashType = normalizedRequest.HashType,
+                Hashes = { normalizedRequest.Hashes },
+                Wordlists = { normalizedRequest.HybridJobSpecs.Wordlists },
+                Masks = { normalizedRequest.HybridJobSpecs.Masks },
+            },
             _ => throw new InvalidOperationException("Invalid job specs payload")
         };
 
         _unfinishedJobs[signedJobId] = assignment;
-    _recentSubmissions[requestFingerprint] = new SubmissionFingerprintEntry(assignment, DateTime.UtcNow);
+        _recentSubmissions[requestFingerprint] = new SubmissionFingerprintEntry(assignment, DateTime.UtcNow);
 
         Console.WriteLine($"{_clusterIdentity.Identity}: received job submission, assigned job id {signedJobId}: {JsonSerializer.Serialize(normalizedRequest)}");
 
@@ -107,24 +121,24 @@ public sealed class JobManagerGrain : JobManagerGrainBase
 
     private static JobSpecsEnvelope NormalizeJobSubmissionRequest(JobSpecsEnvelope request)
     {
-        if (request.PayloadCase != JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs
-            || !HashcatWrapper.IsIncrementMode(request.MaskJobSpecs.MinLength, request.MaskJobSpecs.MaxLength))
+        if (request.PayloadCase == JobSpecsEnvelope.PayloadOneofCase.MaskJobSpecs
+            && request.MaskJobSpecs.MinLength > 0 && request.MaskJobSpecs.MaxLength > 0
+            && request.MaskJobSpecs.MinLength <= request.MaskJobSpecs.MaxLength)
         {
-            return request;
+            var normalized = request.Clone();
+            var expandedMasks = ExpandMasksForIncrementMode(
+                normalized.MaskJobSpecs.Masks,
+                normalized.MaskJobSpecs.MinLength,
+                normalized.MaskJobSpecs.MaxLength);
+
+            normalized.MaskJobSpecs.Masks.Clear();
+            normalized.MaskJobSpecs.Masks.Add(expandedMasks);
+            normalized.MaskJobSpecs.MinLength = 0;
+            normalized.MaskJobSpecs.MaxLength = 0;
+
+            return normalized;
         }
-
-        var normalized = request.Clone();
-        var expandedMasks = ExpandMasksForIncrementMode(
-            normalized.MaskJobSpecs.Masks,
-            normalized.MaskJobSpecs.MinLength,
-            normalized.MaskJobSpecs.MaxLength);
-
-        normalized.MaskJobSpecs.Masks.Clear();
-        normalized.MaskJobSpecs.Masks.Add(expandedMasks);
-        normalized.MaskJobSpecs.MinLength = 0;
-        normalized.MaskJobSpecs.MaxLength = 0;
-
-        return normalized;
+        return request;
     }
 
     private static IEnumerable<string> ExpandMasksForIncrementMode(IEnumerable<string> masks, int minLength, int maxLength)
@@ -183,7 +197,8 @@ public sealed class JobManagerGrain : JobManagerGrainBase
 
     private static string BuildRequestFingerprint(JobSpecsEnvelope request)
     {
-        static string JoinSorted(IEnumerable<string> values) => string.Join('\n', values.OrderBy(value => value, StringComparer.Ordinal));
+        static string _JoinSorted(IEnumerable<string> values)
+            => string.Join('\n', values.OrderBy(value => value, StringComparer.Ordinal));
 
         return request.PayloadCase switch
         {
@@ -191,8 +206,8 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 "mask",
                 request.HashType,
                 request.ChunkTimeSeconds,
-                JoinSorted(request.Hashes),
-                JoinSorted(request.MaskJobSpecs.Masks),
+                _JoinSorted(request.Hashes),
+                _JoinSorted(request.MaskJobSpecs.Masks),
                 request.MaskJobSpecs.MinLength,
                 request.MaskJobSpecs.MaxLength,
                 request.MaskJobSpecs.CustomCharset1,
@@ -204,18 +219,31 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 "dictionary",
                 request.HashType,
                 request.ChunkTimeSeconds,
-                JoinSorted(request.Hashes),
-                JoinSorted(request.DictionaryJobSpecs.Wordlists),
+                _JoinSorted(request.Hashes),
+                _JoinSorted(request.DictionaryJobSpecs.Wordlists),
                 request.DictionaryJobSpecs.RuleFileContent),
 
             JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs => string.Join('|',
                 "combinator",
                 request.HashType,
                 request.ChunkTimeSeconds,
-                JoinSorted(request.Hashes),
-                JoinSorted(request.CombinatorJobSpecs.LeftWordlists),
-                JoinSorted(request.CombinatorJobSpecs.RightWordlists),
+                _JoinSorted(request.Hashes),
+                _JoinSorted(request.CombinatorJobSpecs.LeftWordlists),
+                _JoinSorted(request.CombinatorJobSpecs.RightWordlists),
                 request.CombinatorJobSpecs.RuleFileContent),
+
+            JobSpecsEnvelope.PayloadOneofCase.HybridJobSpecs => string.Join('|',
+                "hybrid",
+                request.HashType,
+                request.ChunkTimeSeconds,
+                _JoinSorted(request.Hashes),
+                _JoinSorted(request.HybridJobSpecs.Wordlists),
+                _JoinSorted(request.HybridJobSpecs.Masks),
+                request.HybridJobSpecs.CustomCharset1,
+                request.HybridJobSpecs.CustomCharset2,
+                request.HybridJobSpecs.CustomCharset3,
+                request.HybridJobSpecs.CustomCharset4,
+                request.HybridJobSpecs.AttackMode),
 
             _ => throw new InvalidOperationException("Invalid job specs payload")
         };
