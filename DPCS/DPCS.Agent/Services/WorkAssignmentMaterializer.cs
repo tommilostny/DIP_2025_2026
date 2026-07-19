@@ -62,6 +62,23 @@ public sealed class WorkAssignmentMaterializer
                 Console.WriteLine($"Prepared combinator assignment {envelope.RequestId} with local left/right chunk files.");
                 return envelope;
 
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment }:
+                envelope.AssociationAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
+                    envelope.RequestId,
+                    envelope.AssociationAssignment.WordlistUrl,
+                    envelope.AssociationAssignment.StartByte,
+                    envelope.AssociationAssignment.EndByte,
+                    "association",
+                    cacheKey: GetCacheKey(
+                        envelope.AssociationAssignment.WordlistName,
+                        envelope.AssociationAssignment.StartByte,
+                        envelope.AssociationAssignment.EndByte),
+                    useCache: true,
+                    expectedChecksum: envelope.AssociationAssignment.WordlistChunkChecksum);
+
+                Console.WriteLine($"Prepared association assignment {envelope.RequestId} with a local dictionary file.");
+                return envelope;
+
             case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment }:
                 envelope.HybridAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
@@ -93,6 +110,9 @@ public sealed class WorkAssignmentMaterializer
         {
             case WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment:
                 TryDeleteLocalFile(chunk.DictionaryAssignment.WordlistUrl);
+                break;
+            case WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment:
+                TryDeleteLocalFile(chunk.AssociationAssignment.WordlistUrl);
                 break;
             case WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment:
                 if (!IsCachedCombinatorLeftPath(chunk.CombinatorAssignment.LeftWordlistUrl))

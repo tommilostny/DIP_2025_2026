@@ -85,6 +85,26 @@
                             </tr>
                             break;
 
+                        case AssignedChunk.PayloadOneofCase.AssociationChunk:
+                            <tr class="assignment-row">
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-primary text-white me-2">Association</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.AssociationChunk.WordlistName</span>
+                                </td>
+                                <td colspan="2">
+                                    <span class="badge rounded-pill bg-info text-dark me-2">Bytes</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@chunk.AssociationChunk.ByteStart - @(chunk.AssociationChunk.ByteEnd == -1 ? "EOF" : chunk.AssociationChunk.ByteEnd.ToString())</span>
+                                </td>
+                                <td>
+                                    <span class="badge rounded-pill bg-warning text-dark me-2">Size</span>
+                                    <br>
+                                    <span class="badge rounded-pill bg-light text-dark">@GetWordlistSizeLabel(chunk.AssociationChunk.WordlistName)</span>
+                                </td>
+                            </tr>
+                            break;
+
                         case AssignedChunk.PayloadOneofCase.MaskChunk:
                             <tr class="assignment-row">
                                 <td colspan="2">

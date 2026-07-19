@@ -369,6 +369,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         {
             WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment => "mask",
             WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment => "dictionary",
+            WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment => "association",
             WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment => "combinator",
             _ => "unknown"
         };
@@ -482,6 +483,15 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
                 Console.WriteLine($"Cracking combinator chunk: {chunk.RequestId}");
                 return await hashcatWrapper.RunHashcatCombinatorAttackAsync(
                     chunk.CombinatorAssignment,
+                    _currentJob.HashType,
+                    hashFilePath,
+                    _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
+                    _currentWorkCts!.Token);
+
+            case WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment:
+                Console.WriteLine($"Cracking association chunk: {chunk.RequestId}");
+                return await hashcatWrapper.RunHashcatAssociationAttackAsync(
+                    chunk.AssociationAssignment,
                     _currentJob.HashType,
                     hashFilePath,
                     _ruleFileStore.GetRuleFilePath(_currentJob.JobId),

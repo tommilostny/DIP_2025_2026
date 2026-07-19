@@ -51,6 +51,12 @@ message HashcatCombinatorJobSpecs {
   string rule_file_content = 3;
 }
 
+// Parameters for submitting a Hashcat association attack job by user in the web interface
+message HashcatAssociationJobSpecs {
+  repeated string wordlists = 1;
+  string rule_file_content = 2;
+}
+
 // Parameters for submitting a Hashcat hybrid attack job by user in the web interface
 message HashcatHybridJobSpecs {
   repeated string wordlists = 1;
@@ -74,6 +80,7 @@ message JobSpecsEnvelope {
     HashcatDictionaryJobSpecs dictionary_job_specs = 5;
     HashcatCombinatorJobSpecs combinator_job_specs = 6;
     HashcatHybridJobSpecs hybrid_job_specs = 7;
+    HashcatAssociationJobSpecs association_job_specs = 8;
   }
 }
 
@@ -117,6 +124,14 @@ message CombinatorWorkAssignment {
   int64 right_end_byte = 10;
 }
 
+message AssociationWorkAssignment {
+  string wordlist_url = 1;
+  string wordlist_chunk_checksum = 2;
+  string wordlist_name = 3;
+  int64 start_byte = 4;
+  int64 end_byte = 5;
+}
+
 message HybridWorkAssignment {
   string wordlist_url = 1;
   string wordlist_chunk_checksum = 2;
@@ -144,6 +159,7 @@ message WorkAssignmentEnvelope {
     DictionaryWorkAssignment dictionary_assignment = 4;
     CombinatorWorkAssignment combinator_assignment = 5;
     HybridWorkAssignment hybrid_assignment = 6;
+    AssociationWorkAssignment association_assignment = 7;
   }
 }
 
@@ -215,6 +231,12 @@ message CombinatorAssignedChunk {
   int64 right_byte_end = 6;
 }
 
+message AssociationAssignedChunk {
+  string wordlist_name = 1;
+  int64 byte_start = 2;
+  int64 byte_end = 3;
+}
+
 message HybridAssignedChunk {
   string wordlist_name = 1;
   int64 byte_start = 2;
@@ -236,12 +258,17 @@ message AssignedChunk {
     DictionaryAssignedChunk dictionary_chunk = 3;
     CombinatorAssignedChunk combinator_chunk = 4;
     HybridAssignedChunk hybrid_chunk = 5;
+    AssociationAssignedChunk association_chunk = 6;
   }
 }
 
 message AgentStatus {
   AgentTelemetry telemetry = 2;
   repeated AssignedChunk assigned_chunks = 3;
+  bool is_alive = 4;
+  google.protobuf.Timestamp joined_at = 5;
+  google.protobuf.Timestamp last_seen_at = 6;
+  google.protobuf.Timestamp disconnected_at = 7;
 }
 
 // Message for reporting job status in response to GetJobStatus RPC
@@ -270,6 +297,16 @@ message JobProgressUpdate {
     string job_id = 1;
     float progress_percentage = 2;
     string status = 3; // e.g., "Running", "Completed", "Cancelled"
+}
+
+message JobProgressSample {
+  google.protobuf.Timestamp captured_at = 1;
+  float progress_percentage = 2;
+}
+
+message JobProgressHistoryExport {
+  string job_id = 1;
+  repeated JobProgressSample samples = 2;
 }
 
 message WordlistQuery {
@@ -313,6 +350,7 @@ message AgentGpuTelemetrySample {
   int32 fan_speed = 5;
   int32 gpu_utilization = 6;
   repeated GpuDeviceTelemetry gpu_devices = 7;
+  bool is_alive = 8;
 }
 
 message AgentGpuTelemetryExport {

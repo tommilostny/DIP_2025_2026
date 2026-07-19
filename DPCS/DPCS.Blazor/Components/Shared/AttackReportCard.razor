@@ -12,6 +12,18 @@
         <div class="row g-2 mb-3">
             <div class="col-sm-6 col-lg-3">
                 <div class="border rounded p-2 bg-light">
+                    <div class="small text-muted">Coverage Metric</div>
+                    <div class="fw-semibold">@AttackReport.CoverageMetric.ToUpperInvariant()</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="border rounded p-2 bg-light">
+                    <div class="small text-muted">Total Coverage</div>
+                    <div class="fw-semibold">@FormatCoverage(AttackReport.TotalCoverageUnits, AttackReport.CoverageUnitLabel)</div>
+                </div>
+            </div>
+            <div class="col-sm-6 col-lg-3">
+                <div class="border rounded p-2 bg-light">
                     <div class="small text-muted">Total WU</div>
                     <div class="fw-semibold">@AttackReport.TotalWorkUnits</div>
                 </div>
@@ -58,6 +70,11 @@
                     <thead class="table-light">
                         <tr>
                             <th>Agent</th>
+                            <th>Alive</th>
+                            <th>Joined</th>
+                            <th>Disconnected</th>
+                            <th>Coverage</th>
+                            <th>Coverage Share</th>
                             <th>Total WU</th>
                             <th>Completed</th>
                             <th>Timed Out</th>
@@ -77,6 +94,20 @@
                             var agentStatusReport = GetAgentStatusForReport(item.AgentKey);
                             <tr>
                                 <td class="font-monospace small" rowspan="@GetReportAgentRowspan(agentStatusReport)">@item.AgentKey</td>
+                                <td>
+                                    @if (agentStatusReport?.IsAlive == true)
+                                    {
+                                        <span class="badge bg-success">Alive</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Dead</span>
+                                    }
+                                </td>
+                                <td>@FormatTimestamp(agentStatusReport?.JoinedAt)</td>
+                                <td>@FormatTimestamp(agentStatusReport?.DisconnectedAt)</td>
+                                <td>@FormatCoverage(item.CoverageUnits, AttackReport.CoverageUnitLabel)</td>
+                                <td>@item.CoverageSharePercent.ToString("F1")%</td>
                                 <td>@item.TotalWorkUnits</td>
                                 <td>@item.CompletedWorkUnits</td>
                                 <td>@item.TimedOutWorkUnits</td>
@@ -95,7 +126,7 @@
                                 @foreach (var gpu in agentStatusReport.Telemetry.GpuDevices.OrderBy(g => g.DeviceIndex))
                                 {
                                     <tr class="assignment-row">
-                                        <td colspan="4">
+                                        <td colspan="9">
                                             <span class="badge rounded-pill bg-dark text-white me-2">GPU @gpu.DeviceIndex</span>
                                             @if (!string.IsNullOrWhiteSpace(gpu.DeviceName))
                                             {
@@ -143,10 +174,8 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Chunk</th>
-                                <th>Mode</th>
                                 <th>Attempts</th>
                                 <th>Agents</th>
-                                <th>Final Outcome</th>
                                 <th>Mean Duration</th>
                                 <th>Recovered</th>
                                 <th>Attempt History</th>
@@ -171,16 +200,12 @@
                                             <div class="small text-muted">@chunk.Display.SecondaryRange</div>
                                         }
                                     </td>
-                                    <td>@chunk.Mode</td>
                                     <td>@chunk.AttemptCount</td>
                                     <td>
                                         @foreach (var agent in chunk.Agents)
                                         {
                                             <div class="font-monospace small">@agent</div>
                                         }
-                                    </td>
-                                    <td>
-                                        <span class="badge @GetOutcomeBadgeClass(chunk.FinalOutcome)">@FormatOutcome(chunk.FinalOutcome)</span>
                                     </td>
                                     <td>@FormatDurationSeconds(chunk.MeanDurationSeconds)</td>
                                     <td>@chunk.RecoveredCount</td>
@@ -225,7 +250,7 @@
             <div class="col-12">
                 <div class="border rounded p-2 bg-white">
                     <div class="d-flex justify-content-between align-items-center mb-2">
-                        <strong>Chart: Load Balancing (Agent Work Share)</strong>
+                        <strong>Chart: Load Balancing (Coverage Share)</strong>
                         <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_load_balancing.png")" href="/api/jobs/@JobId/report-chart?type=load-balancing&amp;ts=@ChartCacheBust">Download PNG</a>
                     </div>
                     <img src="/api/jobs/@JobId/report-chart?type=load-balancing&amp;ts=@ChartCacheBust" alt="Load balancing chart" class="img-fluid border rounded" />
@@ -247,6 +272,51 @@
                         <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_gpu_usage_over_time.png")" href="/api/jobs/@JobId/report-chart?type=gpu-usage-time&amp;ts=@ChartCacheBust">Download PNG</a>
                     </div>
                     <img src="/api/jobs/@JobId/report-chart?type=gpu-usage-time&amp;ts=@ChartCacheBust" alt="GPU usage over time chart" class="img-fluid border rounded" />
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="border rounded p-2 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Chart: GPU Temperature Over Time (Per Agent + All Agents Avg)</strong>
+                        <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_gpu_temperature_over_time.png")" href="/api/jobs/@JobId/report-chart?type=gpu-temperature-time&amp;ts=@ChartCacheBust">Download PNG</a>
+                    </div>
+                    <img src="/api/jobs/@JobId/report-chart?type=gpu-temperature-time&amp;ts=@ChartCacheBust" alt="GPU temperature over time chart" class="img-fluid border rounded" />
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="border rounded p-2 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Chart: Hashrate Over Time (Per Agent + All Agents Avg)</strong>
+                        <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_hashrate_over_time.png")" href="/api/jobs/@JobId/report-chart?type=hashrate-time&amp;ts=@ChartCacheBust">Download PNG</a>
+                    </div>
+                    <img src="/api/jobs/@JobId/report-chart?type=hashrate-time&amp;ts=@ChartCacheBust" alt="Hashrate over time chart" class="img-fluid border rounded" />
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="border rounded p-2 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Chart: Cluster Aggregated Hashrate Over Time</strong>
+                        <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_cluster_hashrate_over_time.png")" href="/api/jobs/@JobId/report-chart?type=cluster-hashrate-time&amp;ts=@ChartCacheBust">Download PNG</a>
+                    </div>
+                    <img src="/api/jobs/@JobId/report-chart?type=cluster-hashrate-time&amp;ts=@ChartCacheBust" alt="Cluster aggregated hashrate over time chart" class="img-fluid border rounded" />
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="border rounded p-2 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Chart: Progress Over Time (Disconnect / Timeout / Retry)</strong>
+                        <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_progress_over_time.png")" href="/api/jobs/@JobId/report-chart?type=progress-time&amp;ts=@ChartCacheBust">Download PNG</a>
+                    </div>
+                    <img src="/api/jobs/@JobId/report-chart?type=progress-time&amp;ts=@ChartCacheBust" alt="Job progress over time chart" class="img-fluid border rounded" />
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="border rounded p-2 bg-white">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong>Chart: Progress Over Time (Log Time)</strong>
+                        <a class="btn btn-sm btn-outline-dark" download="@($"{JobId}_progress_over_time_log.png")" href="/api/jobs/@JobId/report-chart?type=progress-time-log&amp;ts=@ChartCacheBust">Download PNG</a>
+                    </div>
+                    <img src="/api/jobs/@JobId/report-chart?type=progress-time-log&amp;ts=@ChartCacheBust" alt="Log time progress over time chart" class="img-fluid border rounded" />
                 </div>
             </div>
             <div class="col-12">
@@ -387,6 +457,25 @@
     }
 
     private static string FormatDurationSeconds(double seconds) => $"{seconds:F2} s";
+
+    private static string FormatCoverage(double units, string label)
+    {
+        if (string.Equals(label, "bytes", StringComparison.OrdinalIgnoreCase))
+        {
+            var rounded = units >= long.MaxValue ? long.MaxValue : (long)Math.Round(units);
+            return FormatBytes(rounded);
+        }
+
+        if (string.Equals(label, "keyspace", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"{units:N0}";
+        }
+
+        return $"{units:F2} {label}";
+    }
+
+    private static string FormatTimestamp(Google.Protobuf.WellKnownTypes.Timestamp? timestamp)
+        => timestamp is null ? "-" : timestamp.ToDateTime().ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss");
 
     private static string FormatGpuHashrate(long hashrate)
         => hashrate < 0 ? "Unknown" : $"{hashrate:N0} H/s";

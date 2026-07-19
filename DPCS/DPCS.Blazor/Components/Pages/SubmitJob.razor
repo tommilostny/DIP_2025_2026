@@ -137,6 +137,27 @@
                     </div>
                 </div>
                 break;
+
+            case AttackMode.Association:
+                <div class="card mb-3">
+                    <div class="card-header">Association Attack Settings</div>
+                    <div class="card-body">
+                        <WordlistSelection Title="Wordlist"
+                                           AvailableWordlists="_availableWordlists"
+                                           AllowMultiple="false"
+                                           @bind-SelectedWordlists="Model.AssociationWordlist"
+                                           ValidationFor="() => Model.AssociationWordlist"
+                                           HelpText="Select the single wordlist that must line up with the hash list entry-by-entry." />
+
+                        <RulesSelection Title="Rules (optional)"
+                                        HelpText="Association mode can still use hashcat rules on each wordlist candidate."
+                                        @bind-RuleContent="Model.AssociationRules"
+                                        OnLoadFile="OnAssociationRulesFileSelected" />
+
+                        <div class="form-text text-muted">Association requires the wordlist and hash list to have the same number of lines.</div>
+                    </div>
+                </div>
+                break;
             
             case AttackMode.Hybrid_WordlistMask:
             case AttackMode.Hybrid_MaskWordlist:
@@ -225,6 +246,9 @@
 
     private Task OnDictionaryRulesFileSelected(InputFileChangeEventArgs e)
         => LoadContentFromFileAsync(e, () => Model!.DictionaryRules, val => Model!.DictionaryRules = val);
+
+    private Task OnAssociationRulesFileSelected(InputFileChangeEventArgs e)
+        => LoadContentFromFileAsync(e, () => Model!.AssociationRules, val => Model!.AssociationRules = val);
 
     private void AddMaskToInput(string mask)
     {
@@ -322,6 +346,25 @@
                     LeftWordlists = { leftWordlists },
                     RightWordlists = { rightWordlists },
                     RuleFileContent = string.Empty // TODO: add dedicated combinator rule input if needed
+                };
+                await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
+                break;
+
+            case AttackMode.Association:
+                var associationWordlist = Model.AssociationWordlist?
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.Trim())
+                    .FirstOrDefault(w => !string.IsNullOrWhiteSpace(w));
+
+                var associationRuleContent = string.Join('\n', (Model.AssociationRules ?? string.Empty)
+                    .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(r => r.Trim())
+                    .Where(r => !string.IsNullOrWhiteSpace(r) && !r.StartsWith('#')));
+
+                jobSpecs.AssociationJobSpecs = new HashcatAssociationJobSpecs
+                {
+                    Wordlists = { associationWordlist ?? string.Empty },
+                    RuleFileContent = associationRuleContent
                 };
                 await jobManager.JobSubmission(jobSpecs, CancellationToken.None);
                 break;

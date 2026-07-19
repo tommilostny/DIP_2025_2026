@@ -3,9 +3,11 @@
 @using DPCS.DAL
 @using DPCS.DAL.Entities
 @using DPCS.Shared
+@using DPCS.Blazor.Services
 @using Microsoft.EntityFrameworkCore
 @inject ActorSystem ActorSystem
 @inject IDbContextFactory<DpcsDbContext> DbFactory
+@inject WordlistService WordlistService
 @implements IDisposable
 
 <PageTitle>Job Details</PageTitle>
@@ -77,6 +79,16 @@ else
                         <strong>Wordlists:</strong>
                         <ul>
                             @foreach (var wordlist in _jobSpecs.DictionaryJobSpecs.Wordlists)
+                            {
+                                <li>@wordlist</li>
+                            }
+                        </ul>
+                        break;
+
+                    case { PayloadCase: JobSpecsEnvelope.PayloadOneofCase.AssociationJobSpecs }:
+                        <strong>Wordlist:</strong>
+                        <ul>
+                            @foreach (var wordlist in _jobSpecs.AssociationJobSpecs.Wordlists)
                             {
                                 <li>@wordlist</li>
                             }
@@ -268,7 +280,7 @@ else
             _rules = GetRulesFromSpecs(_jobSpecs).ToList();
 
             _workUnitLifecycle = await jobCoordinator.GetWorkUnitLifecycle(new WorkUnitLifecycleFilter(), CancellationToken.None);
-            _attackReport = BuildAttackReport(_workUnitLifecycle);
+            _attackReport = BuildAttackReport(_workUnitLifecycle, WordlistService);
             _chartCacheBust = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         }
         catch (Exception ex)
@@ -313,6 +325,7 @@ else
         {
             JobSpecsEnvelope.PayloadOneofCase.DictionaryJobSpecs => specs.DictionaryJobSpecs.RuleFileContent,
             JobSpecsEnvelope.PayloadOneofCase.CombinatorJobSpecs => specs.CombinatorJobSpecs.RuleFileContent,
+            JobSpecsEnvelope.PayloadOneofCase.AssociationJobSpecs => specs.AssociationJobSpecs.RuleFileContent,
             _ => string.Empty
         };
 
@@ -323,7 +336,7 @@ else
                 .Where(rule => !string.IsNullOrWhiteSpace(rule));
     }
 
-    private static AttackReportSummary BuildAttackReport(WorkUnitLifecycleExport? export)
+    private static AttackReportSummary BuildAttackReport(WorkUnitLifecycleExport? export, WordlistService wordlistService)
     {
         if (export is null || export.Records.Count == 0)
         {
@@ -334,6 +347,28 @@ else
         var completed = records.Count(r => r.Outcome.StartsWith("completed", StringComparison.OrdinalIgnoreCase));
         var timedOut = records.Count(r => string.Equals(r.Outcome, "timed_out_requeued", StringComparison.OrdinalIgnoreCase));
         var retried = timedOut;
+
+        var coverageByRequest = records
+            .GroupBy(r => r.RequestId)
+            .ToDictionary(
+                group => group.Key,
+                group => EstimateCoverageUnits(group.First().Mode, group.First().ChunkSummary, wordlistService));
+
+        var totalCoverageUnits = coverageByRequest.Values.Sum();
+        var completedCoverageUnits = records
+            .Where(r => r.Outcome.StartsWith("completed", StringComparison.OrdinalIgnoreCase))
+            .Sum(r => coverageByRequest.TryGetValue(r.RequestId, out var units) ? units : 0);
+        var timedOutCoverageUnits = records
+            .Where(r => string.Equals(r.Outcome, "timed_out_requeued", StringComparison.OrdinalIgnoreCase))
+            .Sum(r => coverageByRequest.TryGetValue(r.RequestId, out var units) ? units : 0);
+
+        var metricCounts = records
+            .Select(r => DetectCoverageMetric(r.Mode, r.ChunkSummary))
+            .GroupBy(metric => metric)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+        var dominantCoverageMetric = metricCounts.Count == 0
+            ? "mixed"
+            : metricCounts.OrderByDescending(x => x.Value).First().Key;
 
         var durations = records
             .Select(r => r.ProcessingDurationSeconds)
@@ -352,6 +387,8 @@ else
                 return new AgentReportSummary
                 {
                     AgentKey = group.Key,
+                    CoverageMetric = dominantCoverageMetric,
+                    CoverageUnits = group.Sum(r => coverageByRequest.TryGetValue(r.RequestId, out var units) ? units : 0),
                     TotalWorkUnits = group.Count(),
                     CompletedWorkUnits = group.Count(r => r.Outcome.StartsWith("completed", StringComparison.OrdinalIgnoreCase)),
                     TimedOutWorkUnits = group.Count(r => string.Equals(r.Outcome, "timed_out_requeued", StringComparison.OrdinalIgnoreCase)),
@@ -359,6 +396,13 @@ else
                 };
             })
             .ToList();
+
+        foreach (var item in byAgent)
+        {
+            item.CoverageSharePercent = totalCoverageUnits > 0
+                ? item.CoverageUnits * 100.0 / totalCoverageUnits
+                : 0;
+        }
 
         var chunks = records
             .GroupBy(r => BuildChunkGroupKey(r.Mode, r.ChunkSummary))
@@ -402,6 +446,16 @@ else
         var total = records.Count;
         return new AttackReportSummary
         {
+            CoverageMetric = dominantCoverageMetric,
+            TotalCoverageUnits = totalCoverageUnits,
+            CompletedCoverageUnits = completedCoverageUnits,
+            TimedOutCoverageUnits = timedOutCoverageUnits,
+            CoverageUnitLabel = dominantCoverageMetric switch
+            {
+                "keyspace" => "keyspace",
+                "bytes" => "bytes",
+                _ => "units"
+            },
             TotalWorkUnits = total,
             CompletedWorkUnits = completed,
             TimedOutWorkUnits = timedOut,
@@ -534,6 +588,212 @@ else
         }
 
         return (value[..bracketStart], value[(bracketStart + 1)..bracketEnd]);
+    }
+
+    private static string DetectCoverageMetric(string? mode, string? chunkSummary)
+    {
+        var normalized = (mode ?? string.Empty).Trim().ToLowerInvariant();
+        return normalized switch
+        {
+            "mask" => "keyspace",
+            "hybrid" => "keyspace",
+            "dictionary" => "bytes",
+            "association" => "bytes",
+            "combinator" => "bytes",
+            _ => (chunkSummary ?? string.Empty).Contains(";range=", StringComparison.OrdinalIgnoreCase) ? "keyspace" : "bytes"
+        };
+    }
+
+    private static double EstimateCoverageUnits(string? mode, string? chunkSummary, WordlistService wordlistService)
+    {
+        var summary = chunkSummary?.Trim() ?? string.Empty;
+        var metric = DetectCoverageMetric(mode, summary);
+        if (metric == "keyspace")
+        {
+            if (TryParseInclusiveRange(ExtractAfter(summary, ";range="), out var start, out var end))
+            {
+                return Math.Max(0, end - start + 1);
+            }
+
+            return 1;
+        }
+
+        if (summary.StartsWith("left=", StringComparison.OrdinalIgnoreCase) && summary.Contains(";right=", StringComparison.OrdinalIgnoreCase))
+        {
+            var splitIndex = summary.IndexOf(";right=", StringComparison.OrdinalIgnoreCase);
+            var leftSegment = splitIndex >= 0 ? summary[..splitIndex] : summary;
+            var rightSegment = splitIndex >= 0 ? summary[(splitIndex + 1)..] : string.Empty;
+            var leftUnits = ParseBracketedByteRange(leftSegment, "left=", wordlistService);
+            var rightUnits = ParseBracketedByteRange(rightSegment, "right=", wordlistService);
+            return Math.Max(1, leftUnits + rightUnits);
+        }
+
+        if (TryExtractUrlByteRange(summary, wordlistService, out var urlStart, out var urlEnd))
+        {
+            return Math.Max(1, urlEnd - urlStart + 1);
+        }
+
+        if (summary.StartsWith("wordlist=", StringComparison.OrdinalIgnoreCase) && summary.Contains(";bytes=", StringComparison.OrdinalIgnoreCase))
+        {
+            var wordlist = ExtractBetween(summary, "wordlist=", ";bytes=");
+            var range = ExtractAfter(summary, ";bytes=");
+
+            if (range.Contains("EOF", StringComparison.OrdinalIgnoreCase))
+            {
+                var startByte = TryParseStartOnly(range, out var parsedStart) ? parsedStart : 0;
+                return Math.Max(1, ResolveWordlistCoverageFromName(wordlist, startByte, wordlistService));
+            }
+
+            if (TryParseInclusiveRange(range, out var bytesStart, out var bytesEnd))
+            {
+                return Math.Max(1, bytesEnd - bytesStart + 1);
+            }
+        }
+
+        if (TryParseInclusiveRange(ExtractAfter(summary, ";bytes="), out var fallbackBytesStart, out var fallbackBytesEnd))
+        {
+            return Math.Max(1, fallbackBytesEnd - fallbackBytesStart + 1);
+        }
+
+        return 1;
+    }
+
+    private static double ParseBracketedByteRange(string segment, string prefix, WordlistService wordlistService)
+    {
+        var (_, range) = ParseBracketedSegment(segment, prefix);
+        if (TryParseInclusiveRange(range, out var start, out var end))
+        {
+            return Math.Max(1, end - start + 1);
+        }
+
+        return 1;
+    }
+
+    private static bool TryExtractUrlByteRange(string summary, WordlistService wordlistService, out long start, out long end)
+    {
+        start = 0;
+        end = 0;
+        var marker = summary.StartsWith("dictionary_url=", StringComparison.OrdinalIgnoreCase)
+            ? "dictionary_url="
+            : summary.StartsWith("association_url=", StringComparison.OrdinalIgnoreCase)
+                ? "association_url="
+                : string.Empty;
+        if (string.IsNullOrWhiteSpace(marker))
+        {
+            return false;
+        }
+
+        var urlValue = ExtractAfter(summary, marker);
+        if (!Uri.TryCreate(urlValue, UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (!query.TryGetValue("startByte", out var startValue) || !long.TryParse(startValue.ToString(), out start))
+        {
+            start = 0;
+        }
+
+        var wordlistName = Uri.UnescapeDataString(uri.Segments.LastOrDefault()?.Trim('/') ?? string.Empty);
+
+        if (!query.TryGetValue("endByte", out var endValue))
+        {
+            return ResolveWordlistCoverageFromName(wordlistName, start, wordlistService, out start, out end);
+        }
+
+        var endText = endValue.ToString();
+        if (string.Equals(endText, "EOF", StringComparison.OrdinalIgnoreCase) || !long.TryParse(endText, out end))
+        {
+            return ResolveWordlistCoverageFromName(wordlistName, start, wordlistService, out start, out end);
+        }
+
+        return true;
+    }
+
+    private static bool ResolveWordlistCoverageFromName(string wordlistName, long start, WordlistService wordlistService, out long resolvedStart, out long resolvedEnd)
+    {
+        resolvedStart = start;
+        resolvedEnd = start;
+
+        if (string.IsNullOrWhiteSpace(wordlistName))
+        {
+            return true;
+        }
+
+        try
+        {
+            var fileLength = wordlistService.GetWordlistFileSize(wordlistName);
+            if (fileLength <= 0)
+            {
+                return true;
+            }
+
+            resolvedEnd = fileLength - 1;
+            return true;
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static double ResolveWordlistCoverageFromName(string wordlistName, long start, WordlistService wordlistService)
+    {
+        if (string.IsNullOrWhiteSpace(wordlistName))
+        {
+            return 1;
+        }
+
+        try
+        {
+            var fileLength = wordlistService.GetWordlistFileSize(wordlistName);
+            if (fileLength <= 0)
+            {
+                return 1;
+            }
+
+            return Math.Max(1, fileLength - start);
+        }
+        catch
+        {
+            return 1;
+        }
+    }
+
+    private static bool TryParseInclusiveRange(string? range, out long start, out long end)
+    {
+        start = 0;
+        end = 0;
+        if (string.IsNullOrWhiteSpace(range))
+        {
+            return false;
+        }
+
+        var pieces = range.Split('-', 2, StringSplitOptions.TrimEntries);
+        if (pieces.Length != 2 || !long.TryParse(pieces[0], out start))
+        {
+            return false;
+        }
+
+        if (string.Equals(pieces[1], "EOF", StringComparison.OrdinalIgnoreCase) || !long.TryParse(pieces[1], out end))
+        {
+            end = start;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseStartOnly(string? range, out long start)
+    {
+        start = 0;
+        if (string.IsNullOrWhiteSpace(range))
+        {
+            return false;
+        }
+
+        var pieces = range.Split('-', 2, StringSplitOptions.TrimEntries);
+        return pieces.Length >= 1 && long.TryParse(pieces[0], out start);
     }
 
     private static double Percentile(IReadOnlyList<double> sortedValues, double percentile)

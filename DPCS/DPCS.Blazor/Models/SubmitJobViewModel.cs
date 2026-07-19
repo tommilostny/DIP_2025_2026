@@ -27,6 +27,8 @@ public class SubmitJobViewModel : IValidatableObject
     public string? DictionaryRules { get; set; } = "";
     public string? LeftWordlists { get; set; } = "";
     public string? RightWordlists { get; set; } = "";
+    public string? AssociationWordlist { get; set; } = "";
+    public string? AssociationRules { get; set; } = "";
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
@@ -111,6 +113,18 @@ public class SubmitJobViewModel : IValidatableObject
                 }
             }
 
+            break;
+
+        case AttackMode.Association:
+            var associationWordlistsList = AssociationWordlist?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries) ?? [];
+            if (associationWordlistsList.Length == 0)
+            {
+                yield return new ValidationResult("Exactly one wordlist must be provided.", [nameof(AssociationWordlist)]);
+            }
+            else if (associationWordlistsList.Length > 1)
+            {
+                yield return new ValidationResult("Association attack accepts only one wordlist.", [nameof(AssociationWordlist)]);
+            }
             break;
         }
     }

@@ -82,6 +82,22 @@ public sealed class HashcatWrapper(string hashcatPath = "hashcat", int workloadP
         return await RunHashcatAttackAsync(argumentsBuilder, ct);
     }
 
+    public async Task<List<RecoveredPassword>> RunHashcatAssociationAttackAsync(AssociationWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
+    {
+        var argumentsBuilder = new StringBuilder();
+        argumentsBuilder.Append($"-a {(int)AttackMode.Association} ");
+        argumentsBuilder.Append($"-m {hashType} ");
+        argumentsBuilder.Append($" \"{hashFilePath}\" ");
+        argumentsBuilder.Append($"\"{chunk.WordlistUrl}\"");
+
+        if (!string.IsNullOrWhiteSpace(jobRuleFilePath))
+        {
+            argumentsBuilder.Append($" -r \"{jobRuleFilePath}\"");
+        }
+
+        return await RunHashcatAttackAsync(argumentsBuilder, ct);
+    }
+
     public async Task<List<RecoveredPassword>> RunHashcatHybridWordlistMaskAttackAsync(HybridWorkAssignment chunk, int hashType, string hashFilePath, string? jobRuleFilePath, CancellationToken ct)
     {
         var argumentsBuilder = new StringBuilder();

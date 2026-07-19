@@ -111,7 +111,11 @@ app.MapGet("/api/jobs/{jobId}/report-chart", async (
         .GetAgentGpuTelemetryHistory(cancellationToken)
         ?? new AgentGpuTelemetryExport { JobId = jobId };
 
-    var png = reportExportService.BuildReportChartPng(lifecycle, telemetry, type);
+    var progressHistory = await coordinator
+        .GetJobProgressHistory(cancellationToken)
+        ?? new JobProgressHistoryExport { JobId = jobId };
+
+    var png = reportExportService.BuildReportChartPng(lifecycle, telemetry, progressHistory, type);
     return Results.File(png, "image/png");
 });
 

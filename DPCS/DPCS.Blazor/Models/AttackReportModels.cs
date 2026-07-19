@@ -2,6 +2,11 @@ namespace DPCS.Blazor.Models;
 
 public sealed class AttackReportSummary
 {
+    public string CoverageMetric { get; set; } = "mixed";
+    public double TotalCoverageUnits { get; set; }
+    public double CompletedCoverageUnits { get; set; }
+    public double TimedOutCoverageUnits { get; set; }
+    public string CoverageUnitLabel { get; set; } = "units";
     public int TotalWorkUnits { get; set; }
     public int CompletedWorkUnits { get; set; }
     public int TimedOutWorkUnits { get; set; }
@@ -17,6 +22,9 @@ public sealed class AttackReportSummary
 public sealed class AgentReportSummary
 {
     public string AgentKey { get; set; } = string.Empty;
+    public string CoverageMetric { get; set; } = "mixed";
+    public double CoverageUnits { get; set; }
+    public double CoverageSharePercent { get; set; }
     public int TotalWorkUnits { get; set; }
     public int CompletedWorkUnits { get; set; }
     public int TimedOutWorkUnits { get; set; }

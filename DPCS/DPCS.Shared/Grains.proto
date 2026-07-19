@@ -48,6 +48,9 @@ service JobCoordinatorGrain {
   // RPC for exporting per-agent GPU telemetry history for time-series report charts
   rpc GetAgentGpuTelemetryHistory (google.protobuf.Empty) returns (AgentGpuTelemetryExport);
 
+  // RPC for exporting job progress snapshots for time-series report charts
+  rpc GetJobProgressHistory (google.protobuf.Empty) returns (JobProgressHistoryExport);
+
   // RPC for web interface to cancel an ongoing job
   rpc CancelJob (google.protobuf.Empty) returns (google.protobuf.Empty);
 }

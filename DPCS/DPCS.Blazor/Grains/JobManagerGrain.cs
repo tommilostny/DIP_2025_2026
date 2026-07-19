@@ -81,6 +81,15 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 Wordlists = { normalizedRequest.CombinatorJobSpecs.LeftWordlists, normalizedRequest.CombinatorJobSpecs.RightWordlists },
                 RuleFileContent = normalizedRequest.CombinatorJobSpecs.RuleFileContent,
             },
+            JobSpecsEnvelope.PayloadOneofCase.AssociationJobSpecs => new()
+            {
+                JobId = signedJobId,
+                ModeId = (int)AttackMode.Association,
+                HashType = normalizedRequest.HashType,
+                Hashes = { normalizedRequest.Hashes },
+                Wordlists = { normalizedRequest.AssociationJobSpecs.Wordlists },
+                RuleFileContent = normalizedRequest.AssociationJobSpecs.RuleFileContent,
+            },
             JobSpecsEnvelope.PayloadOneofCase.HybridJobSpecs => new()
             {
                 JobId = signedJobId,
@@ -231,6 +240,14 @@ public sealed class JobManagerGrain : JobManagerGrainBase
                 _JoinSorted(request.CombinatorJobSpecs.LeftWordlists),
                 _JoinSorted(request.CombinatorJobSpecs.RightWordlists),
                 request.CombinatorJobSpecs.RuleFileContent),
+
+            JobSpecsEnvelope.PayloadOneofCase.AssociationJobSpecs => string.Join('|',
+                "association",
+                request.HashType,
+                request.ChunkTimeSeconds,
+                _JoinSorted(request.Hashes),
+                _JoinSorted(request.AssociationJobSpecs.Wordlists),
+                request.AssociationJobSpecs.RuleFileContent),
 
             JobSpecsEnvelope.PayloadOneofCase.HybridJobSpecs => string.Join('|',
                 "hybrid",
