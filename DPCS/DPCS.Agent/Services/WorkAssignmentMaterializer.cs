@@ -62,23 +62,6 @@ public sealed class WorkAssignmentMaterializer
                 Console.WriteLine($"Prepared combinator assignment {envelope.RequestId} with local left/right chunk files.");
                 return envelope;
 
-            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment }:
-                envelope.AssociationAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
-                    envelope.RequestId,
-                    envelope.AssociationAssignment.WordlistUrl,
-                    envelope.AssociationAssignment.StartByte,
-                    envelope.AssociationAssignment.EndByte,
-                    "association",
-                    cacheKey: GetCacheKey(
-                        envelope.AssociationAssignment.WordlistName,
-                        envelope.AssociationAssignment.StartByte,
-                        envelope.AssociationAssignment.EndByte),
-                    useCache: true,
-                    expectedChecksum: envelope.AssociationAssignment.WordlistChunkChecksum);
-
-                Console.WriteLine($"Prepared association assignment {envelope.RequestId} with a local dictionary file.");
-                return envelope;
-
             case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment }:
                 envelope.HybridAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
                     envelope.RequestId,
@@ -94,6 +77,23 @@ public sealed class WorkAssignmentMaterializer
                     expectedChecksum: envelope.HybridAssignment.WordlistChunkChecksum);
 
                 Console.WriteLine($"Prepared hybrid assignment {envelope.RequestId} with a local dictionary chunk file.");
+                return envelope;
+
+            case { PayloadCase: WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment }:
+                envelope.AssociationAssignment.WordlistUrl = await DownloadFileRangeChunkAsync(
+                    envelope.RequestId,
+                    envelope.AssociationAssignment.WordlistUrl,
+                    envelope.AssociationAssignment.StartByte,
+                    envelope.AssociationAssignment.EndByte,
+                    "association",
+                    cacheKey: GetCacheKey(
+                        envelope.AssociationAssignment.WordlistName,
+                        envelope.AssociationAssignment.StartByte,
+                        envelope.AssociationAssignment.EndByte),
+                    useCache: true,
+                    expectedChecksum: envelope.AssociationAssignment.WordlistChunkChecksum);
+
+                Console.WriteLine($"Prepared association assignment {envelope.RequestId} with a local dictionary file.");
                 return envelope;
 
             default:
@@ -182,11 +182,21 @@ public sealed class WorkAssignmentMaterializer
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(startByte, endByte == -1 ? null : endByte);
 
         Console.WriteLine($"Downloading {label} chunk: {requestId} (Bytes: {startByte}-{(endByte == -1 ? "EOF" : endByte)})");
+        Console.WriteLine(wordlistUrl);
 
         using var response = await HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            response.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error downloading {label} chunk: {requestId} ({ex.Message})");
+            throw;
+        }
 
         var chunkPath = Path.Combine(Path.GetTempPath(), $"dpcs_{label}_{requestId}_{Guid.NewGuid():N}.txt");
+        Console.WriteLine(chunkPath);
         await using (var fileStream = new FileStream(chunkPath, FileMode.Create, FileAccess.Write, FileShare.None))
         {
             await response.Content.CopyToAsync(fileStream);
@@ -238,7 +248,6 @@ public sealed class WorkAssignmentMaterializer
         {
             return;
         }
-
         try
         {
             File.Delete(path);

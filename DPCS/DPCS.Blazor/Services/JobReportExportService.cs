@@ -136,7 +136,7 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             scatter.LineWidth = 2;
             scatter.MarkerSize = 0;
         }
-
+/*
         var averageBuckets = ordered
             .GroupBy(sample => (long)Math.Floor(((sample.CapturedAt?.ToDateTime().ToUniversalTime() ?? baseTime) - baseTime).TotalSeconds))
             .OrderBy(group => group.Key)
@@ -165,7 +165,7 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             avgScatter.LinePattern = LinePattern.Dashed;
             avgScatter.MarkerSize = 0;
         }
-
+*/
         plot.Axes.SetLimitsY(0, 110);
         plot.ShowLegend();
         return RenderPlotToPngBytes(plot, 1400, 800);
@@ -240,7 +240,7 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             scatter.LineWidth = 2;
             scatter.MarkerSize = 0;
         }
-
+/*
         var averageBuckets = ordered
             .GroupBy(sample => (long)Math.Floor(((sample.CapturedAt?.ToDateTime().ToUniversalTime() ?? baseTime) - baseTime).TotalSeconds))
             .OrderBy(group => group.Key)
@@ -269,7 +269,7 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             avgScatter.LinePattern = LinePattern.Dashed;
             avgScatter.MarkerSize = 0;
         }
-
+*/
         plot.ShowLegend();
         return RenderPlotToPngBytes(plot, 1400, 800);
     }
@@ -514,9 +514,6 @@ public sealed class JobReportExportService(WordlistService wordlistService)
 
     private readonly record struct EventCluster(double X, int Count);
 
-    private static string BuildChunkIdentity(string? mode, string? chunkSummary)
-        => $"{(mode ?? string.Empty).Trim().ToLowerInvariant()}|{(chunkSummary ?? string.Empty).Trim()}";
-
     private static byte[] BuildGpuUsageOverTimePng(AgentGpuTelemetryExport? telemetryExport)
     {
         var plot = new Plot();
@@ -581,6 +578,7 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             scatter.MarkerSize = 0;
         }
 
+        /*
         var buckets = ordered
             .Select(sample => new
             {
@@ -609,6 +607,7 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             avgScatter.LinePattern = LinePattern.Dashed;
             avgScatter.MarkerSize = 0;
         }
+        */
 
         plot.Axes.SetLimitsY(0, 100);
         plot.ShowLegend();
@@ -718,7 +717,6 @@ public sealed class JobReportExportService(WordlistService wordlistService)
             })
             .Where(x => x.Coverage > 0)
             .OrderByDescending(x => x.Coverage)
-            .Take(8)
             .ToList();
 
         var plot = new Plot();
@@ -1018,7 +1016,6 @@ public sealed class JobReportExportService(WordlistService wordlistService)
                 Count = g.Count()
             })
             .OrderByDescending(x => x.Mean)
-            .Take(8)
             .ToList();
 
         var plot = new Plot();

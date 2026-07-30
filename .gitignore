@@ -71,3 +71,18 @@ nunit-*.xml
 
 wordlists/
 *masks.json
+*combinator*.json
+*combinator*.csv
+*combinator*.txt
+*dict*.json
+*dict*.csv
+*dict*.txt
+*hybrid*.json
+*hybrid*.csv
+*hybrid*.txt
+*mask*.json
+*mask*.csv
+*mask*.txt
+*experiments*
+*dataset*
+*agent_metrics*

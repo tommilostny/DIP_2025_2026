@@ -22,4 +22,7 @@ public static class Constants
     public const int IndexInterval = 10_000;
 
     public const int DefaultChunkTimeSeconds = 30;
+
+    // Cap single chunk transfers to 250 MB so high hashrate nodes don't monopolize wordlists or stall on network I/O.
+    public const long MaxChunkByteSize = 250L * 1024 * 1024;
 }

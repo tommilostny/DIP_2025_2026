@@ -64,6 +64,13 @@ public sealed class DictionaryJobStrategy(string jobId, JobSpecsEnvelope specs, 
 
             long startByte = _currentWordlistIndexData[startInterval];
             
+            // Enforce the chunk size limit: shrink endInterval until the byte span is within bounds.
+            while (endInterval > startInterval + 1 &&
+                   _currentWordlistIndexData[endInterval] - startByte > Constants.MaxChunkByteSize)
+            {
+                endInterval = startInterval + (endInterval - startInterval) / 2;
+            }
+
             // -1 means "to EOF" so the final range consumes the remainder.
             long endByte = (endInterval < _currentWordlistIndexData.Length - 1) 
                 ? _currentWordlistIndexData[endInterval] - 1 

@@ -269,7 +269,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         bool submitFailed = false;
         try
         {
-            recovered = await ProcessChunkAsync(chunk);
+            recovered = await ComputeChunkWithHashcatAsync(chunk);
         }
         catch (Exception ex)
         {
@@ -369,8 +369,9 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
         {
             WorkAssignmentEnvelope.PayloadOneofCase.MaskAssignment => "mask",
             WorkAssignmentEnvelope.PayloadOneofCase.DictionaryAssignment => "dictionary",
-            WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment => "association",
             WorkAssignmentEnvelope.PayloadOneofCase.CombinatorAssignment => "combinator",
+            WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment => "hybrid",
+            WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment => "association",
             _ => "unknown"
         };
     }
@@ -435,6 +436,11 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
                 keyspace_length = chunk.HybridAssignment.KeyspaceLength,
                 dictionary_chunk_url = chunk.HybridAssignment.WordlistUrl
             },
+            WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment => new
+            {
+                type = "association",
+                dictionary_chunk_url = chunk.AssociationAssignment.WordlistUrl
+            },
             _ => new { type = "unknown" }
         };
     }
@@ -460,7 +466,7 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
     /// <summary>
     /// Runs the assignment through the matching Hashcat attack mode implementation.
     /// </summary>
-    private async Task<List<RecoveredPassword>> ProcessChunkAsync(WorkAssignmentEnvelope chunk)
+    private async Task<List<RecoveredPassword>> ComputeChunkWithHashcatAsync(WorkAssignmentEnvelope chunk)
     {
         var hashFilePath = await _hashFileStore.GetOrCreateHashFileAsync(_currentJob!.JobId, _currentJob!.Hashes);
 
@@ -488,15 +494,6 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
                     _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
                     _currentWorkCts!.Token);
 
-            case WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment:
-                Console.WriteLine($"Cracking association chunk: {chunk.RequestId}");
-                return await hashcatWrapper.RunHashcatAssociationAttackAsync(
-                    chunk.AssociationAssignment,
-                    _currentJob.HashType,
-                    hashFilePath,
-                    _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
-                    _currentWorkCts!.Token);
-
             case WorkAssignmentEnvelope.PayloadOneofCase.HybridAssignment:
                 Console.WriteLine($"Cracking hybrid chunk: {chunk.RequestId} ({chunk.HybridAssignment.KeyspaceStart} - {chunk.HybridAssignment.KeyspaceStart + chunk.HybridAssignment.KeyspaceLength})");
                 return chunk.HybridAssignment.AttackMode switch
@@ -517,6 +514,15 @@ public sealed class WorkerActor(Cluster cluster, IHashcatWrapper hashcatWrapper,
 
                     _ => []
                 };
+
+            case WorkAssignmentEnvelope.PayloadOneofCase.AssociationAssignment:
+                Console.WriteLine($"Cracking association chunk: {chunk.RequestId}");
+                return await hashcatWrapper.RunHashcatAssociationAttackAsync(
+                    chunk.AssociationAssignment,
+                    _currentJob.HashType,
+                    hashFilePath,
+                    _ruleFileStore.GetRuleFilePath(_currentJob.JobId),
+                    _currentWorkCts!.Token);
 
             default:
                 return [];

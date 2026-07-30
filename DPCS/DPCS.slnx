@@ -4,6 +4,7 @@
   <Project Path="DPCS.Blazor/DPCS.Blazor.csproj" Id="13c57a41-8068-48f8-8492-6af98d8347e6" />
   <Project Path="DPCS.Coordinator/DPCS.Coordinator.csproj" />
   <Project Path="DPCS.DAL/DPCS.DAL.csproj" Id="bfb13d36-a024-4fde-ae7d-c108c95d91f3" />
+  <Project Path="DPCS.HashGenerator/DPCS.HashGenerator.csproj" Id="0c140060-30cc-4248-88cf-55f55f424821" />
   <Project Path="DPCS.ServiceDefaults/DPCS.ServiceDefaults.csproj" />
   <Project Path="DPCS.Shared/DPCS.Shared.csproj" />
   <Project Path="DPCS.Tests/DPCS.Tests.csproj" Id="0acfcad5-6d4b-4a6b-84c3-3d98855898e9" />

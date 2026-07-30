@@ -3,6 +3,7 @@ using DPCS.DAL;
 using DPCS.ServiceDefaults;
 using Proto.OpenTelemetry;
 using System.Text;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,8 +37,22 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 //app.UseHttpsRedirection();
-app.UseStaticFiles();
+/*
+var wordlistStoragePath = builder.Configuration.GetValue<string>("WordlistStoragePath")
+    ?? Path.Combine(app.Environment.WebRootPath ?? Path.Combine(AppContext.BaseDirectory, "wwwroot"), "wordlists");
 
+if (!Directory.Exists(wordlistStoragePath))
+{
+    Directory.CreateDirectory(wordlistStoragePath);
+}
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(wordlistStoragePath),
+    RequestPath = "/wordlists",
+    ServeUnknownFileTypes = true
+});
+*/
 app.UseAntiforgery();
 
 app.MapGet("/api/wordlists/{fileName}/checksum", async (
