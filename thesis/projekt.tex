@@ -73,6 +73,14 @@
 \usepackage{url}
 \usepackage[inkscapearea=page]{svg}
 
+% Source - https://tex.stackexchange.com/a/58684
+% Posted by cmhughes, modified by community. See post 'Timeline' for change history
+% Retrieved 2026-07-27, License - CC BY-SA 3.0
+
+\usepackage{caption} 
+\captionsetup[table]{skip=5pt}
+
+
 % =======================================================================
 % balíček "hyperref" vytváří klikací odkazy v pdf, pokud tedy použijeme pdflatex
 % problém je, že balíček hyperref musí být uveden jako poslední, takže nemůže
@@ -146,8 +154,8 @@
   keywords.en={Distributed Computing, Password Recovery, Actor Model, Proto.Actor, Hashcat, .NET}, % klíčová slova v anglickém jazyce / keywords in english
   %keywords.en={Here, individual keywords separated by commas will be written in English.},
   % Abstrakt / Abstract
-  abstract.cs={Tato práce se zabývá rostoucí výpočetní náročností obnovy hesel návrhem a implementací distribuovaného orchestrátoru založeného na modelu aktorů na platformě .NET v programovacím jazyku C\#. Integrací nástroje Hashcat s frameworkem Proto.Actor a systémem HashiCorp Consul poskytuje navržená architektura škálovatelnou a proti chybám odolnou řídicí vrstvu. Pro správu heterogenních clusterů systém využívá dynamické určování velikosti pracovních bloků na základě hardwarového benchmarkingu, což pomáhá zmírnit problém pomalých uzlů. Asynchronní fronta přednačítání navíc maskuje síťovou latenci a pomáhá udržovat vysoké vytížení GPU. Při rozsáhlých slovníkových útocích implementace spoléhá na strategii indexování na úrovni bajtů v kombinaci s HTTP Byte-Range dotazy k omezení nároků na paměť a propustnost sítě. Výsledky ověřené prostřednictvím automatizované simulace naznačují, že přístup založený na aktorech se dokáže úspěšně zotavit ze selhání uzlů a udržet spolehlivé pokrytí prohledávaného prostoru, čímž nabízí praktický základ pro distribuované kryptografické operace.}, % abstrakt v českém či slovenském jazyce / abstract in czech or slovak language
-  abstract.en={This thesis addresses the growing computational demands of password recovery by proposing and implementing a distributed orchestration system based on the Actor Model on the .NET platform in the C\# programming language. By integrating the Hashcat engine with the Proto.Actor framework and HashiCorp Consul, the architecture provides a scalable and fault-tolerant control plane. To manage heterogeneous clusters, the system utilizes dynamic chunk sizing based on hardware benchmarking, helping to reduce the impact of slow nodes. Additionally, an asynchronous prefetch queue is implemented to mask network latency and improve GPU utilization. For large dictionary attacks, the system employs a byte-offset indexing strategy alongside HTTP Byte-Range requests to mitigate memory and bandwidth bottlenecks. Evaluated through an automated in-process simulation, the results indicate that the actor-based approach successfully recovers from node failures and maintains reliable keyspace coverage, offering a practical foundation for distributed cryptographic operations.}, % abstrakt v anglickém jazyce / abstract in english
+  abstract.cs={Tato diplomová práce se zabývá rostoucími výpočetními nároky na obnovu hesel a navrhuje a implementuje distribuovaný systém založený na modelu aktorů na platformě .NET v jazyce C\#. Systém kombinuje engine Hashcat s frameworkem Proto.Actor, čímž poskytuje škálovatelnou a řídicí rovinu odolnou proti poruchám pro koordinaci práce napříč více uzly. Pro podporu heterogenních clusterů využívá dynamické určování velikosti bloků na základě hardwarových benchmarků, což pomáhá snížit dopad pomalejších uzlů. K maskování síťové latence a zlepšení využití GPU se rovněž využívá asynchronní prefetching fronta. Návrh byl vyhodnocen jak prostřednictvím automatizované simulace, tak laboratorními testy na clusteru pracovních stanic vybavených skutečným GPU hardwarem. Výsledky naznačují, že přístup založený na modelu aktorů dokáže efektivně využívat dostupné výpočetní zdroje, zotavovat se z výpadků uzlů a udržovat spolehlivé pokrytí klíčového prostoru, čímž poskytuje praktický základ pro distribuované kryptografické operace.}, % abstrakt v českém či slovenském jazyce / abstract in czech or slovak language
+  abstract.en={This thesis addresses the growing computational demands of password recovery by proposing and implementing a distributed orchestration system based on the Actor Model on the .NET platform in C\#. The system combines the Hashcat engine with the Proto.Actor framework to provide a scalable and fault-tolerant control plane for coordinating work across multiple nodes. To support heterogeneous clusters, it uses dynamic chunk sizing based on hardware benchmarking, which helps reduce the impact of slower nodes. An asynchronous prefetch queue is also used to hide network latency and improve GPU utilization. The design was evaluated through both automated in-process simulation and laboratory tests on a cluster of workstations equipped with real GPU hardware. The results indicate that the actor-based approach can effectively utilize available compute resources, recover from node failures, and maintain reliable keyspace coverage, providing a practical foundation for distributed cryptographic operations.}, % abstrakt v anglickém jazyce / abstract in english
   %abstract.en={An abstract of the work in English will be written in this paragraph.},
   % Prohlášení (u anglicky psané práce anglicky, u slovensky psané práce slovensky; u projektové praxe lze zakomentovat) / Declaration (for thesis in english should be in english; for project practice can be commented out)
   %declaration={Prohlašuji, že jsem tuto bakalářskou práci vypracoval samostatně pod vedením pana Ing. Jana Pluskala, Ph.D.
@@ -157,7 +165,7 @@
   declaration={I hereby declare that this Master's thesis was prepared as an original work by the author under the supervision of Ing. Jan Pluskal, Ph.D.
 % The supplementary information was provided by Mr. Y
  I have listed all the literary sources, publications and other sources, which were used during the preparation of this thesis.
- I used the Google Gemini tool for the language revision of the technical report. During the creation of the submitted program code, I utilized the Google Gemini Code Assist tool.},
+ I used the Google Gemini tool for the language revision of the technical report. During the creation of the submitted program code, I utilized the Google Gemini Code Assist tool for suggestions, code revision and auto-complete functionality while writing it.},
   % Poděkování (nepovinné, nejlépe v jazyce práce; nechcete-li, zakomentujte pro skrytí nadpisu) / Acknowledgement (optional, ideally in the language of the thesis; comment out for hiding including heading)
   %acknowledgment={V této sekci je možno uvést poděkování vedoucímu práce a těm, kteří poskytli odbornou pomoc
 %(externí zadavatel, konzultant apod.).},
