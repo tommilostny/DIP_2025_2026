@@ -1082,11 +1082,11 @@ Management}{\@fit@EN}%
 %zadani / assignment
 \iftoggle{zadaniTwop}{
   \cleardoublepage
-  \includepdf[pages=-,offset=-0.1cm -0.2cm]{zadani.pdf}
+  \includepdf[pages=-,offset=-0.1cm -0.2cm]{zav_prace__7e1d2972e364b5cf0b21f976a7a6ef77.pdf}
   %\ifzadani\includepdf[pages=-,offset=0.6cm -1.7cm]{assignment.pdf}\fi
 }{
   \ifzadani
-    \includepdf[pages=-,offset=0.6cm -1.7cm]{zadani.pdf}
+    \includepdf[pages=-,offset=0.6cm -1.7cm]{zav_prace__7e1d2972e364b5cf0b21f976a7a6ef77.pdf}
     %\ifzadani\includepdf[pages=-,offset=0.6cm -1.7cm]{assignment.pdf}\fi
   \fi
 }
@@ -1147,24 +1147,24 @@ Management}{\@fit@EN}%
 
 % czech quotation marks
 % \bq - begin quotation, \eq - end quotation
-\def\bq{\mbox{\kern.1ex\protect\raisebox{-1.3ex}[0pt][0pt]{''}\kern-.1ex}}
-\def\eq{\mbox{\kern-.1ex``\kern.1ex}}
+%\def\bq{\mbox{\kern.1ex\protect\raisebox{-1.3ex}[0pt][0pt]{''}\kern-.1ex}}
+%\def\eq{\mbox{\kern-.1ex``\kern.1ex}}
 %\setlanguage{\czech}
 
 {%                                      % Begin a group for which " is active
-\catcode`\"=\active                     % Make " an active character
-\catcode`\@=11                          % Make @ an active character
+%\catcode`\"=\active                     % Make " an active character
+%\catcode`\@=11                          % Make @ an active character
 %
 %  \csdoublequoteson
 %
 %       This macro makes " an active character, resets the control sequence
 %       \dblqu@te to L (left), and defines \dq as a replacement for ".
 %
-\gdef\csdoublequoteson{%                % \csdoublequoteson enables "
-    \gdef"{\czechquotes}%               % Define " as \czechquotes
-    \global\catcode`\"=\active%         % Make " an active character
-    \global\chardef\dq=`\"%             % Double-quote char. via \dq
-    \global\let\dblqu@te=L%             % Always start with a left double-quote
+%\gdef\csdoublequoteson{%                % \csdoublequoteson enables "
+%    \gdef"{\czechquotes}%               % Define " as \czechquotes
+%    \global\catcode`\"=\active%         % Make " an active character
+%    \global\chardef\dq=`\"%             % Double-quote char. via \dq
+%    \global\let\dblqu@te=L%             % Always start with a left double-quote
     }                                   % End of macro
 %
 %  \bq, \eq
